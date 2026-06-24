@@ -10,7 +10,7 @@ export function QRPanel({ slug, title }: { slug: string; title: string }) {
     QRCode.toDataURL(guestUrl, {
       width: 320,
       margin: 2,
-      color: { dark: "#4C1D95", light: "#FBFBF9" },
+      color: { dark: "#C15F3C", light: "#FCFAF6" },
     }).then((url) => {
       if (!cancelled) setDataUrl(url);
     });
