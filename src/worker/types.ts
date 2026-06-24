@@ -4,6 +4,8 @@ export interface Env {
   ASSETS: Fetcher;
   ADMIN_USER: string;
   ADMIN_PASSWORD: string;
+  // Optional: AI banner generation is inert (returns 501) when unset.
+  OPENAI_API_KEY?: string;
 }
 
 export interface EventRow {
@@ -25,4 +27,18 @@ export interface MomentRow {
   caption: string | null;
   points_awarded: number;
   created_at: string;
+}
+
+export interface ParticipantRow {
+  id: string;
+  event_id: string;
+  nickname: string;
+  avatar_seed: string | null;
+  joined_at: string;
+}
+
+export interface LeaderboardEntry {
+  uploader_name: string;
+  total_points: number;
+  moment_count: number;
 }

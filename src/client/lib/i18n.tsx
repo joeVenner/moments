@@ -63,6 +63,32 @@ const dict: Record<Lang, Record<string, Entry>> = {
     uploadFailed: "Failed to upload {failed} of {total} file(s)",
     pointsAdded: (v) =>
       Number(v.points) === 1 ? "+{points} Point Added!" : "+{points} Points Added!",
+
+    livePreview: "Live Preview",
+    livePreviewSubtitle: "What guests will see",
+    previewPlaceholderTitle: "Your Event Title",
+    previewPlaceholderHosts: "Hosts' names",
+
+    chooseAvatar: "Choose your avatar",
+    shuffleAvatar: "Shuffle",
+
+    participantsJoined: (v) =>
+      Number(v.count) === 1 ? "{count} person here" : "{count} people here",
+
+    feedTab: "Feed",
+    leaderboardTab: "Leaderboard",
+    topPhotographers: "Top Photographers",
+    momentsLabel: (v) => (Number(v.count) === 1 ? "{count} moment" : "{count} moments"),
+    ptsLabel: "pts",
+    noLeaderboardYet: "No one's uploaded yet — be the first!",
+    winnerAnnouncement: "{name} is leading the pack!",
+
+    aiSelfiePrompt: "Share a selfie of the happy couple — we'll turn it into a custom banner",
+    generateAiBanner: "Generate AI Banner",
+    generatingBanner: "Generating your banner…",
+    aiBannerUnavailable: "AI banner generation isn't set up yet — using your photo as the cover instead.",
+    aiBannerFailed: "Couldn't generate an AI banner — using your photo as the cover instead.",
+    selfieTooLarge: "Image too large — please choose a photo under 8MB",
   },
   fr: {
     appTagline:
@@ -120,8 +146,56 @@ const dict: Record<Lang, Record<string, Entry>> = {
     uploadFailed: "Échec de l'envoi de {failed} fichier(s) sur {total}",
     pointsAdded: (v) =>
       Number(v.points) === 1 ? "+{points} point ajouté !" : "+{points} points ajoutés !",
+
+    livePreview: "Aperçu en direct",
+    livePreviewSubtitle: "Ce que verront les invités",
+    previewPlaceholderTitle: "Le titre de votre événement",
+    previewPlaceholderHosts: "Noms des hôtes",
+
+    chooseAvatar: "Choisissez votre avatar",
+    shuffleAvatar: "Changer",
+
+    participantsJoined: (v) =>
+      Number(v.count) === 1 ? "{count} personne ici" : "{count} personnes ici",
+
+    feedTab: "Fil",
+    leaderboardTab: "Classement",
+    topPhotographers: "Meilleurs photographes",
+    momentsLabel: (v) => (Number(v.count) === 1 ? "{count} souvenir" : "{count} souvenirs"),
+    ptsLabel: "pts",
+    noLeaderboardYet: "Personne n'a encore partagé — soyez le premier !",
+    winnerAnnouncement: "{name} est en tête !",
+
+    aiSelfiePrompt: "Partagez un selfie des mariés — on en fait une bannière sur mesure",
+    generateAiBanner: "Générer la bannière IA",
+    generatingBanner: "Génération de votre bannière…",
+    aiBannerUnavailable: "La génération IA n'est pas encore configurée — votre photo sera utilisée comme couverture.",
+    aiBannerFailed: "Impossible de générer la bannière IA — votre photo sera utilisée comme couverture.",
+    selfieTooLarge: "Image trop volumineuse — choisissez une photo de moins de 8 Mo",
   },
 };
+
+export const quotes: Record<Lang, string[]> = {
+  en: [
+    "Every great photographer was once an amateur with great friends.",
+    "The best photos happen when no one's posing.",
+    "Behind every great shot is someone who almost missed the moment.",
+    "Capturing memories, one tap at a time.",
+    "The real award is the chaos you documented.",
+  ],
+  fr: [
+    "Tout grand photographe a d'abord été un amateur entouré d'amis formidables.",
+    "Les meilleures photos arrivent quand personne ne pose.",
+    "Derrière chaque beau souvenir, quelqu'un a failli rater l'instant.",
+    "Capturer des souvenirs, un instant à la fois.",
+    "Le vrai trophée, c'est le chaos que vous avez immortalisé.",
+  ],
+};
+
+export function randomQuote(lang: Lang): string {
+  const list = quotes[lang];
+  return list[Math.floor(Math.random() * list.length)];
+}
 
 const eventTypeLabels: Record<Lang, Record<string, string>> = {
   en: { Wedding: "Wedding", Gala: "Gala", Birthday: "Birthday", Corporate: "Corporate", Other: "Other" },
