@@ -3,12 +3,14 @@ import type { Env, EventRow, MomentRow, ParticipantRow, LeaderboardEntry } from 
 import { slugify, randomSuffix } from "./slugify";
 import { putMedia, pointsForContentType } from "./storage";
 import { requireAdmin } from "./auth";
+import { generateAiBanner, BannerGenerationError } from "./banner";
 
 const app = new Hono<{ Bindings: Env }>();
 
 // Admin-only: listing all events and creating new ones. Guest-facing routes
 // (event by slug, moments, media, participants, leaderboard) stay public.
 app.use("/api/events", requireAdmin);
+app.use("/api/admin/*", requireAdmin);
 
 async function uniqueSlug(db: D1Database, title: string): Promise<string> {
   const base = slugify(title) || "event";
@@ -222,6 +224,28 @@ app.get("/api/events/:slug/leaderboard", async (c) => {
     .all<LeaderboardEntry>();
 
   return c.json({ leaderboard: results });
+});
+
+app.post("/api/admin/generate-banner", async (c) => {
+  if (!c.env.OPENAI_API_KEY) {
+    return c.json({ error: "AI banner generation is not configured" }, 501);
+  }
+
+  const body = await c.req.parseBody();
+  const selfie = body.selfie instanceof File ? body.selfie : null;
+  const theme = typeof body.theme === "string" ? body.theme : "";
+
+  if (!selfie || selfie.size === 0) {
+    return c.json({ error: "selfie is required" }, 400);
+  }
+
+  try {
+    const { url } = await generateAiBanner(c.env, selfie, theme);
+    return c.json({ banner_url: url });
+  } catch (err) {
+    const message = err instanceof BannerGenerationError ? err.message : "Banner generation failed";
+    return c.json({ error: message }, 400);
+  }
 });
 
 app.get("/media/*", async (c) => {
