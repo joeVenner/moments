@@ -18,6 +18,11 @@ describe("slugify", () => {
   it("returns empty string for input with no alphanumerics", () => {
     expect(slugify("!!!")).toBe("");
   });
+
+  it("strips accents instead of dropping the whole character", () => {
+    expect(slugify("Soirée Test")).toBe("soiree-test");
+    expect(slugify("Café été")).toBe("cafe-ete");
+  });
 });
 
 describe("randomSuffix", () => {
