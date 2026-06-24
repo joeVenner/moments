@@ -2,10 +2,15 @@ import { Hono } from "hono";
 import type { Env, EventRow, MomentRow } from "./types";
 import { slugify, randomSuffix } from "./slugify";
 import { putMedia } from "./storage";
+import { requireAdmin } from "./auth";
 
 const POINTS_PER_UPLOAD = 10;
 
 const app = new Hono<{ Bindings: Env }>();
+
+// Admin-only: listing all events and creating new ones. Guest-facing routes
+// (event by slug, moments, media) stay public and are unaffected.
+app.use("/api/events", requireAdmin);
 
 async function uniqueSlug(db: D1Database, title: string): Promise<string> {
   const base = slugify(title) || "event";

@@ -1,0 +1,70 @@
+import { useState } from "react";
+import { verifyAdminCredentials } from "../lib/api";
+import { setAdminAuth } from "../lib/adminAuth";
+
+export function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const ok = await verifyAdminCredentials(username, password);
+      if (!ok) {
+        setError("Incorrect username or password");
+        return;
+      }
+      setAdminAuth(username, password);
+      onSuccess();
+    } catch {
+      setError("Couldn't reach the server — try again");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-[var(--color-bg)] px-6">
+      <div className="text-center">
+        <h1 className="font-mono text-2xl font-semibold text-[var(--color-accent-dark)]">
+          Moments — Admin
+        </h1>
+        <p className="mt-1 text-sm text-slate-600">Sign in to manage events</p>
+      </div>
+
+      <form
+        onSubmit={handleSubmit}
+        className="flex w-full max-w-xs flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5"
+      >
+        <input
+          autoFocus
+          autoCapitalize="off"
+          autoCorrect="off"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="Username"
+          className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password"
+          className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
+        />
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <button
+          type="submit"
+          disabled={!username || !password || loading}
+          className="rounded-lg bg-[var(--color-accent)] px-4 py-3 font-mono text-sm font-medium text-white transition hover:bg-[var(--color-accent-dark)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {loading ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
+    </div>
+  );
+}
