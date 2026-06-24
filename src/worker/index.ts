@@ -45,8 +45,12 @@ app.post("/api/events", async (c) => {
 
   let coverImageUrl: string | null = null;
   if (cover) {
-    const { url } = await putMedia(c.env, `events/${id}/cover`, cover);
-    coverImageUrl = url;
+    try {
+      const { url } = await putMedia(c.env, `events/${id}/cover`, cover);
+      coverImageUrl = url;
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : "cover upload failed" }, 400);
+    }
   }
 
   await c.env.DB.prepare(
