@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { compressImage } from "../lib/compressImage";
 
 export function UploadDropzone({
   onUpload,
@@ -10,16 +11,21 @@ export function UploadDropzone({
   const [file, setFile] = useState<File | null>(null);
   const [caption, setCaption] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file) return;
-    await onUpload(file, caption);
+    setOptimizing(true);
+    const optimized = await compressImage(file).finally(() => setOptimizing(false));
+    await onUpload(optimized, caption);
     setFile(null);
     setCaption("");
     if (inputRef.current) inputRef.current.value = "";
   }
+
+  const busy = optimizing || uploading;
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
@@ -64,10 +70,10 @@ export function UploadDropzone({
 
       <button
         type="submit"
-        disabled={!file || uploading}
+        disabled={!file || busy}
         className="rounded-lg bg-[var(--color-accent)] px-4 py-2.5 font-mono text-sm font-medium text-white transition hover:bg-[var(--color-accent-dark)] disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {uploading ? "Uploading…" : "Share Moment"}
+        {optimizing ? "Optimizing…" : uploading ? "Uploading…" : "Share Moment"}
       </button>
     </form>
   );
