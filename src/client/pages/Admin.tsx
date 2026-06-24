@@ -1,0 +1,137 @@
+import { useEffect, useState } from "react";
+import { createEvent, listEvents } from "../lib/api";
+import type { EventData } from "../lib/types";
+import { QRPanel } from "../components/QRPanel";
+import { EventCardSkeleton } from "../components/Skeleton";
+
+const EVENT_TYPES = ["Wedding", "Gala", "Birthday", "Corporate", "Other"];
+
+export default function Admin() {
+  const [events, setEvents] = useState<EventData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    listEvents()
+      .then((r) => setEvents(r.events))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    setCreating(true);
+    const form = e.currentTarget;
+    try {
+      const formData = new FormData(form);
+      const { event } = await createEvent(formData);
+      setEvents((prev) => [event, ...prev]);
+      setExpandedSlug(event.slug);
+      form.reset();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create event");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-[var(--color-bg)] px-4 py-10">
+      <div className="mx-auto max-w-2xl">
+        <h1 className="font-mono text-2xl font-semibold text-[var(--color-accent-dark)]">
+          Moments — Admin
+        </h1>
+        <p className="mt-1 text-sm text-slate-600">Create an event and provision its QR code.</p>
+
+        <form
+          onSubmit={handleCreate}
+          className="mt-6 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5"
+        >
+          <input
+            name="title"
+            required
+            placeholder="Event title (e.g. Sarah & Tom's Wedding)"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+          />
+          <select
+            name="type"
+            required
+            defaultValue="Wedding"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+          >
+            {EVENT_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+          <input
+            name="main_characters"
+            placeholder="Hosts / couple names"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+          />
+          <textarea
+            name="description"
+            placeholder="Description (optional)"
+            rows={2}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+          />
+          <label className="text-xs font-mono text-slate-500">
+            Cover photo (optional)
+            <input
+              name="cover"
+              type="file"
+              accept="image/*"
+              className="mt-1 block w-full text-sm"
+            />
+          </label>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <button
+            type="submit"
+            disabled={creating}
+            className="rounded-lg bg-[var(--color-accent)] px-4 py-2.5 font-mono text-sm font-medium text-white transition hover:bg-[var(--color-accent-dark)] disabled:opacity-50"
+          >
+            {creating ? "Creating…" : "Create Event"}
+          </button>
+        </form>
+
+        <div className="mt-8 flex flex-col gap-3">
+          {loading && (
+            <>
+              <EventCardSkeleton />
+              <EventCardSkeleton />
+            </>
+          )}
+          {!loading && events.length === 0 && (
+            <p className="text-sm text-slate-500">No events yet — create one above.</p>
+          )}
+          {events.map((event) => (
+            <div key={event.id} className="rounded-xl border border-slate-200 bg-white p-4">
+              <button
+                onClick={() => setExpandedSlug(expandedSlug === event.slug ? null : event.slug)}
+                className="flex w-full items-center justify-between text-left"
+              >
+                <div>
+                  <p className="font-medium text-slate-900">{event.title}</p>
+                  <p className="font-mono text-xs text-slate-500">
+                    {event.type} · /e/{event.slug}
+                  </p>
+                </div>
+                <span className="font-mono text-xs text-[var(--color-accent)]">
+                  {expandedSlug === event.slug ? "Hide QR" : "Show QR"}
+                </span>
+              </button>
+              {expandedSlug === event.slug && (
+                <div className="mt-4">
+                  <QRPanel slug={event.slug} title={event.title} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
