@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createEvent, listEvents, UnauthorizedError } from "../lib/api";
 import type { EventData } from "../lib/types";
 import { QRPanel } from "../components/QRPanel";
 import { EventMoments } from "../components/EventMoments";
 import { EventCardSkeleton } from "../components/Skeleton";
 import { AdminLogin } from "../components/AdminLogin";
+import { EventPreview } from "../components/EventPreview";
 import { getAdminAuthHeader, clearAdminAuth } from "../lib/adminAuth";
 import { useI18n } from "../lib/i18n";
 
@@ -19,6 +20,12 @@ export default function Admin() {
   const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [previewTitle, setPreviewTitle] = useState("");
+  const [previewType, setPreviewType] = useState("Wedding");
+  const [previewHosts, setPreviewHosts] = useState("");
+  const [previewCoverUrl, setPreviewCoverUrl] = useState<string | null>(null);
+  const previewCoverUrlRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!authed) return;
     listEvents()
@@ -32,10 +39,31 @@ export default function Admin() {
       .finally(() => setLoading(false));
   }, [authed]);
 
+  useEffect(() => {
+    return () => {
+      if (previewCoverUrlRef.current) URL.revokeObjectURL(previewCoverUrlRef.current);
+    };
+  }, []);
+
   function handleLogout() {
     clearAdminAuth();
     setAuthed(false);
     setEvents([]);
+  }
+
+  function handleCoverChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (previewCoverUrlRef.current) {
+      URL.revokeObjectURL(previewCoverUrlRef.current);
+      previewCoverUrlRef.current = null;
+    }
+    if (file) {
+      const url = URL.createObjectURL(file);
+      previewCoverUrlRef.current = url;
+      setPreviewCoverUrl(url);
+    } else {
+      setPreviewCoverUrl(null);
+    }
   }
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
@@ -49,6 +77,14 @@ export default function Admin() {
       setEvents((prev) => [event, ...prev]);
       setExpandedSlug(event.slug);
       form.reset();
+      setPreviewTitle("");
+      setPreviewType("Wedding");
+      setPreviewHosts("");
+      if (previewCoverUrlRef.current) {
+        URL.revokeObjectURL(previewCoverUrlRef.current);
+        previewCoverUrlRef.current = null;
+      }
+      setPreviewCoverUrl(null);
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         clearAdminAuth();
@@ -91,12 +127,14 @@ export default function Admin() {
             name="title"
             required
             placeholder={t("eventTitlePlaceholder")}
+            onChange={(e) => setPreviewTitle(e.target.value)}
             className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
           />
           <select
             name="type"
             required
             defaultValue="Wedding"
+            onChange={(e) => setPreviewType(e.target.value)}
             className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
           >
             {EVENT_TYPES.map((type) => (
@@ -108,6 +146,7 @@ export default function Admin() {
           <input
             name="main_characters"
             placeholder={t("hostsPlaceholder")}
+            onChange={(e) => setPreviewHosts(e.target.value)}
             className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
           />
           <textarea
@@ -122,6 +161,7 @@ export default function Admin() {
               name="cover"
               type="file"
               accept="image/*"
+              onChange={handleCoverChange}
               className="mt-1 block w-full text-sm"
             />
           </label>
@@ -134,6 +174,15 @@ export default function Admin() {
             {creating ? t("creating") : t("createEvent")}
           </button>
         </form>
+
+        <div className="mt-6">
+          <EventPreview
+            title={previewTitle}
+            type={previewType}
+            hosts={previewHosts}
+            coverUrl={previewCoverUrl}
+          />
+        </div>
 
         <div className="mt-8 flex flex-col gap-3">
           {loading && (
