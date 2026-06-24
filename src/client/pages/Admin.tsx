@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createEvent, listEvents, UnauthorizedError } from "../lib/api";
 import type { EventData } from "../lib/types";
 import { QRPanel } from "../components/QRPanel";
+import { EventMoments } from "../components/EventMoments";
 import { EventCardSkeleton } from "../components/Skeleton";
 import { AdminLogin } from "../components/AdminLogin";
 import { getAdminAuthHeader, clearAdminAuth } from "../lib/adminAuth";
@@ -155,12 +156,18 @@ export default function Admin() {
                   </p>
                 </div>
                 <span className="font-mono text-xs text-[var(--color-accent)]">
-                  {expandedSlug === event.slug ? "Hide QR" : "Show QR"}
+                  {expandedSlug === event.slug ? "Hide details" : "View details"}
                 </span>
               </button>
               {expandedSlug === event.slug && (
-                <div className="mt-4">
+                <div className="mt-4 flex flex-col gap-4">
                   <QRPanel slug={event.slug} title={event.title} />
+                  <div>
+                    <p className="mb-2 font-mono text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Collected Moments
+                    </p>
+                    <EventMoments slug={event.slug} />
+                  </div>
                 </div>
               )}
             </div>
