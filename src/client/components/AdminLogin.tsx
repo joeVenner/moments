@@ -41,6 +41,8 @@ export function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
         className="flex w-full max-w-xs flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5"
       >
         <input
+          name="username"
+          autoComplete="username"
           autoFocus
           autoCapitalize="off"
           autoCorrect="off"
@@ -50,6 +52,8 @@ export function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
           className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
         />
         <input
+          name="password"
+          autoComplete="current-password"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
