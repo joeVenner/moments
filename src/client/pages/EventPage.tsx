@@ -2,16 +2,16 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getEvent, listMoments, uploadMoment } from "../lib/api";
 import { getNickname, setNickname as saveNickname } from "../lib/nickname";
-import type { EventData, MomentData } from "../lib/types";
+import type { EventData } from "../lib/types";
 import { NicknameGate } from "../components/NicknameGate";
 import { UploadDropzone } from "../components/UploadDropzone";
-import { MomentCard } from "../components/MomentCard";
+import { MomentCard, type PendingMoment } from "../components/MomentCard";
 import { PointsToast } from "../components/Toast";
 
 export default function EventPage() {
   const { slug } = useParams<{ slug: string }>();
   const [event, setEvent] = useState<EventData | null>(null);
-  const [moments, setMoments] = useState<MomentData[]>([]);
+  const [moments, setMoments] = useState<PendingMoment[]>([]);
   const [nickname, setNicknameState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -32,20 +32,40 @@ export default function EventPage() {
   }, [slug]);
 
   async function handleUpload(file: File, caption: string) {
-    if (!slug || !nickname) return;
+    if (!slug || !nickname || !event) return;
     setUploadError(null);
     setUploading(true);
+
+    const tempId = `pending-${crypto.randomUUID()}`;
+    const previewUrl = URL.createObjectURL(file);
+    setMoments((prev) => [
+      {
+        id: tempId,
+        event_id: event.id,
+        uploader_name: nickname,
+        media_url: previewUrl,
+        caption: caption || null,
+        points_awarded: 10,
+        created_at: new Date().toISOString(),
+        _pending: true,
+        _mimeType: file.type,
+      },
+      ...prev,
+    ]);
+
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("uploader_name", nickname);
       if (caption) formData.append("caption", caption);
       const { moment, points_awarded } = await uploadMoment(slug, formData);
-      setMoments((prev) => [moment, ...prev]);
+      setMoments((prev) => prev.map((m) => (m.id === tempId ? moment : m)));
       setToastPoints(points_awarded);
     } catch (err) {
+      setMoments((prev) => prev.filter((m) => m.id !== tempId));
       setUploadError(err instanceof Error ? err.message : "Upload failed");
     } finally {
+      URL.revokeObjectURL(previewUrl);
       setUploading(false);
     }
   }
