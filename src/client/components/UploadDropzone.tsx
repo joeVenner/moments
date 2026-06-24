@@ -45,7 +45,6 @@ export function UploadDropzone({
           ref={inputRef}
           type="file"
           accept="image/*,video/*"
-          capture="environment"
           className="hidden"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />
