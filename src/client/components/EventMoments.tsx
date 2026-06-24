@@ -3,8 +3,10 @@ import { listMoments } from "../lib/api";
 import type { MomentData } from "../lib/types";
 import { MomentCard } from "./MomentCard";
 import { MomentCardSkeleton } from "./Skeleton";
+import { useI18n } from "../lib/i18n";
 
 export function EventMoments({ slug }: { slug: string }) {
+  const { t } = useI18n();
   const [moments, setMoments] = useState<MomentData[] | null>(null);
 
   useEffect(() => {
@@ -33,10 +35,10 @@ export function EventMoments({ slug }: { slug: string }) {
   return (
     <div>
       <p className="mb-2 font-mono text-xs text-slate-500">
-        {moments.length} moment{moments.length === 1 ? "" : "s"} collected · {totalPoints} points total
+        {t("momentsCollected", { count: moments.length, points: totalPoints })}
       </p>
       {moments.length === 0 ? (
-        <p className="text-sm text-slate-500">No moments collected yet.</p>
+        <p className="text-sm text-slate-500">{t("noMomentsCollected")}</p>
       ) : (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {moments.map((moment) => (

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { EventData } from "../lib/types";
+import { useI18n } from "../lib/i18n";
 
 export function NicknameGate({
   event,
@@ -8,6 +9,7 @@ export function NicknameGate({
   event: EventData;
   onSubmit: (nickname: string) => void;
 }) {
+  const { t, eventTypeLabel } = useI18n();
   const [name, setName] = useState("");
 
   return (
@@ -21,7 +23,7 @@ export function NicknameGate({
       )}
       <div>
         <p className="font-mono text-xs uppercase tracking-wide text-[var(--color-accent)]">
-          {event.type}
+          {eventTypeLabel(event.type)}
         </p>
         <h1 className="text-2xl font-semibold text-slate-900">{event.title}</h1>
         {event.main_characters && <p className="mt-1 text-sm text-slate-600">{event.main_characters}</p>}
@@ -37,7 +39,7 @@ export function NicknameGate({
           autoFocus
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Enter your name to join"
+          placeholder={t("enterNameToJoin")}
           className="rounded-lg border border-slate-300 bg-white px-3 py-3 text-center text-base outline-none focus:border-[var(--color-accent)]"
         />
         <button
@@ -45,7 +47,7 @@ export function NicknameGate({
           disabled={!name.trim()}
           className="rounded-lg bg-[var(--color-accent)] px-4 py-2.5 font-mono text-sm font-medium text-white transition hover:bg-[var(--color-accent-dark)] disabled:opacity-50"
         >
-          Join the Feed
+          {t("joinTheFeed")}
         </button>
       </form>
     </div>

@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { compressImage } from "../lib/compressImage";
+import { useI18n } from "../lib/i18n";
 
 export function UploadDropzone({
   onUpload,
@@ -8,6 +9,7 @@ export function UploadDropzone({
   onUpload: (files: File[], caption: string) => Promise<void>;
   uploading: boolean;
 }) {
+  const { t } = useI18n();
   const [files, setFiles] = useState<File[]>([]);
   const [caption, setCaption] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -61,13 +63,9 @@ export function UploadDropzone({
           onChange={(e) => setFiles(e.target.files ? Array.from(e.target.files) : [])}
         />
         <span className="font-mono text-sm text-[var(--color-accent-dark)]">
-          {files.length > 0
-            ? `${files.length} file${files.length > 1 ? "s" : ""} selected`
-            : "Tap to capture or choose photos/videos"}
+          {files.length > 0 ? t("filesSelected", { count: files.length }) : t("tapToChoose")}
         </span>
-        {files.length === 0 && (
-          <span className="text-xs text-slate-500">JPG, PNG, MP4 — up to 25MB each</span>
-        )}
+        {files.length === 0 && <span className="text-xs text-slate-500">{t("uploadHint")}</span>}
       </label>
 
       {files.length > 0 && (
@@ -81,7 +79,7 @@ export function UploadDropzone({
               <button
                 type="button"
                 onClick={() => removeFile(i)}
-                aria-label={`Remove ${f.name}`}
+                aria-label={t("removeFile", { name: f.name })}
                 className="ml-2 shrink-0 font-mono text-xs text-slate-400 hover:text-[var(--color-accent-dark)]"
               >
                 ✕
@@ -95,7 +93,7 @@ export function UploadDropzone({
         type="text"
         value={caption}
         onChange={(e) => setCaption(e.target.value)}
-        placeholder="Add a caption (optional)"
+        placeholder={t("addCaptionPlaceholder")}
         className="rounded-lg border border-slate-300 bg-white px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
       />
 
@@ -105,12 +103,10 @@ export function UploadDropzone({
         className="rounded-lg bg-[var(--color-accent)] px-4 py-2.5 font-mono text-sm font-medium text-white transition hover:bg-[var(--color-accent-dark)] disabled:cursor-not-allowed disabled:opacity-50"
       >
         {optimizing
-          ? "Optimizing…"
+          ? t("optimizing")
           : uploading
-            ? "Uploading…"
-            : files.length > 1
-              ? `Share ${files.length} Moments`
-              : "Share Moment"}
+            ? t("uploading")
+            : t("shareMoment", { count: files.length })}
       </button>
     </form>
   );

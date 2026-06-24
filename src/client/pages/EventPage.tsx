@@ -9,8 +9,10 @@ import { MomentCard, type PendingMoment } from "../components/MomentCard";
 import { PointsToast } from "../components/Toast";
 import { MomentCardSkeleton } from "../components/Skeleton";
 import { pointsForContentType } from "../lib/points";
+import { useI18n } from "../lib/i18n";
 
 export default function EventPage() {
+  const { t, eventTypeLabel } = useI18n();
   const { slug } = useParams<{ slug: string }>();
   const [event, setEvent] = useState<EventData | null>(null);
   const [moments, setMoments] = useState<PendingMoment[]>([]);
@@ -85,7 +87,7 @@ export default function EventPage() {
 
     if (totalPoints > 0) setToastPoints(totalPoints);
     if (failures > 0) {
-      setUploadError(`${failures} of ${files.length} file${files.length > 1 ? "s" : ""} failed to upload`);
+      setUploadError(t("uploadFailed", { failed: failures, total: files.length }));
     }
     setUploading(false);
   }
@@ -109,7 +111,7 @@ export default function EventPage() {
   if (notFound || !event) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
-        Event not found.
+        {t("eventNotFound")}
       </div>
     );
   }
@@ -138,12 +140,13 @@ export default function EventPage() {
 
       <header className="border-b border-slate-200 bg-[var(--color-bg-alt)] px-4 py-6 text-center">
         <p className="font-mono text-xs uppercase tracking-wide text-[var(--color-accent)]">
-          {event.type}
+          {eventTypeLabel(event.type)}
         </p>
         <h1 className="text-xl font-semibold text-slate-900">{event.title}</h1>
         {event.main_characters && <p className="text-sm text-slate-600">{event.main_characters}</p>}
         <p className="mt-2 font-mono text-xs text-slate-500">
-          Hi {nickname} · Your points: <span className="font-semibold text-[var(--color-accent-dark)]">{myPoints}</span>
+          {t("greetingName", { name: nickname })} · {t("yourPoints")}{" "}
+          <span className="font-semibold text-[var(--color-accent-dark)]">{myPoints}</span>
         </p>
       </header>
 
@@ -157,9 +160,7 @@ export default function EventPage() {
           ))}
         </div>
         {moments.length === 0 && (
-          <p className="mt-8 text-center text-sm text-slate-500">
-            No moments yet — be the first to share one!
-          </p>
+          <p className="mt-8 text-center text-sm text-slate-500">{t("noMomentsYetBeFirst")}</p>
         )}
       </div>
     </div>

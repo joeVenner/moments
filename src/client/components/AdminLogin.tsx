@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { verifyAdminCredentials } from "../lib/api";
 import { setAdminAuth } from "../lib/adminAuth";
+import { useI18n } from "../lib/i18n";
 
 export function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
+  const { t } = useI18n();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -15,13 +17,13 @@ export function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
     try {
       const ok = await verifyAdminCredentials(username, password);
       if (!ok) {
-        setError("Incorrect username or password");
+        setError(t("incorrectCredentials"));
         return;
       }
       setAdminAuth(username, password);
       onSuccess();
     } catch {
-      setError("Couldn't reach the server — try again");
+      setError(t("serverUnreachable"));
     } finally {
       setLoading(false);
     }
@@ -33,7 +35,7 @@ export function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
         <h1 className="font-mono text-2xl font-semibold text-[var(--color-accent-dark)]">
           Moments — Admin
         </h1>
-        <p className="mt-1 text-sm text-slate-600">Sign in to manage events</p>
+        <p className="mt-1 text-sm text-slate-600">{t("adminSignInPrompt")}</p>
       </div>
 
       <form
@@ -48,7 +50,7 @@ export function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
           autoCorrect="off"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="Username"
+          placeholder={t("usernamePlaceholder")}
           className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
         />
         <input
@@ -57,7 +59,7 @@ export function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password"
+          placeholder={t("passwordPlaceholder")}
           className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
         />
         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -66,7 +68,7 @@ export function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
           disabled={!username || !password || loading}
           className="rounded-lg bg-[var(--color-accent)] px-4 py-3 font-mono text-sm font-medium text-white transition hover:bg-[var(--color-accent-dark)] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {loading ? "Signing in…" : "Sign in"}
+          {loading ? t("signingIn") : t("signIn")}
         </button>
       </form>
     </div>

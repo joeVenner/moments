@@ -6,10 +6,12 @@ import { EventMoments } from "../components/EventMoments";
 import { EventCardSkeleton } from "../components/Skeleton";
 import { AdminLogin } from "../components/AdminLogin";
 import { getAdminAuthHeader, clearAdminAuth } from "../lib/adminAuth";
+import { useI18n } from "../lib/i18n";
 
 const EVENT_TYPES = ["Wedding", "Gala", "Birthday", "Corporate", "Other"];
 
 export default function Admin() {
+  const { t, eventTypeLabel } = useI18n();
   const [authed, setAuthed] = useState(() => !!getAdminAuthHeader());
   const [events, setEvents] = useState<EventData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,7 +55,7 @@ export default function Admin() {
         setAuthed(false);
         return;
       }
-      setError(err instanceof Error ? err.message : "Failed to create event");
+      setError(err instanceof Error ? err.message : t("failedToCreateEvent"));
     } finally {
       setCreating(false);
     }
@@ -64,20 +66,20 @@ export default function Admin() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)] px-4 py-10">
+    <div className="min-h-screen bg-[var(--color-bg)] px-4 pb-10 pt-16">
       <div className="mx-auto max-w-2xl">
         <div className="flex items-start justify-between">
           <div>
             <h1 className="font-mono text-2xl font-semibold text-[var(--color-accent-dark)]">
               Moments — Admin
             </h1>
-            <p className="mt-1 text-sm text-slate-600">Create an event and provision its QR code.</p>
+            <p className="mt-1 text-sm text-slate-600">{t("adminTagline")}</p>
           </div>
           <button
             onClick={handleLogout}
             className="shrink-0 whitespace-nowrap rounded-full border border-slate-300 px-3 py-1.5 font-mono text-xs text-slate-600 transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent-dark)]"
           >
-            Log out
+            {t("logOut")}
           </button>
         </div>
 
@@ -88,7 +90,7 @@ export default function Admin() {
           <input
             name="title"
             required
-            placeholder="Event title (e.g. Sarah & Tom's Wedding)"
+            placeholder={t("eventTitlePlaceholder")}
             className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
           />
           <select
@@ -97,25 +99,25 @@ export default function Admin() {
             defaultValue="Wedding"
             className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
           >
-            {EVENT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {EVENT_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {eventTypeLabel(type)}
               </option>
             ))}
           </select>
           <input
             name="main_characters"
-            placeholder="Hosts / couple names"
+            placeholder={t("hostsPlaceholder")}
             className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
           />
           <textarea
             name="description"
-            placeholder="Description (optional)"
+            placeholder={t("descriptionPlaceholder")}
             rows={2}
             className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
           />
           <label className="text-xs font-mono text-slate-500">
-            Cover photo (optional)
+            {t("coverPhotoLabel")}
             <input
               name="cover"
               type="file"
@@ -129,7 +131,7 @@ export default function Admin() {
             disabled={creating}
             className="rounded-lg bg-[var(--color-accent)] px-4 py-2.5 font-mono text-sm font-medium text-white transition hover:bg-[var(--color-accent-dark)] disabled:opacity-50"
           >
-            {creating ? "Creating…" : "Create Event"}
+            {creating ? t("creating") : t("createEvent")}
           </button>
         </form>
 
@@ -141,7 +143,7 @@ export default function Admin() {
             </>
           )}
           {!loading && events.length === 0 && (
-            <p className="text-sm text-slate-500">No events yet — create one above.</p>
+            <p className="text-sm text-slate-500">{t("noEventsYet")}</p>
           )}
           {events.map((event) => (
             <div key={event.id} className="rounded-xl border border-slate-200 bg-white p-4">
@@ -149,14 +151,14 @@ export default function Admin() {
                 onClick={() => setExpandedSlug(expandedSlug === event.slug ? null : event.slug)}
                 className="flex w-full items-center justify-between text-left"
               >
-                <div>
-                  <p className="font-medium text-slate-900">{event.title}</p>
-                  <p className="font-mono text-xs text-slate-500">
-                    {event.type} · /e/{event.slug}
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-slate-900">{event.title}</p>
+                  <p className="truncate font-mono text-xs text-slate-500">
+                    {eventTypeLabel(event.type)} · /e/{event.slug}
                   </p>
                 </div>
-                <span className="font-mono text-xs text-[var(--color-accent)]">
-                  {expandedSlug === event.slug ? "Hide details" : "View details"}
+                <span className="ml-3 shrink-0 whitespace-nowrap font-mono text-xs text-[var(--color-accent)]">
+                  {expandedSlug === event.slug ? t("hideDetails") : t("viewDetails")}
                 </span>
               </button>
               {expandedSlug === event.slug && (
@@ -164,7 +166,7 @@ export default function Admin() {
                   <QRPanel slug={event.slug} title={event.title} />
                   <div>
                     <p className="mb-2 font-mono text-xs font-medium uppercase tracking-wide text-slate-500">
-                      Collected Moments
+                      {t("collectedMoments")}
                     </p>
                     <EventMoments slug={event.slug} />
                   </div>
