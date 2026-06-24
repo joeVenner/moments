@@ -1,0 +1,26 @@
+import { useEffect, useState } from "react";
+
+export function PointsToast({ points, onDone }: { points: number; onDone: () => void }) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const show = setTimeout(() => setVisible(true), 10);
+    const hide = setTimeout(() => setVisible(false), 1800);
+    const remove = setTimeout(onDone, 2200);
+    return () => {
+      clearTimeout(show);
+      clearTimeout(hide);
+      clearTimeout(remove);
+    };
+  }, [onDone]);
+
+  return (
+    <div
+      className={`fixed top-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-[var(--color-accent-dark)] px-5 py-2.5 text-sm font-mono font-medium text-white shadow-lg transition-all duration-300 ${
+        visible ? "translate-y-0 opacity-100" : "-translate-y-4 opacity-0"
+      }`}
+    >
+      +{points} Points Added!
+    </div>
+  );
+}
