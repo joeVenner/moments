@@ -10,7 +10,8 @@
     "deploy": "npm run build && wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply moments-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply moments-db --remote",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "hono": "^4.12.27",
@@ -30,6 +31,7 @@
     "tailwindcss": "^4.3.1",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
+    "vitest": "^4.1.9",
     "wrangler": "^4.104.0"
   }
 }
