@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createEvent, listEvents } from "../lib/api";
 import type { EventData } from "../lib/types";
 import { QRPanel } from "../components/QRPanel";
+import { EventCardSkeleton } from "../components/Skeleton";
 
 const EVENT_TYPES = ["Wedding", "Gala", "Birthday", "Corporate", "Other"];
 
@@ -97,7 +98,12 @@ export default function Admin() {
         </form>
 
         <div className="mt-8 flex flex-col gap-3">
-          {loading && <p className="text-sm text-slate-500">Loading events…</p>}
+          {loading && (
+            <>
+              <EventCardSkeleton />
+              <EventCardSkeleton />
+            </>
+          )}
           {!loading && events.length === 0 && (
             <p className="text-sm text-slate-500">No events yet — create one above.</p>
           )}

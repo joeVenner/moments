@@ -7,6 +7,7 @@ import { NicknameGate } from "../components/NicknameGate";
 import { UploadDropzone } from "../components/UploadDropzone";
 import { MomentCard, type PendingMoment } from "../components/MomentCard";
 import { PointsToast } from "../components/Toast";
+import { MomentCardSkeleton } from "../components/Skeleton";
 
 export default function EventPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -71,7 +72,19 @@ export default function EventPage() {
   }
 
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">Loading…</div>;
+    return (
+      <div className="min-h-screen bg-[var(--color-bg)] px-4 py-10">
+        <div className="mx-auto max-w-xl animate-pulse">
+          <div className="mx-auto h-4 w-16 rounded bg-slate-200" />
+          <div className="mx-auto mt-3 h-6 w-2/3 rounded bg-slate-200" />
+        </div>
+        <div className="mx-auto mt-10 grid max-w-xl grid-cols-2 gap-3 sm:grid-cols-3">
+          <MomentCardSkeleton />
+          <MomentCardSkeleton />
+          <MomentCardSkeleton />
+        </div>
+      </div>
+    );
   }
 
   if (notFound || !event) {
