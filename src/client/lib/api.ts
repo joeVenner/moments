@@ -49,3 +49,11 @@ export function uploadMoment(slug: string, data: FormData) {
     asJson<{ moment: MomentData; points_awarded: number }>(r)
   );
 }
+
+export function joinEvent(slug: string, nickname: string, avatarSeed: string) {
+  const data = new URLSearchParams({ nickname, avatar_seed: avatarSeed });
+  return fetch(`/api/events/${slug}/participants`, { method: "POST", body: data }).catch(() => {
+    // Joining the participant roster is a nice-to-have for the leaderboard/avatar
+    // strip — never block the guest from reaching the feed if this fails.
+  });
+}

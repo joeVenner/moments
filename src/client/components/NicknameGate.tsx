@@ -1,16 +1,22 @@
 import { useState } from "react";
 import type { EventData } from "../lib/types";
 import { useI18n } from "../lib/i18n";
+import { AvatarPicker } from "./AvatarPicker";
+
+function randomSeed(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
 
 export function NicknameGate({
   event,
   onSubmit,
 }: {
   event: EventData;
-  onSubmit: (nickname: string) => void;
+  onSubmit: (nickname: string, avatarSeed: string) => void;
 }) {
   const { t, eventTypeLabel } = useI18n();
   const [name, setName] = useState("");
+  const [avatarSeed, setAvatarSeed] = useState(randomSeed);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-[var(--color-bg)] px-6 text-center">
@@ -28,10 +34,13 @@ export function NicknameGate({
         <h1 className="text-2xl font-semibold text-slate-900">{event.title}</h1>
         {event.main_characters && <p className="mt-1 text-sm text-slate-600">{event.main_characters}</p>}
       </div>
+
+      <AvatarPicker seed={avatarSeed} onChange={setAvatarSeed} />
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (name.trim()) onSubmit(name.trim());
+          if (name.trim()) onSubmit(name.trim(), avatarSeed);
         }}
         className="flex w-full max-w-xs flex-col gap-3"
       >

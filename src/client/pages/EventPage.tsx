@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getEvent, listMoments, uploadMoment } from "../lib/api";
+import { getEvent, listMoments, uploadMoment, joinEvent } from "../lib/api";
 import { getNickname, setNickname as saveNickname } from "../lib/nickname";
 import type { EventData } from "../lib/types";
 import { NicknameGate } from "../components/NicknameGate";
@@ -8,6 +8,8 @@ import { UploadDropzone } from "../components/UploadDropzone";
 import { MomentCard, type PendingMoment } from "../components/MomentCard";
 import { PointsToast } from "../components/Toast";
 import { MomentCardSkeleton } from "../components/Skeleton";
+import { ParticipantStrip } from "../components/ParticipantStrip";
+import { Leaderboard } from "../components/Leaderboard";
 import { pointsForContentType } from "../lib/points";
 import { useI18n } from "../lib/i18n";
 
@@ -22,6 +24,7 @@ export default function EventPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [toastPoints, setToastPoints] = useState<number | null>(null);
+  const [tab, setTab] = useState<"feed" | "leaderboard">("feed");
 
   useEffect(() => {
     if (!slug) return;
@@ -120,9 +123,10 @@ export default function EventPage() {
     return (
       <NicknameGate
         event={event}
-        onSubmit={(name) => {
+        onSubmit={(name, avatarSeed) => {
           saveNickname(slug!, name);
           setNicknameState(name);
+          joinEvent(slug!, name, avatarSeed);
         }}
       />
     );
@@ -151,16 +155,51 @@ export default function EventPage() {
       </header>
 
       <div className="mx-auto max-w-xl px-4 py-6">
-        <UploadDropzone onUpload={handleUpload} uploading={uploading} />
-        {uploadError && <p className="mt-2 text-sm text-red-600">{uploadError}</p>}
+        <ParticipantStrip slug={slug!} />
 
-        <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {moments.map((moment) => (
-            <MomentCard key={moment.id} moment={moment} />
-          ))}
+        <div className="mt-4 flex gap-1 rounded-full border border-slate-200 bg-white p-1 font-mono text-xs">
+          <button
+            onClick={() => setTab("feed")}
+            className={`flex-1 rounded-full py-2 transition ${
+              tab === "feed"
+                ? "bg-[var(--color-accent)] text-white"
+                : "text-slate-500 hover:text-[var(--color-accent-dark)]"
+            }`}
+          >
+            {t("feedTab")}
+          </button>
+          <button
+            onClick={() => setTab("leaderboard")}
+            className={`flex-1 rounded-full py-2 transition ${
+              tab === "leaderboard"
+                ? "bg-[var(--color-accent)] text-white"
+                : "text-slate-500 hover:text-[var(--color-accent-dark)]"
+            }`}
+          >
+            {t("leaderboardTab")}
+          </button>
         </div>
-        {moments.length === 0 && (
-          <p className="mt-8 text-center text-sm text-slate-500">{t("noMomentsYetBeFirst")}</p>
+
+        {tab === "leaderboard" ? (
+          <div className="mt-6">
+            <Leaderboard slug={slug!} />
+          </div>
+        ) : (
+          <>
+            <div className="mt-6">
+              <UploadDropzone onUpload={handleUpload} uploading={uploading} />
+              {uploadError && <p className="mt-2 text-sm text-red-600">{uploadError}</p>}
+            </div>
+
+            <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {moments.map((moment) => (
+                <MomentCard key={moment.id} moment={moment} />
+              ))}
+            </div>
+            {moments.length === 0 && (
+              <p className="mt-8 text-center text-sm text-slate-500">{t("noMomentsYetBeFirst")}</p>
+            )}
+          </>
         )}
       </div>
     </div>
