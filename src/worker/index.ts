@@ -262,4 +262,9 @@ app.get("/media/*", async (c) => {
   });
 });
 
+app.onError((err, c) => {
+  console.error(err);
+  return c.json({ error: "Internal server error" }, 500);
+});
+
 export default app;
