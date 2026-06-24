@@ -65,7 +65,7 @@ export function UploadDropzone({
         value={caption}
         onChange={(e) => setCaption(e.target.value)}
         placeholder="Add a caption (optional)"
-        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+        className="rounded-lg border border-slate-300 bg-white px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
       />
 
       <button

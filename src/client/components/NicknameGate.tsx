@@ -38,7 +38,7 @@ export function NicknameGate({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Enter your name to join"
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-center text-sm outline-none focus:border-[var(--color-accent)]"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-3 text-center text-base outline-none focus:border-[var(--color-accent)]"
         />
         <button
           type="submit"
