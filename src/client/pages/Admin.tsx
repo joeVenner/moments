@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
-import { createEvent, listEvents } from "../lib/api";
+import { createEvent, listEvents, UnauthorizedError } from "../lib/api";
 import type { EventData } from "../lib/types";
 import { QRPanel } from "../components/QRPanel";
 import { EventCardSkeleton } from "../components/Skeleton";
+import { AdminLogin } from "../components/AdminLogin";
+import { getAdminAuthHeader, clearAdminAuth } from "../lib/adminAuth";
 
 const EVENT_TYPES = ["Wedding", "Gala", "Birthday", "Corporate", "Other"];
 
 export default function Admin() {
+  const [authed, setAuthed] = useState(() => !!getAdminAuthHeader());
   const [events, setEvents] = useState<EventData[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -14,10 +17,23 @@ export default function Admin() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!authed) return;
     listEvents()
       .then((r) => setEvents(r.events))
+      .catch((err) => {
+        if (err instanceof UnauthorizedError) {
+          clearAdminAuth();
+          setAuthed(false);
+        }
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [authed]);
+
+  function handleLogout() {
+    clearAdminAuth();
+    setAuthed(false);
+    setEvents([]);
+  }
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -31,19 +47,38 @@ export default function Admin() {
       setExpandedSlug(event.slug);
       form.reset();
     } catch (err) {
+      if (err instanceof UnauthorizedError) {
+        clearAdminAuth();
+        setAuthed(false);
+        return;
+      }
       setError(err instanceof Error ? err.message : "Failed to create event");
     } finally {
       setCreating(false);
     }
   }
 
+  if (!authed) {
+    return <AdminLogin onSuccess={() => setAuthed(true)} />;
+  }
+
   return (
     <div className="min-h-screen bg-[var(--color-bg)] px-4 py-10">
       <div className="mx-auto max-w-2xl">
-        <h1 className="font-mono text-2xl font-semibold text-[var(--color-accent-dark)]">
-          Moments — Admin
-        </h1>
-        <p className="mt-1 text-sm text-slate-600">Create an event and provision its QR code.</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="font-mono text-2xl font-semibold text-[var(--color-accent-dark)]">
+              Moments — Admin
+            </h1>
+            <p className="mt-1 text-sm text-slate-600">Create an event and provision its QR code.</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="shrink-0 whitespace-nowrap rounded-full border border-slate-300 px-3 py-1.5 font-mono text-xs text-slate-600 transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent-dark)]"
+          >
+            Log out
+          </button>
+        </div>
 
         <form
           onSubmit={handleCreate}
@@ -53,13 +88,13 @@ export default function Admin() {
             name="title"
             required
             placeholder="Event title (e.g. Sarah & Tom's Wedding)"
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+            className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
           />
           <select
             name="type"
             required
             defaultValue="Wedding"
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+            className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
           >
             {EVENT_TYPES.map((t) => (
               <option key={t} value={t}>
@@ -70,13 +105,13 @@ export default function Admin() {
           <input
             name="main_characters"
             placeholder="Hosts / couple names"
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+            className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
           />
           <textarea
             name="description"
             placeholder="Description (optional)"
             rows={2}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+            className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
           />
           <label className="text-xs font-mono text-slate-500">
             Cover photo (optional)
