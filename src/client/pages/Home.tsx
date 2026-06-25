@@ -96,7 +96,6 @@ export default function Home() {
       particleCount: 80,
       spread: 65,
       origin: { y: 0.7 },
-      colors: ["#d97757", "#c15f3c", "#fcfaf6"],
     });
   }
 
