@@ -27,6 +27,14 @@ export function createEvent(data: FormData) {
   );
 }
 
+export function generateBanner(data: FormData) {
+  return fetch("/api/admin/generate-banner", {
+    method: "POST",
+    headers: adminHeaders(),
+    body: data,
+  }).then((r) => asJson<{ banner_url: string }>(r));
+}
+
 export async function verifyAdminCredentials(username: string, password: string): Promise<boolean> {
   const res = await fetch("/api/events", {
     headers: { Authorization: `Basic ${btoa(`${username}:${password}`)}` },

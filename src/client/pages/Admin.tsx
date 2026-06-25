@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createEvent, listEvents, UnauthorizedError } from "../lib/api";
+import { createEvent, generateBanner, listEvents, UnauthorizedError } from "../lib/api";
 import type { EventData } from "../lib/types";
 import { QRPanel } from "../components/QRPanel";
 import { EventMoments } from "../components/EventMoments";
@@ -10,6 +10,7 @@ import { getAdminAuthHeader, clearAdminAuth } from "../lib/adminAuth";
 import { useI18n } from "../lib/i18n";
 
 const EVENT_TYPES = ["Wedding", "Gala", "Birthday", "Corporate", "Other"];
+const MAX_SELFIE_BYTES = 8 * 1024 * 1024; // mirrors src/worker/banner.ts MAX_SELFIE_BYTES
 
 export default function Admin() {
   const { t, eventTypeLabel } = useI18n();
@@ -25,6 +26,14 @@ export default function Admin() {
   const [previewHosts, setPreviewHosts] = useState("");
   const [previewCoverUrl, setPreviewCoverUrl] = useState<string | null>(null);
   const previewCoverUrlRef = useRef<string | null>(null);
+
+  const [selfieFile, setSelfieFile] = useState<File | null>(null);
+  const [bannerTheme, setBannerTheme] = useState("");
+  const [aiBannerUrl, setAiBannerUrl] = useState<string | null>(null);
+  const [generatingBanner, setGeneratingBanner] = useState(false);
+  const [bannerError, setBannerError] = useState<string | null>(null);
+  const selfieInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!authed) return;
@@ -58,11 +67,62 @@ export default function Admin() {
       previewCoverUrlRef.current = null;
     }
     if (file) {
+      // A manually-picked cover file wins over any AI banner on submit (the
+      // backend's precedence rule), so drop the AI banner state here too —
+      // keeps the live preview consistent with what will actually be sent.
+      setAiBannerUrl(null);
       const url = URL.createObjectURL(file);
       previewCoverUrlRef.current = url;
       setPreviewCoverUrl(url);
     } else {
       setPreviewCoverUrl(null);
+    }
+  }
+
+  function handleSelfieChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setBannerError(null);
+    setSelfieFile(file);
+  }
+
+  async function handleGenerateBanner() {
+    if (!selfieFile) return;
+    setBannerError(null);
+
+    if (selfieFile.size > MAX_SELFIE_BYTES) {
+      setBannerError(t("selfieTooLarge"));
+      return;
+    }
+
+    setGeneratingBanner(true);
+    try {
+      const fd = new FormData();
+      fd.append("selfie", selfieFile);
+      fd.append("theme", bannerTheme);
+      const { banner_url } = await generateBanner(fd);
+
+      // A freshly generated AI banner should win over any manual cover file
+      // already sitting in the file input (mirrors handleCoverChange's
+      // symmetric clear of aiBannerUrl) — otherwise the preview shows the AI
+      // banner but the backend's "manual file wins" rule would silently save
+      // the stale manual cover instead.
+      if (coverInputRef.current) coverInputRef.current.value = "";
+      setAiBannerUrl(banner_url);
+      if (previewCoverUrlRef.current) {
+        URL.revokeObjectURL(previewCoverUrlRef.current);
+        previewCoverUrlRef.current = null;
+      }
+      setPreviewCoverUrl(banner_url);
+    } catch (err) {
+      if (err instanceof UnauthorizedError) {
+        clearAdminAuth();
+        setAuthed(false);
+        return;
+      }
+      const message = err instanceof Error ? err.message : "";
+      setBannerError(/not configured/i.test(message) ? t("aiBannerUnavailable") : t("aiBannerFailed"));
+    } finally {
+      setGeneratingBanner(false);
     }
   }
 
@@ -73,6 +133,9 @@ export default function Admin() {
     const form = e.currentTarget;
     try {
       const formData = new FormData(form);
+      if (aiBannerUrl) {
+        formData.set("cover_image_url", aiBannerUrl);
+      }
       const { event } = await createEvent(formData);
       setEvents((prev) => [event, ...prev]);
       setExpandedSlug(event.slug);
@@ -85,6 +148,11 @@ export default function Admin() {
         previewCoverUrlRef.current = null;
       }
       setPreviewCoverUrl(null);
+      setSelfieFile(null);
+      setBannerTheme("");
+      setAiBannerUrl(null);
+      setBannerError(null);
+      if (selfieInputRef.current) selfieInputRef.current.value = "";
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         clearAdminAuth();
@@ -158,6 +226,7 @@ export default function Admin() {
           <label className="text-xs font-mono text-slate-500">
             {t("coverPhotoLabel")}
             <input
+              ref={coverInputRef}
               name="cover"
               type="file"
               accept="image/*"
@@ -165,6 +234,36 @@ export default function Admin() {
               className="mt-1 block w-full text-sm"
             />
           </label>
+
+          <div className="flex flex-col gap-2 rounded-lg border border-dashed border-slate-300 p-3">
+            <p className="text-xs font-mono text-slate-500">{t("aiSelfiePrompt")}</p>
+            <input
+              ref={selfieInputRef}
+              type="file"
+              accept="image/*"
+              data-testid="selfie-input"
+              onChange={handleSelfieChange}
+              className="block w-full text-sm"
+            />
+            <input
+              type="text"
+              value={bannerTheme}
+              onChange={(e) => setBannerTheme(e.target.value)}
+              placeholder={t("bannerThemePlaceholder")}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+            />
+            <button
+              type="button"
+              onClick={handleGenerateBanner}
+              disabled={!selfieFile || generatingBanner}
+              className="self-start rounded-lg border border-[var(--color-accent)] px-3 py-2 font-mono text-xs font-medium text-[var(--color-accent-dark)] transition hover:bg-[var(--color-accent)]/10 disabled:opacity-50"
+            >
+              {generatingBanner ? t("generatingBanner") : t("generateAiBanner")}
+            </button>
+            {bannerError && <p className="text-xs text-red-600">{bannerError}</p>}
+          </div>
+
+          {aiBannerUrl && <input type="hidden" name="cover_image_url" value={aiBannerUrl} />}
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button
             type="submit"

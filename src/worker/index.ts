@@ -73,6 +73,8 @@ app.post("/api/events", async (c) => {
     typeof body.main_characters === "string" ? body.main_characters.trim() : null;
   const description = typeof body.description === "string" ? body.description.trim() : null;
   const cover = body.cover instanceof File && body.cover.size > 0 ? body.cover : null;
+  const coverImageUrlField =
+    typeof body.cover_image_url === "string" ? body.cover_image_url.trim() : null;
 
   if (!title || !type) {
     return c.json({ error: "title and type are required" }, 400);
@@ -89,6 +91,11 @@ app.post("/api/events", async (c) => {
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : "cover upload failed" }, 400);
     }
+  } else if (coverImageUrlField && coverImageUrlField.startsWith("/media/")) {
+    // Already-generated AI banner stored in R2 by /api/admin/generate-banner —
+    // no re-upload needed. Only trust our own /media/ namespace here, since
+    // this is rendered directly as an <img src> elsewhere.
+    coverImageUrl = coverImageUrlField;
   }
 
   await c.env.DB.prepare(
