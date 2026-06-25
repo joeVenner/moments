@@ -5,14 +5,17 @@
   --font-display: "Fraunces", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", monospace;
 
-  /* Dark neutral "black-and-white" theme — near-black surfaces, white/grey
-     text, single Claude-orange accent (modeled on the Claude Code / OpenAI
-     platform UIs). See project CLAUDE.md → "Design System" for the law. */
-  --color-bg: #0d0d0d;
-  --color-bg-alt: #1a1a1a;
-  --color-border: #2a2a2a;
+  /* Dark neutral "black-and-white" theme — layered charcoal surfaces with a
+     visibly stepped hierarchy (page → raised surface → hairline border) for
+     depth, white/grey text, single Claude-orange accent (modeled on the
+     OpenAI / Claude Code platform consoles). Deliberately NOT pure-black:
+     flat near-black read as "too dark". See project CLAUDE.md → "Design
+     System" for the law. */
+  --color-bg: #1a1a1a;
+  --color-bg-alt: #262626;
+  --color-border: #383838;
   --color-text: #ededed;
-  --color-text-muted: #8f8f8f;
+  --color-text-muted: #a1a1a1;
   --color-accent: #d97757;
   --color-accent-dark: #c15f3c;
 }
@@ -26,6 +29,20 @@ body {
 h1,
 h2 {
   font-family: var(--font-display);
+}
+
+/* Event header backdrop when an event has no cover image: a faint accent glow
+   over the raised surface, replacing the old solid-orange block. Keeps a hint
+   of brand warmth without the garish saturated fill (per the "orange sparingly"
+   rule). The animated hero glow on the landing page is separate (PLAN P2.2). */
+.event-banner-fallback {
+  background:
+    radial-gradient(
+      130% 110% at 50% 0%,
+      color-mix(in oklab, var(--color-accent) 22%, transparent),
+      transparent 62%
+    ),
+    var(--color-bg-alt);
 }
 
 /* Shared one-time "pop-in" entrance — plays once on DOM mount because it's

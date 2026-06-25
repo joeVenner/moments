@@ -165,7 +165,7 @@ export default function EventPage() {
             className="h-28 w-full object-cover sm:h-36"
           />
         ) : (
-          <div className="h-28 w-full bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-dark)] sm:h-36" />
+          <div className="event-banner-fallback h-28 w-full sm:h-36" />
         )}
         <div className="px-4 py-6 text-center">
           <p className="font-mono text-xs uppercase tracking-wide text-[var(--color-accent)]">
