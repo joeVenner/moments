@@ -111,8 +111,8 @@ export default function EventPage() {
     return (
       <div className="min-h-screen bg-[var(--color-bg)] px-4 py-10">
         <div className="mx-auto max-w-xl animate-pulse">
-          <div className="mx-auto h-4 w-16 rounded bg-slate-200" />
-          <div className="mx-auto mt-3 h-6 w-2/3 rounded bg-slate-200" />
+          <div className="mx-auto h-4 w-16 rounded bg-[var(--color-border)]" />
+          <div className="mx-auto mt-3 h-6 w-2/3 rounded bg-[var(--color-border)]" />
         </div>
         <div className="mx-auto mt-10 grid max-w-xl grid-cols-2 gap-3 sm:grid-cols-3">
           <MomentCardSkeleton />
@@ -125,7 +125,7 @@ export default function EventPage() {
 
   if (notFound || !event) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+      <div className="flex min-h-screen items-center justify-center text-sm text-[var(--color-text-muted)]">
         {t("eventNotFound")}
       </div>
     );
@@ -157,7 +157,7 @@ export default function EventPage() {
         />
       )}
 
-      <header className="border-b border-slate-200 bg-[var(--color-bg-alt)]">
+      <header className="border-b border-[var(--color-border)] bg-[var(--color-bg-alt)]">
         {event.cover_image_url ? (
           <img
             src={event.cover_image_url}
@@ -171,9 +171,9 @@ export default function EventPage() {
           <p className="font-mono text-xs uppercase tracking-wide text-[var(--color-accent)]">
             {eventTypeLabel(event.type)}
           </p>
-          <h1 className="text-xl font-semibold text-slate-900">{event.title}</h1>
-          {event.main_characters && <p className="text-sm text-slate-600">{event.main_characters}</p>}
-          <p className="mt-2 font-mono text-xs text-slate-500">
+          <h1 className="text-xl font-semibold text-[var(--color-text)]">{event.title}</h1>
+          {event.main_characters && <p className="text-sm text-[var(--color-text-muted)]">{event.main_characters}</p>}
+          <p className="mt-2 font-mono text-xs text-[var(--color-text-muted)]">
             {t("greetingName", { name: nickname })} · {t("yourPoints")}{" "}
             <span className="font-semibold text-[var(--color-accent-dark)]">{myPoints}</span>
           </p>
@@ -183,13 +183,13 @@ export default function EventPage() {
       <div className="mx-auto max-w-xl px-4 py-6">
         <ParticipantStrip slug={slug!} />
 
-        <div className="mt-4 flex gap-1 rounded-full border border-slate-200 bg-white p-1 font-mono text-xs">
+        <div className="mt-4 flex gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-1 font-mono text-xs">
           <button
             onClick={() => setTab("feed")}
             className={`flex-1 rounded-full py-2 transition ${
               tab === "feed"
                 ? "bg-[var(--color-accent)] text-white"
-                : "text-slate-500 hover:text-[var(--color-accent-dark)]"
+                : "text-[var(--color-text-muted)] hover:text-[var(--color-accent-dark)]"
             }`}
           >
             {t("feedTab")}
@@ -199,7 +199,7 @@ export default function EventPage() {
             className={`flex-1 rounded-full py-2 transition ${
               tab === "leaderboard"
                 ? "bg-[var(--color-accent)] text-white"
-                : "text-slate-500 hover:text-[var(--color-accent-dark)]"
+                : "text-[var(--color-text-muted)] hover:text-[var(--color-accent-dark)]"
             }`}
           >
             {t("leaderboardTab")}
@@ -225,7 +225,7 @@ export default function EventPage() {
             {moments.length === 0 && (
               <div className="mt-8 text-center">
                 <img src={emptyFeed} alt="" className="mx-auto h-24 w-24" />
-                <p className="mt-2 text-sm text-slate-500">{t("noMomentsYetBeFirst")}</p>
+                <p className="mt-2 text-sm text-[var(--color-text-muted)]">{t("noMomentsYetBeFirst")}</p>
               </div>
             )}
           </div>

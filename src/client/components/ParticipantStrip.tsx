@@ -90,7 +90,7 @@ export function ParticipantStrip({ slug }: { slug: string }) {
             className="animate-pop-in flex flex-shrink-0 flex-col items-center gap-1"
           >
             <ParticipantAvatar participant={participant} />
-            <span className="max-w-[60px] truncate text-xs text-slate-600">
+            <span className="max-w-[60px] truncate text-xs text-[var(--color-text-muted)]">
               {participant.nickname}
             </span>
           </div>

@@ -67,7 +67,7 @@ export function Leaderboard({ slug }: { slug: string }) {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-6 text-center text-sm text-[var(--color-text-muted)]">
         {t("serverUnreachable")}
       </div>
     );
@@ -79,10 +79,10 @@ export function Leaderboard({ slug }: { slug: string }) {
         {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="h-16 animate-pulse rounded-xl border border-slate-200 bg-white p-4"
+            className="h-16 animate-pulse rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-4"
           >
-            <div className="h-3 w-1/3 rounded bg-slate-200" />
-            <div className="mt-2 h-3 w-1/4 rounded bg-slate-200" />
+            <div className="h-3 w-1/3 rounded bg-[var(--color-border)]" />
+            <div className="mt-2 h-3 w-1/4 rounded bg-[var(--color-border)]" />
           </div>
         ))}
       </div>
@@ -91,14 +91,14 @@ export function Leaderboard({ slug }: { slug: string }) {
 
   if (entries.length === 0) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-6 text-center">
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-6 text-center">
         <img
           src={emptyLeaderboard}
           alt=""
           className="mx-auto h-24 w-24"
         />
-        <p className="mt-2 text-sm text-slate-500">{t("noLeaderboardYet")}</p>
-        <p className="mt-3 text-xs italic text-slate-400">{quote}</p>
+        <p className="mt-2 text-sm text-[var(--color-text-muted)]">{t("noLeaderboardYet")}</p>
+        <p className="mt-3 text-xs italic text-[var(--color-text-muted)]">{quote}</p>
       </div>
     );
   }
@@ -120,7 +120,7 @@ export function Leaderboard({ slug }: { slug: string }) {
 
   return (
     <div className="space-y-4">
-      <h2 className="font-serif text-lg text-slate-900">{t("topPhotographers")}</h2>
+      <h2 className="font-serif text-lg text-[var(--color-text)]">{t("topPhotographers")}</h2>
 
       {showWinnerBanner && (
         <div
@@ -150,15 +150,15 @@ export function Leaderboard({ slug }: { slug: string }) {
                   {MEDALS[podium.indexOf(entry)]}
                 </span>
                 <span
-                  className="mt-1 max-w-[80px] truncate text-center text-xs font-medium text-slate-800"
+                  className="mt-1 max-w-[80px] truncate text-center text-xs font-medium text-[var(--color-text)]"
                   title={entry.uploader_name}
                 >
                   {entry.uploader_name}
                 </span>
-                <span className="font-mono text-[11px] text-slate-500">
+                <span className="font-mono text-[11px] text-[var(--color-text-muted)]">
                   {entry.total_points} {t("ptsLabel")}
                 </span>
-                <span className="font-mono text-[10px] text-slate-400">
+                <span className="font-mono text-[10px] text-[var(--color-text-muted)]">
                   {t("momentsLabel", { count: entry.moment_count })}
                 </span>
                 <div
@@ -174,7 +174,7 @@ export function Leaderboard({ slug }: { slug: string }) {
                 >
                   <span
                     className={`pb-1 font-mono text-xs font-bold ${
-                      isFirst ? "text-white" : "text-slate-500"
+                      isFirst ? "text-white" : "text-[var(--color-text-muted)]"
                     }`}
                   >
                     #{entries.indexOf(entry) + 1}
@@ -186,24 +186,24 @@ export function Leaderboard({ slug }: { slug: string }) {
         </div>
       )}
 
-      <p className="text-center text-xs italic text-slate-400">{quote}</p>
+      <p className="text-center text-xs italic text-[var(--color-text-muted)]">{quote}</p>
 
       {rest.length > 0 && (
         <div className="space-y-2">
           {rest.map((entry) => (
             <div
               key={entry.uploader_name}
-              className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3"
+              className="flex items-center justify-between rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-3"
             >
               <div className="flex min-w-0 items-center gap-2">
-                <span className="font-mono text-xs text-slate-400">#{entry.rank}</span>
-                <span className="max-w-[140px] truncate text-sm text-slate-800">
+                <span className="font-mono text-xs text-[var(--color-text-muted)]">#{entry.rank}</span>
+                <span className="max-w-[140px] truncate text-sm text-[var(--color-text)]">
                   {entry.uploader_name}
                 </span>
               </div>
-              <div className="flex shrink-0 items-center gap-2 font-mono text-xs text-slate-500">
+              <div className="flex shrink-0 items-center gap-2 font-mono text-xs text-[var(--color-text-muted)]">
                 <span>{t("momentsLabel", { count: entry.moment_count })}</span>
-                <span className="font-semibold text-slate-700">
+                <span className="font-semibold text-[var(--color-text)]">
                   {entry.total_points} {t("ptsLabel")}
                 </span>
               </div>

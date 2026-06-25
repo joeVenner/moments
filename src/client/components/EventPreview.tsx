@@ -15,12 +15,12 @@ export function EventPreview({
 
   return (
     <div>
-      <p className="font-mono text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <p className="font-mono text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
         {t("livePreview")}
       </p>
-      <p className="mt-0.5 text-xs text-slate-400">{t("livePreviewSubtitle")}</p>
+      <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{t("livePreviewSubtitle")}</p>
 
-      <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-[var(--color-bg)] text-center shadow-sm">
+      <div className="mt-3 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] text-center shadow-sm">
         {coverUrl ? (
           <img
             src={coverUrl}
@@ -37,10 +37,10 @@ export function EventPreview({
               {eventTypeLabel(type)}
             </p>
           )}
-          <h2 className="mt-1 truncate text-xl font-semibold text-slate-900">
+          <h2 className="mt-1 truncate text-xl font-semibold text-[var(--color-text)]">
             {title.trim() || t("previewPlaceholderTitle")}
           </h2>
-          <p className="mt-1 truncate text-sm text-slate-600">
+          <p className="mt-1 truncate text-sm text-[var(--color-text-muted)]">
             {hosts.trim() || t("previewPlaceholderHosts")}
           </p>
         </div>

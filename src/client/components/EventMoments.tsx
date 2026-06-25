@@ -34,11 +34,11 @@ export function EventMoments({ slug }: { slug: string }) {
 
   return (
     <div>
-      <p className="mb-2 font-mono text-xs text-slate-500">
+      <p className="mb-2 font-mono text-xs text-[var(--color-text-muted)]">
         {t("momentsCollected", { count: moments.length, points: totalPoints })}
       </p>
       {moments.length === 0 ? (
-        <p className="text-sm text-slate-500">{t("noMomentsCollected")}</p>
+        <p className="text-sm text-[var(--color-text-muted)]">{t("noMomentsCollected")}</p>
       ) : (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {moments.map((moment) => (

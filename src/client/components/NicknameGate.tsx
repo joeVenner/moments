@@ -35,8 +35,8 @@ export function NicknameGate({
           <p className="font-mono text-xs uppercase tracking-wide text-[var(--color-accent)]">
             {eventTypeLabel(event.type)}
           </p>
-          <h1 className="text-2xl font-semibold text-slate-900">{event.title}</h1>
-          {event.main_characters && <p className="mt-1 text-sm text-slate-600">{event.main_characters}</p>}
+          <h1 className="text-2xl font-semibold text-[var(--color-text)]">{event.title}</h1>
+          {event.main_characters && <p className="mt-1 text-sm text-[var(--color-text-muted)]">{event.main_characters}</p>}
         </div>
 
         <AvatarPicker seed={avatarSeed} onChange={setAvatarSeed} />
@@ -53,7 +53,7 @@ export function NicknameGate({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={t("enterNameToJoin")}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-3 text-center text-base outline-none focus:border-[var(--color-accent)]"
+            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-alt)] px-3 py-3 text-center text-base outline-none focus:border-[var(--color-accent)]"
           />
           <button
             type="submit"
