@@ -66,13 +66,13 @@ function FeatureCard({
     <div
       ref={ref}
       style={{ transitionDelay: visible ? `${delayMs}ms` : "0ms" }}
-      className={`rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm transition-all duration-700 ${
+      className={`rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-6 text-center shadow-sm transition-all duration-700 ${
         visible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
       }`}
     >
       <img src={icon} alt="" className="mx-auto h-20 w-20" />
-      <h3 className="mt-4 text-lg font-semibold text-slate-900">{title}</h3>
-      <p className="mt-2 text-sm text-slate-600">{body}</p>
+      <h3 className="mt-4 text-lg font-semibold text-[var(--color-text)]">{title}</h3>
+      <p className="mt-2 text-sm text-[var(--color-text-muted)]">{body}</p>
     </div>
   );
 }
@@ -120,7 +120,7 @@ export default function Home() {
           <h1 className="max-w-2xl text-4xl font-semibold text-[var(--color-accent-dark)] sm:text-5xl">
             {t("heroHeadline")}
           </h1>
-          <p className="max-w-md text-base text-slate-600 sm:text-lg">{t("heroSubhead")}</p>
+          <p className="max-w-md text-base text-[var(--color-text-muted)] sm:text-lg">{t("heroSubhead")}</p>
 
           <form
             onSubmit={handleJoinSubmit}
@@ -130,7 +130,7 @@ export default function Home() {
               value={eventCode}
               onChange={(e) => setEventCode(e.target.value)}
               placeholder={t("eventCodePlaceholder")}
-              className="flex-1 rounded-full border border-slate-300 bg-white px-5 py-3 text-center text-sm outline-none focus:border-[var(--color-accent)] sm:text-left"
+              className="flex-1 rounded-full border border-[var(--color-border)] bg-[var(--color-bg-alt)] px-5 py-3 text-center text-sm outline-none focus:border-[var(--color-accent)] sm:text-left"
             />
             <button
               type="submit"
@@ -143,12 +143,12 @@ export default function Home() {
 
           <Link
             to="/admin"
-            className="text-xs text-slate-400 underline-offset-2 transition hover:text-slate-600 hover:underline"
+            className="text-xs text-[var(--color-text-muted)] underline-offset-2 transition hover:text-[var(--color-text)] hover:underline"
           >
             {t("openAdminPanel")}
           </Link>
 
-          <p className="font-mono text-xs text-slate-400">
+          <p className="font-mono text-xs text-[var(--color-text-muted)]">
             {t("momentsCapturedCounter", { count: momentsCaptured.toLocaleString() })}
           </p>
         </div>
@@ -164,7 +164,7 @@ export default function Home() {
 
       {/* Feature highlights */}
       <section className="px-6 pb-24">
-        <h2 className="mx-auto max-w-lg text-center text-2xl font-semibold text-slate-900 sm:text-3xl">
+        <h2 className="mx-auto max-w-lg text-center text-2xl font-semibold text-[var(--color-text)] sm:text-3xl">
           {t("featuresHeading")}
         </h2>
 
