@@ -79,6 +79,8 @@ const dict: Record<Lang, Record<string, Entry>> = {
     uploadFailed: "Failed to upload {failed} of {total} file(s)",
     pointsAdded: (v) =>
       Number(v.points) === 1 ? "+{points} Point Added!" : "+{points} Points Added!",
+    milestoneReached: "Milestone!",
+    milestonePointsReached: "{points} points reached!",
 
     livePreview: "Live Preview",
     livePreviewSubtitle: "What guests will see",
@@ -179,6 +181,8 @@ const dict: Record<Lang, Record<string, Entry>> = {
     uploadFailed: "Échec de l'envoi de {failed} fichier(s) sur {total}",
     pointsAdded: (v) =>
       Number(v.points) === 1 ? "+{points} point ajouté !" : "+{points} points ajoutés !",
+    milestoneReached: "Étape franchie !",
+    milestonePointsReached: "{points} points atteints !",
 
     livePreview: "Aperçu en direct",
     livePreviewSubtitle: "Ce que verront les invités",

@@ -6,11 +6,11 @@ import type { EventData } from "../lib/types";
 import { NicknameGate } from "../components/NicknameGate";
 import { UploadDropzone } from "../components/UploadDropzone";
 import { MomentCard, type PendingMoment } from "../components/MomentCard";
-import { PointsToast } from "../components/Toast";
+import { PointsToast, MilestoneBanner } from "../components/Toast";
 import { MomentCardSkeleton } from "../components/Skeleton";
 import { ParticipantStrip } from "../components/ParticipantStrip";
 import { Leaderboard } from "../components/Leaderboard";
-import { pointsForContentType } from "../lib/points";
+import { pointsForContentType, highestMilestoneCrossed } from "../lib/points";
 import { useI18n } from "../lib/i18n";
 import emptyFeed from "../assets/empty-feed.png";
 
@@ -25,6 +25,7 @@ export default function EventPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [toastPoints, setToastPoints] = useState<number | null>(null);
+  const [milestoneReached, setMilestoneReached] = useState<number | null>(null);
   const [tab, setTab] = useState<"feed" | "leaderboard">("feed");
 
   useEffect(() => {
@@ -39,8 +40,13 @@ export default function EventPage() {
       .finally(() => setLoading(false));
   }, [slug]);
 
+  const myPoints = moments
+    .filter((m) => m.uploader_name === nickname)
+    .reduce((sum, m) => sum + m.points_awarded, 0);
+
   async function handleUpload(files: File[], caption: string) {
     if (!slug || !nickname || !event) return;
+    const pointsBefore = myPoints;
     setUploadError(null);
     setUploading(true);
 
@@ -89,7 +95,12 @@ export default function EventPage() {
     });
     pending.forEach(({ previewUrl }) => URL.revokeObjectURL(previewUrl));
 
-    if (totalPoints > 0) setToastPoints(totalPoints);
+    if (totalPoints > 0) {
+      setToastPoints(totalPoints);
+      const pointsAfter = pointsBefore + totalPoints;
+      const milestone = highestMilestoneCrossed(pointsBefore, pointsAfter);
+      if (milestone !== null) setMilestoneReached(milestone);
+    }
     if (failures > 0) {
       setUploadError(t("uploadFailed", { failed: failures, total: files.length }));
     }
@@ -133,14 +144,17 @@ export default function EventPage() {
     );
   }
 
-  const myPoints = moments
-    .filter((m) => m.uploader_name === nickname)
-    .reduce((sum, m) => sum + m.points_awarded, 0);
-
   return (
     <div className="min-h-screen bg-[var(--color-bg)] pb-12">
       {toastPoints !== null && (
         <PointsToast points={toastPoints} onDone={() => setToastPoints(null)} />
+      )}
+      {milestoneReached !== null && (
+        <MilestoneBanner
+          key={milestoneReached}
+          points={milestoneReached}
+          onDone={() => setMilestoneReached(null)}
+        />
       )}
 
       <header className="border-b border-slate-200 bg-[var(--color-bg-alt)]">
