@@ -38,7 +38,10 @@ export function QRFlyer({
           <h2 className="mt-6 font-display text-2xl font-semibold text-[var(--color-accent-dark)]">
             {t("flyerCta")}
           </h2>
-          <p className="mt-1 text-sm text-slate-700">{t("flyerCtaSubline")}</p>
+          {/* Fixed dark "paper inks" (not theme tokens): this flyer is composited
+              on the light frame image and printed on white paper, so its text must
+              stay dark regardless of the dark UI theme. */}
+          <p className="mt-1 text-sm text-[#3f3f46]">{t("flyerCtaSubline")}</p>
 
           <img
             src={dataUrl}
@@ -47,11 +50,11 @@ export function QRFlyer({
             data-testid="qr-flyer-image"
           />
 
-          <p className="mt-5 text-xs text-slate-600">{t("flyerInstruction")}</p>
-          <p className="mt-2 truncate font-display text-base font-semibold text-slate-900">
+          <p className="mt-5 text-xs text-[#52525b]">{t("flyerInstruction")}</p>
+          <p className="mt-2 truncate font-display text-base font-semibold text-[#18181b]">
             {title}
           </p>
-          <code className="mt-1 text-[10px] text-slate-500 break-all">{guestUrl}</code>
+          <code className="mt-1 text-[10px] text-[#71717a] break-all">{guestUrl}</code>
         </div>
       </div>
     </div>

@@ -99,5 +99,10 @@ h2 {
     position: absolute;
     top: 0;
     left: 0;
+    /* Pin to paper: the dark theme sets a near-white body color, so force a
+       white background + dark default ink here so nothing prints invisibly.
+       The flyer's own text already uses explicit dark "paper ink" colors. */
+    color: #18181b;
+    background: #ffffff;
   }
 }

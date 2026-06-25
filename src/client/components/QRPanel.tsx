@@ -8,7 +8,7 @@ export function QRPanel({ slug, title }: { slug: string; title: string }) {
   const dataUrl = useQrDataUrl(guestUrl);
 
   return (
-    <div className="flex flex-col items-center gap-3 rounded-xl border border-slate-200 bg-[var(--color-bg-alt)] p-5">
+    <div className="flex flex-col items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-5">
       {dataUrl ? (
         <img
           data-testid="qr-code-image"
@@ -17,9 +17,9 @@ export function QRPanel({ slug, title }: { slug: string; title: string }) {
           className="h-40 w-40 animate-[fade-in_400ms_ease-out] rounded-lg"
         />
       ) : (
-        <div className="h-40 w-40 animate-pulse rounded-lg bg-slate-200" />
+        <div className="h-40 w-40 animate-pulse rounded-lg bg-[var(--color-border)]" />
       )}
-      <code className="text-xs text-slate-500 break-all">{guestUrl}</code>
+      <code className="text-xs text-[var(--color-text-muted)] break-all">{guestUrl}</code>
       {dataUrl && (
         <div className="flex items-center gap-2">
           <a
