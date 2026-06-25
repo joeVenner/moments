@@ -2,7 +2,7 @@ import type { Env } from "./types";
 
 const AI_BANNER_MODEL = "gpt-image-2";
 const MAX_SELFIE_BYTES = 8 * 1024 * 1024; // 8MB — this is a portrait photo, not an event upload
-const REQUEST_TIMEOUT_MS = 30_000;
+const REQUEST_TIMEOUT_MS = 90_000; // gpt-image-2 edits at this size routinely take 30-50s+
 
 export class BannerGenerationError extends Error {}
 
