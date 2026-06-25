@@ -25,10 +25,10 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[var(--color-bg)] px-6 text-center">
-          <p className="text-lg font-semibold text-slate-900">
+          <p className="text-lg font-semibold text-[var(--color-text)]">
             Something went wrong — please reload.
           </p>
-          <p className="text-sm text-slate-600">Une erreur est survenue — veuillez recharger.</p>
+          <p className="text-sm text-[var(--color-text-muted)]">Une erreur est survenue — veuillez recharger.</p>
           <button
             onClick={() => window.location.reload()}
             className="rounded-full bg-[var(--color-accent)] px-5 py-2 font-mono text-sm font-medium text-white transition hover:bg-[var(--color-accent-dark)]"

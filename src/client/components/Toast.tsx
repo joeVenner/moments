@@ -65,12 +65,12 @@ export function MilestoneBanner({ points, onDone }: { points: number; onDone: ()
         top: "calc(4.5rem + env(safe-area-inset-top))",
         borderColor: "var(--color-accent)",
       }}
-      className={`fixed left-1/2 z-50 flex w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 flex-col items-center gap-2 rounded-2xl border-2 bg-white px-6 py-5 text-center shadow-xl transition-all duration-300 ${
+      className={`fixed left-1/2 z-50 flex w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 flex-col items-center gap-2 rounded-2xl border-2 bg-[var(--color-bg-alt)] px-6 py-5 text-center shadow-xl transition-all duration-300 ${
         visible ? "translate-y-0 scale-100 opacity-100" : "-translate-y-4 scale-95 opacity-0"
       }`}
     >
       <img src={milestoneBadge} alt="" className="h-16 w-16" />
-      <p className="font-serif text-lg font-semibold text-slate-900">{t("milestoneReached")}</p>
+      <p className="font-serif text-lg font-semibold text-[var(--color-text)]">{t("milestoneReached")}</p>
       <p className="font-mono text-sm text-[var(--color-accent-dark)]">
         {t("milestonePointsReached", { points })}
       </p>
