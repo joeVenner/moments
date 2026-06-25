@@ -63,6 +63,10 @@ const dict: Record<Lang, Record<string, Entry>> = {
     noMomentsCollected: "No moments collected yet.",
 
     downloadQr: "Download QR",
+    printFlyer: "Print Flyer",
+    flyerCta: "Caught the moment?",
+    flyerCtaSubline: "Scan & show us what you captured!",
+    flyerInstruction: "Scan the code above to join the feed and share your photos & videos.",
 
     enterNameToJoin: "Enter your name to join",
     joinTheFeed: "Join the Feed",
@@ -171,6 +175,11 @@ const dict: Record<Lang, Record<string, Entry>> = {
     noMomentsCollected: "Aucun souvenir collecté pour l'instant.",
 
     downloadQr: "Télécharger le QR code",
+    printFlyer: "Imprimer l'affiche",
+    flyerCta: "Instant capturé ?",
+    flyerCtaSubline: "Scannez et montrez-nous ce que vous avez capturé !",
+    flyerInstruction:
+      "Scannez le code ci-dessus pour rejoindre le fil et partager vos photos et vidéos.",
 
     enterNameToJoin: "Entrez votre nom pour participer",
     joinTheFeed: "Rejoindre le fil",

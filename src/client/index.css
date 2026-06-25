@@ -77,3 +77,22 @@ h2 {
     animation: none;
   }
 }
+
+/* Printable QR flyer: hide everything on the page except the flyer card.
+   `visibility` (not `display`) is used because it lets a descendant
+   re-show itself even though intervening ancestors (the admin page chrome,
+   the QRPanel wrapper) have no special print styling of their own. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .qr-flyer,
+  .qr-flyer * {
+    visibility: visible;
+  }
+  .qr-flyer {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+}
