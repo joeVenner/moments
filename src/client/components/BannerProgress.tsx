@@ -42,7 +42,7 @@ export function BannerProgress() {
         <span className="font-mono text-xs text-[var(--color-accent-dark)]">
           {t("generatingBanner")}
         </span>
-        <span className="font-mono text-xs tabular-nums text-slate-500">
+        <span className="font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
           {formatElapsed(elapsed)}
         </span>
       </div>
@@ -52,7 +52,7 @@ export function BannerProgress() {
           style={{ width: `${percent}%` }}
         />
       </div>
-      <span className="font-mono text-[11px] text-slate-400">{t("bannerProgressHint")}</span>
+      <span className="font-mono text-[11px] text-[var(--color-text-muted)]">{t("bannerProgressHint")}</span>
     </div>
   );
 }

@@ -51,7 +51,7 @@ export function UploadDropzone({
         className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-6 text-center transition ${
           dragOver
             ? "border-[var(--color-accent)] bg-[var(--color-bg-alt)]"
-            : "border-slate-300 bg-[var(--color-bg-alt)]"
+            : "border-[var(--color-border)] bg-[var(--color-bg-alt)]"
         }`}
       >
         <input
@@ -65,7 +65,7 @@ export function UploadDropzone({
         <span className="font-mono text-sm text-[var(--color-accent-dark)]">
           {files.length > 0 ? t("filesSelected", { count: files.length }) : t("tapToChoose")}
         </span>
-        {files.length === 0 && <span className="text-xs text-slate-500">{t("uploadHint")}</span>}
+        {files.length === 0 && <span className="text-xs text-[var(--color-text-muted)]">{t("uploadHint")}</span>}
       </label>
 
       {files.length > 0 && (
@@ -73,14 +73,14 @@ export function UploadDropzone({
           {files.map((f, i) => (
             <li
               key={`${f.name}-${f.lastModified}-${i}`}
-              className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm"
+              className="flex items-center justify-between rounded-lg bg-[var(--color-bg-alt)] px-3 py-2 text-sm"
             >
-              <span className="truncate text-slate-700">{f.name}</span>
+              <span className="truncate text-[var(--color-text)]">{f.name}</span>
               <button
                 type="button"
                 onClick={() => removeFile(i)}
                 aria-label={t("removeFile", { name: f.name })}
-                className="ml-2 shrink-0 font-mono text-xs text-slate-400 hover:text-[var(--color-accent-dark)]"
+                className="ml-2 shrink-0 font-mono text-xs text-[var(--color-text-muted)] hover:text-[var(--color-accent-dark)]"
               >
                 ✕
               </button>
@@ -94,7 +94,7 @@ export function UploadDropzone({
         value={caption}
         onChange={(e) => setCaption(e.target.value)}
         placeholder={t("addCaptionPlaceholder")}
-        className="rounded-lg border border-slate-300 bg-white px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
+        className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-alt)] px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
       />
 
       <button

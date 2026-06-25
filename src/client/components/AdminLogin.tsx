@@ -35,12 +35,12 @@ export function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
         <h1 className="font-mono text-2xl font-semibold text-[var(--color-accent-dark)]">
           Moments — Admin
         </h1>
-        <p className="mt-1 text-sm text-slate-600">{t("adminSignInPrompt")}</p>
+        <p className="mt-1 text-sm text-[var(--color-text-muted)]">{t("adminSignInPrompt")}</p>
       </div>
 
       <form
         onSubmit={handleSubmit}
-        className="flex w-full max-w-xs flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5"
+        className="flex w-full max-w-xs flex-col gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-5"
       >
         <input
           name="username"
@@ -51,7 +51,7 @@ export function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder={t("usernamePlaceholder")}
-          className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
+          className="rounded-lg border border-[var(--color-border)] px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
         />
         <input
           name="password"
@@ -60,7 +60,7 @@ export function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder={t("passwordPlaceholder")}
-          className="rounded-lg border border-slate-300 px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
+          className="rounded-lg border border-[var(--color-border)] px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
         />
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button
