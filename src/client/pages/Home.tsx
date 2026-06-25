@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useI18n } from "../lib/i18n";
 import { safeConfetti } from "../lib/motion";
 import heroIllustration from "../assets/hero-illustration.png";
@@ -79,7 +79,9 @@ function FeatureCard({
 
 export default function Home() {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const [heroVisible, setHeroVisible] = useState(false);
+  const [eventCode, setEventCode] = useState("");
   const momentsCaptured = useCountUp(MOMENTS_COUNTER_TARGET);
 
   useEffect(() => {
@@ -98,6 +100,14 @@ export default function Home() {
     });
   }
 
+  function handleJoinSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const code = eventCode.trim();
+    if (!code) return;
+    fireConfetti();
+    navigate(`/e/${encodeURIComponent(code)}`);
+  }
+
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
       {/* Hero */}
@@ -111,13 +121,33 @@ export default function Home() {
             {t("heroHeadline")}
           </h1>
           <p className="max-w-md text-base text-slate-600 sm:text-lg">{t("heroSubhead")}</p>
+
+          <form
+            onSubmit={handleJoinSubmit}
+            className="mt-2 flex w-full max-w-sm flex-col gap-2 sm:flex-row"
+          >
+            <input
+              value={eventCode}
+              onChange={(e) => setEventCode(e.target.value)}
+              placeholder={t("eventCodePlaceholder")}
+              className="flex-1 rounded-full border border-slate-300 bg-white px-5 py-3 text-center text-sm outline-none focus:border-[var(--color-accent)] sm:text-left"
+            />
+            <button
+              type="submit"
+              disabled={!eventCode.trim()}
+              className="rounded-full bg-[var(--color-accent)] px-6 py-3 font-mono text-sm font-medium text-white transition hover:bg-[var(--color-accent-dark)] disabled:opacity-50"
+            >
+              {t("joinEvent")}
+            </button>
+          </form>
+
           <Link
             to="/admin"
-            onClick={fireConfetti}
-            className="mt-2 rounded-full bg-[var(--color-accent)] px-6 py-3 font-mono text-sm font-medium text-white transition hover:bg-[var(--color-accent-dark)]"
+            className="text-xs text-slate-400 underline-offset-2 transition hover:text-slate-600 hover:underline"
           >
             {t("openAdminPanel")}
           </Link>
+
           <p className="font-mono text-xs text-slate-400">
             {t("momentsCapturedCounter", { count: momentsCaptured.toLocaleString() })}
           </p>

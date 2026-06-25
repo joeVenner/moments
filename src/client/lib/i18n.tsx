@@ -17,6 +17,8 @@ const dict: Record<Lang, Record<string, Entry>> = {
     heroSubhead:
       "One QR code turns your guests' phones into a live photo wall — no app, no sign-up, no waiting.",
     momentsCapturedCounter: (v) => `${v.count} moments captured and counting`,
+    eventCodePlaceholder: "Enter your event code",
+    joinEvent: "Join",
 
     featuresHeading: "Built to make every event a little more fun",
     featurePointsTitle: "Gamified points & leaderboard",
@@ -121,6 +123,8 @@ const dict: Record<Lang, Record<string, Entry>> = {
     heroSubhead:
       "Un seul QR code transforme les téléphones de vos invités en mur de photos en direct — sans application, sans inscription, sans attente.",
     momentsCapturedCounter: (v) => `${v.count} souvenirs capturés et ça continue`,
+    eventCodePlaceholder: "Entrez votre code événement",
+    joinEvent: "Rejoindre",
 
     featuresHeading: "Pensé pour rendre chaque événement un peu plus amusant",
     featurePointsTitle: "Points ludiques & classement",
