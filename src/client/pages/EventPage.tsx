@@ -142,16 +142,27 @@ export default function EventPage() {
         <PointsToast points={toastPoints} onDone={() => setToastPoints(null)} />
       )}
 
-      <header className="border-b border-slate-200 bg-[var(--color-bg-alt)] px-4 py-6 text-center">
-        <p className="font-mono text-xs uppercase tracking-wide text-[var(--color-accent)]">
-          {eventTypeLabel(event.type)}
-        </p>
-        <h1 className="text-xl font-semibold text-slate-900">{event.title}</h1>
-        {event.main_characters && <p className="text-sm text-slate-600">{event.main_characters}</p>}
-        <p className="mt-2 font-mono text-xs text-slate-500">
-          {t("greetingName", { name: nickname })} · {t("yourPoints")}{" "}
-          <span className="font-semibold text-[var(--color-accent-dark)]">{myPoints}</span>
-        </p>
+      <header className="border-b border-slate-200 bg-[var(--color-bg-alt)]">
+        {event.cover_image_url ? (
+          <img
+            src={event.cover_image_url}
+            alt={event.title}
+            className="h-28 w-full object-cover sm:h-36"
+          />
+        ) : (
+          <div className="h-28 w-full bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-dark)] sm:h-36" />
+        )}
+        <div className="px-4 py-6 text-center">
+          <p className="font-mono text-xs uppercase tracking-wide text-[var(--color-accent)]">
+            {eventTypeLabel(event.type)}
+          </p>
+          <h1 className="text-xl font-semibold text-slate-900">{event.title}</h1>
+          {event.main_characters && <p className="text-sm text-slate-600">{event.main_characters}</p>}
+          <p className="mt-2 font-mono text-xs text-slate-500">
+            {t("greetingName", { name: nickname })} · {t("yourPoints")}{" "}
+            <span className="font-semibold text-[var(--color-accent-dark)]">{myPoints}</span>
+          </p>
+        </div>
       </header>
 
       <div className="mx-auto max-w-xl px-4 py-6">

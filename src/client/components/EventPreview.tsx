@@ -20,18 +20,18 @@ export function EventPreview({
       </p>
       <p className="mt-0.5 text-xs text-slate-400">{t("livePreviewSubtitle")}</p>
 
-      <div className="mx-auto mt-3 flex max-w-[280px] flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-[var(--color-bg)] p-6 text-center shadow-sm">
+      <div className="mx-auto mt-3 max-w-[280px] overflow-hidden rounded-2xl border border-slate-200 bg-[var(--color-bg)] text-center shadow-sm">
         {coverUrl ? (
           <img
             src={coverUrl}
             alt={title.trim() || t("previewPlaceholderTitle")}
-            className="h-20 w-20 rounded-full border-4 border-white object-cover shadow-md"
+            className="h-28 w-full object-cover"
           />
         ) : (
-          <div className="h-20 w-20 rounded-full border-4 border-white bg-slate-200 shadow-md" />
+          <div className="h-28 w-full bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-dark)]" />
         )}
 
-        <div className="w-full min-w-0">
+        <div className="w-full min-w-0 p-4">
           {type && (
             <p className="truncate font-mono text-xs uppercase tracking-wide text-[var(--color-accent)]">
               {eventTypeLabel(type)}
