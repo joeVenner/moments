@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import confetti from "canvas-confetti";
 import { useI18n } from "../lib/i18n";
 
 export function PointsToast({ points, onDone }: { points: number; onDone: () => void }) {
@@ -6,6 +7,12 @@ export function PointsToast({ points, onDone }: { points: number; onDone: () => 
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    confetti({
+      particleCount: 70,
+      spread: 60,
+      origin: { y: 0.6 },
+    });
+
     const show = setTimeout(() => setVisible(true), 10);
     const hide = setTimeout(() => setVisible(false), 1800);
     const remove = setTimeout(onDone, 2200);

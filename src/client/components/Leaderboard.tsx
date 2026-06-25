@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import { useI18n, randomQuote } from "../lib/i18n";
+import emptyLeaderboard from "../assets/empty-leaderboard.png";
+import winnerTrophy from "../assets/winner-trophy.png";
 
 interface LeaderboardEntry {
   uploader_name: string;
@@ -79,7 +81,12 @@ export function Leaderboard({ slug }: { slug: string }) {
   if (entries.length === 0) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-6 text-center">
-        <p className="text-sm text-slate-500">{t("noLeaderboardYet")}</p>
+        <img
+          src={emptyLeaderboard}
+          alt=""
+          className="mx-auto h-24 w-24"
+        />
+        <p className="mt-2 text-sm text-slate-500">{t("noLeaderboardYet")}</p>
         <p className="mt-3 text-xs italic text-slate-400">{quote}</p>
       </div>
     );
@@ -106,14 +113,15 @@ export function Leaderboard({ slug }: { slug: string }) {
 
       {showWinnerBanner && (
         <div
-          className="rounded-xl border p-3 text-center text-sm font-medium"
+          className="flex items-center justify-center gap-2 rounded-xl border p-3 text-center text-sm font-medium"
           style={{
             borderColor: "var(--color-accent)",
             backgroundColor: "var(--color-bg-alt)",
             color: "var(--color-accent-dark)",
           }}
         >
-          🎉 {t("winnerAnnouncement", { name: winner.uploader_name })}
+          <img src={winnerTrophy} alt="" className="h-8 w-8 shrink-0" />
+          {t("winnerAnnouncement", { name: winner.uploader_name })}
         </div>
       )}
 

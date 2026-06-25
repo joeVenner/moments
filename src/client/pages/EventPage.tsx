@@ -12,6 +12,7 @@ import { ParticipantStrip } from "../components/ParticipantStrip";
 import { Leaderboard } from "../components/Leaderboard";
 import { pointsForContentType } from "../lib/points";
 import { useI18n } from "../lib/i18n";
+import emptyFeed from "../assets/empty-feed.png";
 
 export default function EventPage() {
   const { t, eventTypeLabel } = useI18n();
@@ -208,7 +209,10 @@ export default function EventPage() {
               ))}
             </div>
             {moments.length === 0 && (
-              <p className="mt-8 text-center text-sm text-slate-500">{t("noMomentsYetBeFirst")}</p>
+              <div className="mt-8 text-center">
+                <img src={emptyFeed} alt="" className="mx-auto h-24 w-24" />
+                <p className="mt-2 text-sm text-slate-500">{t("noMomentsYetBeFirst")}</p>
+              </div>
             )}
           </>
         )}
