@@ -113,6 +113,8 @@ const dict: Record<Lang, Record<string, Entry>> = {
     aiBannerFailed: "Couldn't generate an AI banner — using your photo as the cover instead.",
     selfieTooLarge: "Image too large — please choose a photo under 8MB",
     bannerThemePlaceholder: "Theme (e.g. rustic garden, neon city)",
+
+    footerTagline: "Made for moments worth sharing.",
   },
   fr: {
     appTagline:
@@ -220,6 +222,8 @@ const dict: Record<Lang, Record<string, Entry>> = {
     aiBannerFailed: "Impossible de générer la bannière IA — votre photo sera utilisée comme couverture.",
     selfieTooLarge: "Image trop volumineuse — choisissez une photo de moins de 8 Mo",
     bannerThemePlaceholder: "Thème (ex. jardin champêtre, ville néon)",
+
+    footerTagline: "Conçu pour les instants qui valent d'être partagés.",
   },
 };
 
