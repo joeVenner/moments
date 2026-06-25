@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import confetti from "canvas-confetti";
 import { useI18n } from "../lib/i18n";
+import { safeConfetti } from "../lib/motion";
 
 export function PointsToast({ points, onDone }: { points: number; onDone: () => void }) {
   const { t } = useI18n();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    confetti({
+    safeConfetti({
       particleCount: 70,
       spread: 60,
       origin: { y: 0.6 },

@@ -193,11 +193,11 @@ export default function EventPage() {
         </div>
 
         {tab === "leaderboard" ? (
-          <div className="mt-6">
+          <div key="leaderboard" className="mt-6 animate-[fade-in_250ms_ease-out]">
             <Leaderboard slug={slug!} />
           </div>
         ) : (
-          <>
+          <div key="feed" className="animate-[fade-in_250ms_ease-out]">
             <div className="mt-6">
               <UploadDropzone onUpload={handleUpload} uploading={uploading} />
               {uploadError && <p className="mt-2 text-sm text-red-600">{uploadError}</p>}
@@ -214,7 +214,7 @@ export default function EventPage() {
                 <p className="mt-2 text-sm text-slate-500">{t("noMomentsYetBeFirst")}</p>
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>

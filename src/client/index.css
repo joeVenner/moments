@@ -22,3 +22,58 @@ h1,
 h2 {
   font-family: var(--font-display);
 }
+
+/* Shared one-time "pop-in" entrance — plays once on DOM mount because it's
+   applied unconditionally; React's keyed reconciliation decides when that
+   mount actually happens (see MomentCard / ParticipantStrip). */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-pop-in {
+  animation: pop-in 320ms ease-out;
+}
+
+/* Simple fade used for the QR code reveal and tab-switch crossfade. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Punchier mount animation for the avatar shuffle — deliberately more than a
+   subtle scale, so it's gated behind prefers-reduced-motion below. */
+@keyframes pop-punch {
+  0% {
+    opacity: 0;
+    transform: scale(0.7) rotate(-6deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.15) rotate(2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.animate-pop-punch {
+  animation: pop-punch 350ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pop-punch {
+    animation: none;
+  }
+}

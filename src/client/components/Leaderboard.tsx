@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import confetti from "canvas-confetti";
 import { useI18n, randomQuote } from "../lib/i18n";
+import { safeConfetti } from "../lib/motion";
 import emptyLeaderboard from "../assets/empty-leaderboard.png";
 import winnerTrophy from "../assets/winner-trophy.png";
 
@@ -17,6 +17,7 @@ export function Leaderboard({ slug }: { slug: string }) {
   const [entries, setEntries] = useState<LeaderboardEntry[] | null>(null);
   const [error, setError] = useState(false);
   const [quote] = useState(() => randomQuote(lang));
+  const [podiumGrown, setPodiumGrown] = useState(false);
   const confettiFiredRef = useRef(false);
 
   useEffect(() => {
@@ -37,7 +38,7 @@ export function Leaderboard({ slug }: { slug: string }) {
           data.leaderboard[0].total_points > 0
         ) {
           confettiFiredRef.current = true;
-          confetti({
+          safeConfetti({
             particleCount: 120,
             spread: 70,
             origin: { y: 0.6 },
@@ -53,6 +54,16 @@ export function Leaderboard({ slug }: { slug: string }) {
       cancelled = true;
     };
   }, [slug]);
+
+  useEffect(() => {
+    // Podium only exists in the DOM once entries have loaded, so wait for
+    // that before arming the rAF flip — otherwise the bars would already be
+    // "grown" by the time they first paint and the animation would no-op.
+    if (entries === null) return;
+    setPodiumGrown(false);
+    const id = requestAnimationFrame(() => setPodiumGrown(true));
+    return () => cancelAnimationFrame(id);
+  }, [entries]);
 
   if (error) {
     return (
@@ -151,9 +162,9 @@ export function Leaderboard({ slug }: { slug: string }) {
                   {t("momentsLabel", { count: entry.moment_count })}
                 </span>
                 <div
-                  className={`mt-2 flex w-full items-end justify-center rounded-t-lg ${heightClass[i]} ${
-                    isFirst ? "shadow-[0_0_12px_rgba(217,119,87,0.6)]" : ""
-                  }`}
+                  className={`mt-2 flex w-full items-end justify-center overflow-hidden rounded-t-lg transition-all duration-700 ${
+                    podiumGrown ? heightClass[i] : "h-0"
+                  } ${isFirst ? "shadow-[0_0_12px_rgba(217,119,87,0.6)]" : ""}`}
                   style={{
                     backgroundColor: isFirst
                       ? "var(--color-accent)"

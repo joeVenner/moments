@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import confetti from "canvas-confetti";
 import { useI18n } from "../lib/i18n";
+import { safeConfetti } from "../lib/motion";
 import heroIllustration from "../assets/hero-illustration.png";
 import winnerTrophy from "../assets/winner-trophy.png";
 import emptyFeed from "../assets/empty-feed.png";
@@ -90,7 +90,7 @@ export default function Home() {
   }, []);
 
   function fireConfetti() {
-    confetti({
+    safeConfetti({
       particleCount: 80,
       spread: 65,
       origin: { y: 0.7 },

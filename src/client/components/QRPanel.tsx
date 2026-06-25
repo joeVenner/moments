@@ -28,7 +28,7 @@ export function QRPanel({ slug, title }: { slug: string; title: string }) {
           data-testid="qr-code-image"
           src={dataUrl}
           alt={`QR — ${title}`}
-          className="h-40 w-40 rounded-lg"
+          className="h-40 w-40 animate-[fade-in_400ms_ease-out] rounded-lg"
         />
       ) : (
         <div className="h-40 w-40 animate-pulse rounded-lg bg-slate-200" />

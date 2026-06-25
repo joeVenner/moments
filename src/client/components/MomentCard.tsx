@@ -12,7 +12,7 @@ export interface PendingMoment extends MomentData {
 export function MomentCard({ moment }: { moment: PendingMoment }) {
   const video = moment._mimeType ? moment._mimeType.startsWith("video/") : isVideo(moment.media_url);
   return (
-    <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div className="animate-pop-in relative overflow-hidden rounded-xl border border-slate-200 bg-white transition-transform duration-150 ease-out active:scale-95 hover:scale-[1.02]">
       {video ? (
         <video src={moment.media_url} controls className="aspect-square w-full object-cover" />
       ) : (

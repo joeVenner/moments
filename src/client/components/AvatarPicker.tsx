@@ -24,7 +24,8 @@ export function AvatarPicker({
         {t("chooseAvatar")}
       </p>
       <div
-        className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-white shadow-md [&>svg]:h-full [&>svg]:w-full"
+        key={seed}
+        className="animate-pop-punch flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-white shadow-md [&>svg]:h-full [&>svg]:w-full"
         dangerouslySetInnerHTML={{ __html: svg }}
       />
       <button

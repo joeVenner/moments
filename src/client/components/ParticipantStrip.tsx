@@ -85,7 +85,10 @@ export function ParticipantStrip({ slug }: { slug: string }) {
       </p>
       <div className="flex gap-3 overflow-x-auto pb-1">
         {participants.map((participant) => (
-          <div key={participant.id} className="flex flex-shrink-0 flex-col items-center gap-1">
+          <div
+            key={participant.id}
+            className="animate-pop-in flex flex-shrink-0 flex-col items-center gap-1"
+          >
             <ParticipantAvatar participant={participant} />
             <span className="max-w-[60px] truncate text-xs text-slate-600">
               {participant.nickname}
