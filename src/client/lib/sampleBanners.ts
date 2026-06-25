@@ -1,0 +1,88 @@
+// Ready-made banner fallbacks. When AI generation fails (or isn't configured),
+// the admin can pick one of these instead of being stuck with no cover. Each
+// theme is painted onto a 1536x1024 canvas — matching the AI banner's aspect
+// ratio — and exported as a PNG File so it flows through the exact same
+// `cover` upload path as a hand-picked photo (the backend only trusts real
+// image uploads or its own /media/ URLs for the cover).
+
+export interface SampleBanner {
+  id: string;
+  /** i18n key for the human-facing label. */
+  labelKey: string;
+  /** Diagonal gradient stops, top-left → bottom-right. */
+  stops: [string, string, string];
+  /** Soft accent used for the decorative bokeh dots. */
+  glow: string;
+}
+
+export const SAMPLE_BANNERS: SampleBanner[] = [
+  { id: "golden", labelKey: "sampleGolden", stops: ["#f6d365", "#fda085", "#c15f3c"], glow: "#fff3d6" },
+  { id: "blush", labelKey: "sampleBlush", stops: ["#fad0c4", "#ffd1ff", "#a18cd1"], glow: "#ffe9f3" },
+  { id: "midnight", labelKey: "sampleMidnight", stops: ["#243b55", "#141e30", "#0f2027"], glow: "#5b8cb8" },
+  { id: "sunset", labelKey: "sampleSunset", stops: ["#ff9966", "#ff5e62", "#d97757"], glow: "#ffd9b3" },
+  { id: "forest", labelKey: "sampleForest", stops: ["#5a9367", "#2c5364", "#1d3a2f"], glow: "#bfe3c0" },
+  { id: "confetti", labelKey: "sampleConfetti", stops: ["#a18cd1", "#fbc2eb", "#fad0c4"], glow: "#fff0fa" },
+];
+
+const BANNER_WIDTH = 1536;
+const BANNER_HEIGHT = 1024;
+
+/**
+ * Paints a sample banner to an offscreen canvas and returns it as a PNG File.
+ * The optional title is drawn faintly so a bare-fallback banner still feels
+ * tailored to the event rather than a generic swatch.
+ */
+export async function renderSampleBanner(
+  banner: SampleBanner,
+  title?: string
+): Promise<File> {
+  const canvas = document.createElement("canvas");
+  canvas.width = BANNER_WIDTH;
+  canvas.height = BANNER_HEIGHT;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas 2D context unavailable");
+
+  const gradient = ctx.createLinearGradient(0, 0, BANNER_WIDTH, BANNER_HEIGHT);
+  gradient.addColorStop(0, banner.stops[0]);
+  gradient.addColorStop(0.55, banner.stops[1]);
+  gradient.addColorStop(1, banner.stops[2]);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, BANNER_WIDTH, BANNER_HEIGHT);
+
+  // Scattered soft "bokeh" circles for a celebratory, photographed-light feel.
+  const dots = [
+    { x: 0.18, y: 0.28, r: 220, a: 0.18 },
+    { x: 0.78, y: 0.22, r: 150, a: 0.22 },
+    { x: 0.62, y: 0.72, r: 260, a: 0.14 },
+    { x: 0.32, y: 0.78, r: 120, a: 0.2 },
+    { x: 0.88, y: 0.6, r: 90, a: 0.25 },
+  ];
+  for (const dot of dots) {
+    ctx.beginPath();
+    ctx.globalAlpha = dot.a;
+    ctx.fillStyle = banner.glow;
+    ctx.arc(dot.x * BANNER_WIDTH, dot.y * BANNER_HEIGHT, dot.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  const trimmed = title?.trim();
+  if (trimmed) {
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "600 92px Fraunces, Georgia, serif";
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.shadowColor = "rgba(0,0,0,0.28)";
+    ctx.shadowBlur = 24;
+    ctx.shadowOffsetY = 4;
+    ctx.fillText(trimmed.slice(0, 40), BANNER_WIDTH / 2, BANNER_HEIGHT / 2);
+    ctx.restore();
+  }
+
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/png")
+  );
+  if (!blob) throw new Error("Could not render sample banner");
+  return new File([blob], `sample-banner-${banner.id}.png`, { type: "image/png" });
+}

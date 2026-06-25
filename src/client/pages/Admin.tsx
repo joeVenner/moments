@@ -8,6 +8,8 @@ import { AdminLogin } from "../components/AdminLogin";
 import { EventPreview } from "../components/EventPreview";
 import { getAdminAuthHeader, clearAdminAuth } from "../lib/adminAuth";
 import { useI18n } from "../lib/i18n";
+import { BannerProgress } from "../components/BannerProgress";
+import { SAMPLE_BANNERS, renderSampleBanner } from "../lib/sampleBanners";
 
 const EVENT_TYPES = ["Wedding", "Gala", "Birthday", "Corporate", "Other"];
 const MAX_SELFIE_BYTES = 8 * 1024 * 1024; // mirrors src/worker/banner.ts MAX_SELFIE_BYTES
@@ -31,6 +33,7 @@ export default function Admin() {
   const [selfiePreviewUrl, setSelfiePreviewUrl] = useState<string | null>(null);
   const [bannerTheme, setBannerTheme] = useState("");
   const [aiBannerUrl, setAiBannerUrl] = useState<string | null>(null);
+  const [sampleCoverFile, setSampleCoverFile] = useState<File | null>(null);
   const [generatingBanner, setGeneratingBanner] = useState(false);
   const [bannerError, setBannerError] = useState<string | null>(null);
   const selfieInputRef = useRef<HTMLInputElement>(null);
@@ -85,6 +88,7 @@ export default function Admin() {
       // backend's precedence rule), so drop the AI banner state here too —
       // keeps the live preview consistent with what will actually be sent.
       setAiBannerUrl(null);
+      setSampleCoverFile(null);
       const url = URL.createObjectURL(file);
       previewCoverUrlRef.current = url;
       setPreviewCoverUrl(url);
@@ -110,6 +114,26 @@ export default function Admin() {
       previewCoverUrlRef.current = null;
     }
     setPreviewCoverUrl(null);
+    setSampleCoverFile(null);
+  }
+
+  // Falls back to one of the prebuilt gradient banners when AI generation
+  // failed (or isn't configured). Rendered to a PNG File so it rides the same
+  // `cover` upload path as a hand-picked photo — see handleCreate, which sets
+  // it onto the outgoing FormData over the (empty) file input.
+  async function handleSelectSample(bannerId: string) {
+    const banner = SAMPLE_BANNERS.find((b) => b.id === bannerId);
+    if (!banner) return;
+    setBannerError(null);
+    const file = await renderSampleBanner(banner, previewTitle);
+
+    if (coverInputRef.current) coverInputRef.current.value = "";
+    setAiBannerUrl(null);
+    setSampleCoverFile(file);
+    if (previewCoverUrlRef.current) URL.revokeObjectURL(previewCoverUrlRef.current);
+    const url = URL.createObjectURL(file);
+    previewCoverUrlRef.current = url;
+    setPreviewCoverUrl(url);
   }
 
   // Clears the selected selfie file; the selfiePreviewUrl effect above
@@ -143,6 +167,7 @@ export default function Admin() {
       // the stale manual cover instead.
       if (coverInputRef.current) coverInputRef.current.value = "";
       setAiBannerUrl(banner_url);
+      setSampleCoverFile(null);
       if (previewCoverUrlRef.current) {
         URL.revokeObjectURL(previewCoverUrlRef.current);
         previewCoverUrlRef.current = null;
@@ -170,6 +195,10 @@ export default function Admin() {
       const formData = new FormData(form);
       if (aiBannerUrl) {
         formData.set("cover_image_url", aiBannerUrl);
+      } else if (sampleCoverFile) {
+        // Override the empty native file input with our rendered banner so it
+        // uploads as a normal cover (the backend ignores zero-byte cover files).
+        formData.set("cover", sampleCoverFile);
       }
       const { event } = await createEvent(formData);
       setEvents((prev) => [event, ...prev]);
@@ -186,6 +215,7 @@ export default function Admin() {
       setSelfieFile(null);
       setBannerTheme("");
       setAiBannerUrl(null);
+      setSampleCoverFile(null);
       setBannerError(null);
       if (selfieInputRef.current) selfieInputRef.current.value = "";
     } catch (err) {
@@ -268,7 +298,7 @@ export default function Admin() {
                   className="h-10 w-10 shrink-0 rounded-md object-cover"
                 />
                 <span className="min-w-0 flex-1 truncate text-sm text-slate-700">
-                  {coverInputRef.current?.files?.[0]?.name}
+                  {coverInputRef.current?.files?.[0]?.name ?? sampleCoverFile?.name}
                 </span>
                 <button
                   type="button"
@@ -371,7 +401,35 @@ export default function Admin() {
             >
               {generatingBanner ? t("generatingBanner") : t("generateAiBanner")}
             </button>
+            {generatingBanner && <BannerProgress />}
             {bannerError && <p className="text-xs text-red-600">{bannerError}</p>}
+            {bannerError && (
+              <div className="flex flex-col gap-1.5">
+                <p className="font-mono text-xs text-slate-500">{t("bannerFallbackHeading")}</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {SAMPLE_BANNERS.map((banner) => {
+                    const selected = sampleCoverFile?.name === `sample-banner-${banner.id}.png`;
+                    return (
+                      <button
+                        key={banner.id}
+                        type="button"
+                        onClick={() => handleSelectSample(banner.id)}
+                        className={`flex h-14 flex-col justify-end rounded-lg p-1.5 text-left ring-offset-2 transition hover:scale-[1.03] ${
+                          selected ? "ring-2 ring-[var(--color-accent)]" : ""
+                        }`}
+                        style={{
+                          backgroundImage: `linear-gradient(135deg, ${banner.stops[0]}, ${banner.stops[1]}, ${banner.stops[2]})`,
+                        }}
+                      >
+                        <span className="rounded bg-black/25 px-1 font-mono text-[10px] font-medium text-white">
+                          {t(banner.labelKey)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {aiBannerUrl && <input type="hidden" name="cover_image_url" value={aiBannerUrl} />}
