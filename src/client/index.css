@@ -5,16 +5,21 @@
   --font-display: "Fraunces", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", monospace;
 
-  /* Anthropic/Claude brand palette — warm Pampas neutrals + Claude orange,
-     which doubles as the summer-vibe accent without extra colors. */
-  --color-bg: #fcfaf6;
-  --color-bg-alt: #f4f1ea;
+  /* Dark neutral "black-and-white" theme — near-black surfaces, white/grey
+     text, single Claude-orange accent (modeled on the Claude Code / OpenAI
+     platform UIs). See project CLAUDE.md → "Design System" for the law. */
+  --color-bg: #0d0d0d;
+  --color-bg-alt: #1a1a1a;
+  --color-border: #2a2a2a;
+  --color-text: #ededed;
+  --color-text-muted: #8f8f8f;
   --color-accent: #d97757;
   --color-accent-dark: #c15f3c;
 }
 
 body {
   background-color: var(--color-bg);
+  color: var(--color-text);
   font-family: var(--font-sans);
 }
 
