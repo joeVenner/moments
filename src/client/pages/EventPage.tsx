@@ -8,8 +8,11 @@ import { UploadDropzone } from "../components/UploadDropzone";
 import { MomentCard, type PendingMoment } from "../components/MomentCard";
 import { PointsToast } from "../components/Toast";
 import { MomentCardSkeleton } from "../components/Skeleton";
+import { pointsForContentType } from "../lib/points";
+import { useI18n } from "../lib/i18n";
 
 export default function EventPage() {
+  const { t, eventTypeLabel } = useI18n();
   const { slug } = useParams<{ slug: string }>();
   const [event, setEvent] = useState<EventData | null>(null);
   const [moments, setMoments] = useState<PendingMoment[]>([]);
@@ -32,43 +35,61 @@ export default function EventPage() {
       .finally(() => setLoading(false));
   }, [slug]);
 
-  async function handleUpload(file: File, caption: string) {
+  async function handleUpload(files: File[], caption: string) {
     if (!slug || !nickname || !event) return;
     setUploadError(null);
     setUploading(true);
 
-    const tempId = `pending-${crypto.randomUUID()}`;
-    const previewUrl = URL.createObjectURL(file);
+    const pending = files.map((file) => ({
+      file,
+      tempId: `pending-${crypto.randomUUID()}`,
+      previewUrl: URL.createObjectURL(file),
+    }));
+
     setMoments((prev) => [
-      {
+      ...pending.map(({ file, tempId, previewUrl }) => ({
         id: tempId,
         event_id: event.id,
         uploader_name: nickname,
         media_url: previewUrl,
         caption: caption || null,
-        points_awarded: 10,
+        points_awarded: pointsForContentType(file.type),
         created_at: new Date().toISOString(),
         _pending: true,
         _mimeType: file.type,
-      },
+      })),
       ...prev,
     ]);
 
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("uploader_name", nickname);
-      if (caption) formData.append("caption", caption);
-      const { moment, points_awarded } = await uploadMoment(slug, formData);
-      setMoments((prev) => prev.map((m) => (m.id === tempId ? moment : m)));
-      setToastPoints(points_awarded);
-    } catch (err) {
-      setMoments((prev) => prev.filter((m) => m.id !== tempId));
-      setUploadError(err instanceof Error ? err.message : "Upload failed");
-    } finally {
-      URL.revokeObjectURL(previewUrl);
-      setUploading(false);
+    const results = await Promise.allSettled(
+      pending.map(async ({ file, tempId }) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("uploader_name", nickname);
+        if (caption) formData.append("caption", caption);
+        const { moment, points_awarded } = await uploadMoment(slug, formData);
+        setMoments((prev) => prev.map((m) => (m.id === tempId ? moment : m)));
+        return points_awarded;
+      })
+    );
+
+    let totalPoints = 0;
+    let failures = 0;
+    results.forEach((result, i) => {
+      if (result.status === "fulfilled") {
+        totalPoints += result.value;
+      } else {
+        failures += 1;
+        setMoments((prev) => prev.filter((m) => m.id !== pending[i].tempId));
+      }
+    });
+    pending.forEach(({ previewUrl }) => URL.revokeObjectURL(previewUrl));
+
+    if (totalPoints > 0) setToastPoints(totalPoints);
+    if (failures > 0) {
+      setUploadError(t("uploadFailed", { failed: failures, total: files.length }));
     }
+    setUploading(false);
   }
 
   if (loading) {
@@ -90,7 +111,7 @@ export default function EventPage() {
   if (notFound || !event) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
-        Event not found.
+        {t("eventNotFound")}
       </div>
     );
   }
@@ -119,12 +140,13 @@ export default function EventPage() {
 
       <header className="border-b border-slate-200 bg-[var(--color-bg-alt)] px-4 py-6 text-center">
         <p className="font-mono text-xs uppercase tracking-wide text-[var(--color-accent)]">
-          {event.type}
+          {eventTypeLabel(event.type)}
         </p>
         <h1 className="text-xl font-semibold text-slate-900">{event.title}</h1>
         {event.main_characters && <p className="text-sm text-slate-600">{event.main_characters}</p>}
         <p className="mt-2 font-mono text-xs text-slate-500">
-          Hi {nickname} · Your points: <span className="font-semibold text-[var(--color-accent-dark)]">{myPoints}</span>
+          {t("greetingName", { name: nickname })} · {t("yourPoints")}{" "}
+          <span className="font-semibold text-[var(--color-accent-dark)]">{myPoints}</span>
         </p>
       </header>
 
@@ -138,9 +160,7 @@ export default function EventPage() {
           ))}
         </div>
         {moments.length === 0 && (
-          <p className="mt-8 text-center text-sm text-slate-500">
-            No moments yet — be the first to share one!
-          </p>
+          <p className="mt-8 text-center text-sm text-slate-500">{t("noMomentsYetBeFirst")}</p>
         )}
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { sanitizeFilename, isAllowedContentType, putMedia } from "./storage";
+import { sanitizeFilename, isAllowedContentType, pointsForContentType, putMedia } from "./storage";
 import type { Env } from "./types";
 
 describe("sanitizeFilename", () => {
@@ -26,6 +26,18 @@ describe("isAllowedContentType", () => {
     expect(isAllowedContentType("text/plain")).toBe(false);
     expect(isAllowedContentType("application/pdf")).toBe(false);
     expect(isAllowedContentType("")).toBe(false);
+  });
+});
+
+describe("pointsForContentType", () => {
+  it("awards 1 point for images", () => {
+    expect(pointsForContentType("image/jpeg")).toBe(1);
+    expect(pointsForContentType("image/heic")).toBe(1);
+  });
+
+  it("awards 3 points for video, case-insensitively", () => {
+    expect(pointsForContentType("video/mp4")).toBe(3);
+    expect(pointsForContentType("VIDEO/QUICKTIME")).toBe(3);
   });
 });
 

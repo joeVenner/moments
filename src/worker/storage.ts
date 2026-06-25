@@ -22,6 +22,10 @@ export function isAllowedContentType(contentType: string): boolean {
   return ALLOWED_CONTENT_TYPES.has(contentType.toLowerCase());
 }
 
+export function pointsForContentType(contentType: string): number {
+  return contentType.toLowerCase().startsWith("video/") ? 3 : 1;
+}
+
 export async function putMedia(
   env: Env,
   folder: string,

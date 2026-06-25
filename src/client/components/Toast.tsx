@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useI18n } from "../lib/i18n";
 
 export function PointsToast({ points, onDone }: { points: number; onDone: () => void }) {
+  const { t } = useI18n();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -16,12 +18,13 @@ export function PointsToast({ points, onDone }: { points: number; onDone: () => 
 
   return (
     <div
+      data-testid="points-toast"
       style={{ top: "calc(1.5rem + env(safe-area-inset-top))" }}
       className={`fixed left-1/2 z-50 -translate-x-1/2 rounded-full bg-[var(--color-accent-dark)] px-5 py-2.5 text-sm font-mono font-medium text-white shadow-lg transition-all duration-300 ${
         visible ? "translate-y-0 opacity-100" : "-translate-y-4 opacity-0"
       }`}
     >
-      +{points} Points Added!
+      {t("pointsAdded", { points })}
     </div>
   );
 }

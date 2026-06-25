@@ -1,10 +1,8 @@
 import { Hono } from "hono";
 import type { Env, EventRow, MomentRow } from "./types";
 import { slugify, randomSuffix } from "./slugify";
-import { putMedia } from "./storage";
+import { putMedia, pointsForContentType } from "./storage";
 import { requireAdmin } from "./auth";
-
-const POINTS_PER_UPLOAD = 10;
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -119,19 +117,20 @@ app.post("/api/events/:slug/moments", async (c) => {
     return c.json({ error: err instanceof Error ? err.message : "upload failed" }, 400);
   }
 
+  const points = pointsForContentType(file.type);
   const id = crypto.randomUUID();
   await c.env.DB.prepare(
     `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded)
      VALUES (?, ?, ?, ?, ?, ?)`
   )
-    .bind(id, event.id, uploaderName, mediaUrl, caption, POINTS_PER_UPLOAD)
+    .bind(id, event.id, uploaderName, mediaUrl, caption, points)
     .run();
 
   const moment = await c.env.DB.prepare("SELECT * FROM moments WHERE id = ?")
     .bind(id)
     .first<MomentRow>();
 
-  return c.json({ moment, points_awarded: POINTS_PER_UPLOAD }, 201);
+  return c.json({ moment, points_awarded: points }, 201);
 });
 
 app.get("/media/*", async (c) => {
