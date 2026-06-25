@@ -13,6 +13,22 @@ const dict: Record<Lang, Record<string, Entry>> = {
       "Scan a QR code at your event to share photos and videos instantly with everyone there.",
     openAdminPanel: "Open Admin Panel",
 
+    heroHeadline: "Every moment, shared the instant it happens.",
+    heroSubhead:
+      "One QR code turns your guests' phones into a live photo wall — no app, no sign-up, no waiting.",
+    momentsCapturedCounter: (v) => `${v.count} moments captured and counting`,
+
+    featuresHeading: "Built to make every event a little more fun",
+    featurePointsTitle: "Gamified points & leaderboard",
+    featurePointsBody:
+      "Every photo and video earns points, with a live leaderboard crowning the night's top photographer.",
+    featureSharingTitle: "Instant photo & video sharing",
+    featureSharingBody:
+      "Guests capture moments straight from their phone and watch them land in the shared feed in real time.",
+    featureScanTitle: "Scan & join instantly",
+    featureScanBody:
+      "No app to install — scan the event's QR code, pick a name, and start sharing in seconds.",
+
     adminSignInPrompt: "Sign in to manage events",
     usernamePlaceholder: "Username",
     passwordPlaceholder: "Password",
@@ -95,6 +111,22 @@ const dict: Record<Lang, Record<string, Entry>> = {
     appTagline:
       "Scannez un QR code sur place pour partager photos et vidéos instantanément avec tout le monde.",
     openAdminPanel: "Ouvrir le panneau admin",
+
+    heroHeadline: "Chaque instant, partagé dès qu'il se produit.",
+    heroSubhead:
+      "Un seul QR code transforme les téléphones de vos invités en mur de photos en direct — sans application, sans inscription, sans attente.",
+    momentsCapturedCounter: (v) => `${v.count} souvenirs capturés et ça continue`,
+
+    featuresHeading: "Pensé pour rendre chaque événement un peu plus amusant",
+    featurePointsTitle: "Points ludiques & classement",
+    featurePointsBody:
+      "Chaque photo et vidéo rapporte des points, avec un classement en direct qui couronne le meilleur photographe de la soirée.",
+    featureSharingTitle: "Partage instantané de photos et vidéos",
+    featureSharingBody:
+      "Les invités capturent l'instant depuis leur téléphone et le voient apparaître dans le fil partagé en temps réel.",
+    featureScanTitle: "Scanner et rejoindre instantanément",
+    featureScanBody:
+      "Aucune application à installer — scannez le QR code de l'événement, choisissez un nom et commencez à partager en quelques secondes.",
 
     adminSignInPrompt: "Connectez-vous pour gérer les événements",
     usernamePlaceholder: "Identifiant",
