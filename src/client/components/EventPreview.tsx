@@ -20,7 +20,7 @@ export function EventPreview({
       </p>
       <p className="mt-0.5 text-xs text-slate-400">{t("livePreviewSubtitle")}</p>
 
-      <div className="mx-auto mt-3 max-w-[280px] overflow-hidden rounded-2xl border border-slate-200 bg-[var(--color-bg)] text-center shadow-sm">
+      <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-[var(--color-bg)] text-center shadow-sm">
         {coverUrl ? (
           <img
             src={coverUrl}
