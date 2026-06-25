@@ -6,7 +6,7 @@ export function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="flex flex-col items-center gap-1.5 px-6 py-8 text-center">
+    <footer className="mx-auto flex w-full max-w-md flex-col items-center gap-1.5 px-6 py-8 text-center">
       <div className="flex items-center gap-1.5">
         <img src={logo} alt="" className="h-5 w-5 shrink-0 opacity-70" />
         <span className="font-display text-sm font-semibold text-slate-400">Moments</span>
