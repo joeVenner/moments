@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useI18n } from "../lib/i18n";
-import { safeConfetti } from "../lib/motion";
+import { prefersReducedMotion, safeConfetti } from "../lib/motion";
 import heroIllustration from "../assets/hero-illustration.png";
 import winnerTrophy from "../assets/winner-trophy.png";
 import emptyFeed from "../assets/empty-feed.png";
@@ -10,9 +10,15 @@ import qrFeature from "../assets/qr-feature.png";
 const MOMENTS_COUNTER_TARGET = 12482;
 
 function useCountUp(target: number, durationMs = 1400) {
-  const [value, setValue] = useState(0);
+  // Reduced motion → snap to the final value (no animated ramp).
+  const [value, setValue] = useState(() => (prefersReducedMotion() ? target : 0));
 
   useEffect(() => {
+    if (prefersReducedMotion()) {
+      setValue(target);
+      return;
+    }
+
     let frameId: number;
     const start = performance.now();
 
@@ -43,9 +49,11 @@ function FeatureCard({
   delayMs: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
+  // Reduced motion → start already revealed so no reveal transition ever fires.
+  const [visible, setVisible] = useState(() => prefersReducedMotion());
 
   useEffect(() => {
+    if (prefersReducedMotion()) return;
     const el = ref.current;
     if (!el) return;
 
@@ -80,11 +88,13 @@ function FeatureCard({
 export default function Home() {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const [heroVisible, setHeroVisible] = useState(false);
+  // Reduced motion → render the hero at rest, skipping the mount transition.
+  const [heroVisible, setHeroVisible] = useState(() => prefersReducedMotion());
   const [eventCode, setEventCode] = useState("");
   const momentsCaptured = useCountUp(MOMENTS_COUNTER_TARGET);
 
   useEffect(() => {
+    if (prefersReducedMotion()) return;
     // Defer to next frame so the initial (opacity-0) state paints first,
     // guaranteeing the transition actually animates rather than snapping in.
     const id = requestAnimationFrame(() => setHeroVisible(true));
