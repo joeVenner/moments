@@ -111,6 +111,64 @@ h2 {
   display: none; /* WebKit/Blink */
 }
 
+/* Animated hero backdrop (PLAN P2.2): a slow-drifting warm orange glow over the
+   dark page, à la the OpenAI / Vercel / Linear dark heroes. Pure CSS, sits
+   behind the hero content, frozen under reduced-motion. */
+@keyframes hero-glow-drift {
+  0% {
+    transform: translate3d(-6%, -4%, 0) scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translate3d(6%, 4%, 0) scale(1.15);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate3d(-6%, -4%, 0) scale(1);
+    opacity: 0.55;
+  }
+}
+.hero-glow {
+  background:
+    radial-gradient(
+      40% 50% at 50% 38%,
+      color-mix(in oklab, var(--color-accent) 40%, transparent),
+      transparent 70%
+    );
+  filter: blur(40px);
+  animation: hero-glow-drift 14s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+/* Continuous "live feed" marquee (PLAN P1.3): the track holds two copies of the
+   tile set and slides left by exactly half its width, so the loop is seamless.
+   Hover pauses it; reduced-motion stops it and the strip falls back to manual
+   horizontal scroll on its container. */
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.animate-marquee {
+  animation: marquee-scroll 40s linear infinite;
+  width: max-content;
+}
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-glow {
+    animation: none;
+  }
+  .animate-marquee {
+    animation: none;
+  }
+}
+
 /* Printable QR flyer: hide everything on the page except the flyer card.
    `visibility` (not `display`) is used because it lets a descendant
    re-show itself even though intervening ancestors (the admin page chrome,
