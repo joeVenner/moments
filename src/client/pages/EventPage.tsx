@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getEvent, listMoments, uploadMoment, joinEvent } from "../lib/api";
+import {
+  getEvent,
+  listMoments,
+  uploadMoment,
+  directUploadMoment,
+  joinEvent,
+  NATIVE_UPLOAD_MAX_BYTES,
+} from "../lib/api";
 import { getNickname, setNickname as saveNickname } from "../lib/nickname";
 import type { EventData } from "../lib/types";
 import { NicknameGate } from "../components/NicknameGate";
@@ -73,13 +80,20 @@ export default function EventPage() {
 
     const results = await Promise.allSettled(
       pending.map(async ({ file, tempId }) => {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("uploader_name", nickname);
-        if (caption) formData.append("caption", caption);
-        const { moment, points_awarded } = await uploadMoment(slug, formData);
-        setMoments((prev) => prev.map((m) => (m.id === tempId ? moment : m)));
-        return points_awarded;
+        // Files past the native cap can't fit the Worker's request body — send them
+        // straight to R2 via a presigned PUT; everything else takes the multipart route.
+        let result;
+        if (file.size > NATIVE_UPLOAD_MAX_BYTES) {
+          result = await directUploadMoment(slug, file, caption, nickname);
+        } else {
+          const formData = new FormData();
+          formData.append("file", file);
+          formData.append("uploader_name", nickname);
+          if (caption) formData.append("caption", caption);
+          result = await uploadMoment(slug, formData);
+        }
+        setMoments((prev) => prev.map((m) => (m.id === tempId ? result.moment : m)));
+        return result.points_awarded;
       })
     );
 
