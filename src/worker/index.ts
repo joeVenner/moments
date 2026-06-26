@@ -1,7 +1,13 @@
 import { Hono } from "hono";
 import type { Env, EventRow, MomentRow, ParticipantRow, LeaderboardEntry } from "./types";
 import { slugify, randomSuffix } from "./slugify";
-import { putMedia, pointsForContentType } from "./storage";
+import { putMedia, pointsForContentType, sanitizeFilename, isAllowedContentType } from "./storage";
+import {
+  isR2Configured,
+  presignPutUrl,
+  MAX_DIRECT_UPLOAD_BYTES,
+  PRESIGN_EXPIRY_SECONDS,
+} from "./presign";
 import { requireAdmin } from "./auth";
 import { generateAiBanner, BannerGenerationError } from "./banner";
 
@@ -174,6 +180,45 @@ app.post("/api/events/:slug/moments", async (c) => {
     .first<MomentRow>();
 
   return c.json({ moment, points_awarded: points }, 201);
+});
+
+// Step 1 of the large-upload flow (P3.1): hand the browser a presigned PUT URL so
+// it can upload a >25MB file straight to R2, bypassing the Worker's request-body
+// limit. Same guest trust model as the multipart moments route above (valid event
+// + uploader_name). Inert (501) until the R2 S3 credentials are configured.
+app.post("/api/events/:slug/moments/presign", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  if (!isR2Configured(c.env)) {
+    return c.json({ error: "Large direct uploads are not configured" }, 501);
+  }
+
+  const body = (await c.req.json().catch(() => null)) as {
+    uploader_name?: unknown;
+    content_type?: unknown;
+    size?: unknown;
+    filename?: unknown;
+  } | null;
+
+  const uploaderName = typeof body?.uploader_name === "string" ? body.uploader_name.trim() : "";
+  const contentType = typeof body?.content_type === "string" ? body.content_type.toLowerCase() : "";
+  const size = typeof body?.size === "number" ? body.size : NaN;
+  const filename = typeof body?.filename === "string" ? body.filename : "upload";
+
+  if (!uploaderName) return c.json({ error: "uploader_name is required" }, 400);
+  if (!isAllowedContentType(contentType)) return c.json({ error: "Unsupported file type" }, 400);
+  if (!Number.isFinite(size) || size <= 0 || size > MAX_DIRECT_UPLOAD_BYTES) {
+    return c.json({ error: "File too large (max 512MB)" }, 400);
+  }
+
+  const key = `events/${event.id}/moments/${crypto.randomUUID()}-${sanitizeFilename(filename)}`;
+  const uploadUrl = await presignPutUrl(c.env, key);
+  return c.json({
+    upload_url: uploadUrl,
+    key,
+    media_url: `/media/${key}`,
+    expires_in: PRESIGN_EXPIRY_SECONDS,
+  });
 });
 
 app.get("/api/events/:slug/participants", async (c) => {

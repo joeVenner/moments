@@ -16,6 +16,7 @@
   "dependencies": {
     "@dicebear/collection": "^9.4.2",
     "@dicebear/core": "^9.4.2",
+    "aws4fetch": "^1.0.20",
     "canvas-confetti": "^1.9.4",
     "hono": "^4.12.27",
     "qrcode": "^1.5.4",
