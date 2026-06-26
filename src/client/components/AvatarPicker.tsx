@@ -1,11 +1,14 @@
 import { useMemo } from "react";
-import { createAvatar } from "@dicebear/core";
-import { funEmoji } from "@dicebear/collection";
 import { useI18n } from "../lib/i18n";
+import { renderAvatarSvg } from "../lib/avatar";
 
 function randomSeed(): string {
   return Math.random().toString(36).slice(2, 10);
 }
+
+// The curated eyes/mouth allowlists live in `lib/avatar.ts` and are shared with
+// every other place a seed is rendered (participant strip, etc.) — see the
+// comment there for why the same options must be applied everywhere.
 
 export function AvatarPicker({
   seed,
@@ -16,7 +19,7 @@ export function AvatarPicker({
 }) {
   const { t } = useI18n();
 
-  const svg = useMemo(() => createAvatar(funEmoji, { seed }).toString(), [seed]);
+  const svg = useMemo(() => renderAvatarSvg(seed), [seed]);
 
   return (
     <div className="flex flex-col items-center gap-3">

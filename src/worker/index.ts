@@ -43,12 +43,17 @@ async function upsertParticipant(
   avatarSeed?: string | null
 ): Promise<void> {
   const existing = await db
-    .prepare("SELECT id FROM participants WHERE event_id = ? AND nickname = ?")
+    .prepare("SELECT id, avatar_seed FROM participants WHERE event_id = ? AND nickname = ?")
     .bind(eventId, nickname)
-    .first<{ id: string }>();
+    .first<{ id: string; avatar_seed: string | null }>();
 
   if (existing) {
-    if (avatarSeed) {
+    // Keep the avatar the guest first picked. Re-joining with the same nickname
+    // (e.g. from another device, or after clearing local storage) must NOT
+    // regenerate the face everyone else already sees — only backfill a seed if
+    // they originally joined without one (e.g. uploaded before going through
+    // the nickname gate). Never replace an already-chosen face.
+    if (avatarSeed && !existing.avatar_seed) {
       await db
         .prepare("UPDATE participants SET avatar_seed = ? WHERE id = ?")
         .bind(avatarSeed, existing.id)
@@ -131,13 +136,21 @@ app.get("/api/events/:slug/moments", async (c) => {
   const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
 
+  // Offset pagination (not cursor): created_at is a `datetime('now')` text
+  // default ("YYYY-MM-DD HH:MM:SS", space-separated), so a cursor comparison
+  // would be fragile across formats. Event feeds are small enough that
+  // deep-offset cost is a non-issue, and offset keeps ordering bulletproof.
+  // Default 25, cap 100 — bounds the initial payload + DOM.
+  const limit = Math.min(Math.max(parseInt(c.req.query("limit") ?? "25", 10) || 25, 1), 100);
+  const offset = Math.max(parseInt(c.req.query("offset") ?? "0", 10) || 0, 0);
+
   const { results } = await c.env.DB.prepare(
-    "SELECT * FROM moments WHERE event_id = ? ORDER BY created_at DESC"
+    "SELECT * FROM moments WHERE event_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
   )
-    .bind(event.id)
+    .bind(event.id, limit, offset)
     .all<MomentRow>();
 
-  return c.json({ moments: results });
+  return c.json({ moments: results, hasMore: results.length === limit });
 });
 
 app.post("/api/events/:slug/moments", async (c) => {
@@ -165,10 +178,10 @@ app.post("/api/events/:slug/moments", async (c) => {
   const points = pointsForContentType(file.type);
   const id = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded)
-     VALUES (?, ?, ?, ?, ?, ?)`
+    `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   )
-    .bind(id, event.id, uploaderName, mediaUrl, caption, points)
+    .bind(id, event.id, uploaderName, mediaUrl, caption, points, file.size, file.type || null)
     .run();
 
   // Defensive: guarantees a participant row exists even if the client somehow
@@ -269,10 +282,10 @@ app.post("/api/events/:slug/moments/register", async (c) => {
   const points = pointsForContentType(contentType);
   const id = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded)
-     VALUES (?, ?, ?, ?, ?, ?)`
+    `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   )
-    .bind(id, event.id, uploaderName, `/media/${key}`, caption, points)
+    .bind(id, event.id, uploaderName, `/media/${key}`, caption, points, object.size, contentType || null)
     .run();
 
   // Defensive: same as the multipart route — never let the leaderboard drop an
@@ -367,16 +380,87 @@ app.post("/api/admin/generate-banner", async (c) => {
 
 app.get("/media/*", async (c) => {
   const key = c.req.path.slice("/media/".length);
+  const ifNoneMatch = c.req.header("If-None-Match") ?? "";
+  const rangeHeader = c.req.header("Range") ?? "";
+  // Single byte range only (what browsers send for <video> seeking): bytes=a-b,
+  // bytes=a-, or bytes=-b. "bytes=-" (no digits) is not a range.
+  const rangeMatch = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
+  const wantsRange = rangeMatch !== null && rangeHeader !== "bytes=-";
+  const conditional = ifNoneMatch.length > 0;
+
+  // Fast path: no cache revalidation and no byte-range → stream the whole object
+  // exactly like before (one R2 get, no head()). Covers image card loads.
+  if (!wantsRange && !conditional) {
+    const object = await c.env.BUCKET.get(key);
+    if (!object) return c.notFound();
+    return new Response(object.body, {
+      headers: {
+        "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "Accept-Ranges": "bytes",
+        ETag: object.httpEtag,
+      },
+    });
+  }
+
+  // For a 304 or a 206 we need the total size (+ etag), so pay one cheap head()
+  // call — metadata only, no body transfer, edge-cacheable.
+  const meta = await c.env.BUCKET.head(key);
+  if (!meta) return c.notFound();
+  const total = meta.size;
+  const etag = meta.httpEtag;
+  const baseHeaders: Record<string, string> = {
+    "Content-Type": meta.httpMetadata?.contentType ?? "application/octet-stream",
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "Accept-Ranges": "bytes",
+    ETag: etag,
+  };
+
+  // 304: client already has this exact object (revalidation). Rare in practice
+  // because responses are `immutable`, but correct when browsers do revalidate.
+  if (conditional && ifNoneMatch === etag) {
+    return new Response(null, { status: 304, headers: baseHeaders });
+  }
+
+  // 206: single byte range (video seeking). Clamp to object bounds; 416 if the
+  // start is past the end.
+  if (wantsRange && rangeMatch) {
+    const startStr = rangeMatch[1];
+    const endStr = rangeMatch[2];
+    let offset: number;
+    let length: number;
+    if (startStr === "") {
+      // suffix: bytes=-N → last N bytes
+      const n = parseInt(endStr, 10);
+      length = Math.min(n, total);
+      offset = total - length;
+    } else {
+      offset = parseInt(startStr, 10);
+      if (offset >= total) {
+        return new Response(null, {
+          status: 416,
+          headers: { ...baseHeaders, "Content-Range": `bytes */${total}` },
+        });
+      }
+      length = endStr === "" ? total - offset : Math.min(parseInt(endStr, 10), total - 1) - offset + 1;
+    }
+    const obj = await c.env.BUCKET.get(key, { range: { offset, length } });
+    if (!obj) return c.notFound();
+    const end = offset + length - 1;
+    return new Response(obj.body, {
+      status: 206,
+      headers: {
+        ...baseHeaders,
+        "Content-Length": String(length),
+        "Content-Range": `bytes ${offset}-${end}/${total}`,
+      },
+    });
+  }
+
+  // Conditional but the etag didn't match, no range → serve the full body.
   const object = await c.env.BUCKET.get(key);
   if (!object) return c.notFound();
-
-  return new Response(object.body, {
-    headers: {
-      "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
-      "Cache-Control": "public, max-age=31536000, immutable",
-      ETag: object.httpEtag,
-    },
-  });
+  return new Response(object.body, { headers: baseHeaders });
 });
 
 app.onError((err, c) => {

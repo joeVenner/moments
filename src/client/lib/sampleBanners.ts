@@ -4,25 +4,58 @@
 // ratio — and exported as a PNG File so it flows through the exact same
 // `cover` upload path as a hand-picked photo (the backend only trusts real
 // image uploads or its own /media/ URLs for the cover).
+//
+// Repainted dark-native (2026-06) to follow CLAUDE.md → Design System: the old
+// light candy gradients (#f6d365, #fad0c4, #a18cd1…) clashed with the charcoal
+// page and violated the dark-theme mandate. Each swatch now echoes one of the
+// live type scenes in `eventBanners.ts` (midnight→Corporate, sunset→Gala,
+// confetti→Birthday, forest→Wedding, golden/blush→Other/celebratory) so the
+// pickable static covers feel of-a-piece with the animated fallback.
 
 export interface SampleBanner {
   id: string;
   /** i18n key for the human-facing label. */
   labelKey: string;
-  /** Diagonal gradient stops, top-left → bottom-right. */
+  /** Diagonal gradient stops, top-left → bottom-right. Dark-native only. */
   stops: [string, string, string];
   /** Soft accent used for the decorative bokeh dots. */
   glow: string;
 }
 
 export const SAMPLE_BANNERS: SampleBanner[] = [
-  { id: "golden", labelKey: "sampleGolden", stops: ["#f6d365", "#fda085", "#c15f3c"], glow: "#fff3d6" },
-  { id: "blush", labelKey: "sampleBlush", stops: ["#fad0c4", "#ffd1ff", "#a18cd1"], glow: "#ffe9f3" },
-  { id: "midnight", labelKey: "sampleMidnight", stops: ["#243b55", "#141e30", "#0f2027"], glow: "#5b8cb8" },
-  { id: "sunset", labelKey: "sampleSunset", stops: ["#ff9966", "#ff5e62", "#d97757"], glow: "#ffd9b3" },
-  { id: "forest", labelKey: "sampleForest", stops: ["#5a9367", "#2c5364", "#1d3a2f"], glow: "#bfe3c0" },
-  { id: "confetti", labelKey: "sampleConfetti", stops: ["#a18cd1", "#fbc2eb", "#fad0c4"], glow: "#fff0fa" },
+  // Other / celebratory — warm accent mesh.
+  { id: "golden", labelKey: "sampleGolden", stops: ["#2a1a16", "#1f1714", "#171010"], glow: "#d97757" },
+  // Other / celebratory — near-white sparkle on charcoal.
+  { id: "blush", labelKey: "sampleBlush", stops: ["#2b2b2b", "#3a3a3a", "#232323"], glow: "#e8e0d4" },
+  // Corporate — cool graphite + cyan.
+  { id: "midnight", labelKey: "sampleMidnight", stops: ["#222a2e", "#1a1f22", "#15191b"], glow: "#5fa8c4" },
+  // Gala — deep oxblood + gold.
+  { id: "sunset", labelKey: "sampleSunset", stops: ["#3a1f1c", "#22120f", "#16100e"], glow: "#d9a85a" },
+  // Wedding — emerald-tinted charcoal.
+  { id: "forest", labelKey: "sampleForest", stops: ["#1f2a24", "#172019", "#121a15"], glow: "#bfe3c0" },
+  // Birthday — accent + near-white confetti.
+  { id: "confetti", labelKey: "sampleConfetti", stops: ["#2a1a16", "#1f1714", "#171010"], glow: "#d97757" },
 ];
+
+/**
+ * Picks a sample-banner id that echoes the live scene for a given event type,
+ * so the admin's fallback picker can pre-select a cover that matches the
+ * occasion. Falls back to "golden" (the warm Other default) for unknown types.
+ */
+export function sampleBannerIdForType(type: string | null | undefined): string {
+  switch ((type ?? "").toLowerCase()) {
+    case "wedding":
+      return "forest";
+    case "gala":
+      return "sunset";
+    case "birthday":
+      return "confetti";
+    case "corporate":
+      return "midnight";
+    default:
+      return "golden";
+  }
+}
 
 const BANNER_WIDTH = 1536;
 const BANNER_HEIGHT = 1024;

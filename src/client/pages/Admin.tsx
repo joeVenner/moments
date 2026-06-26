@@ -9,6 +9,7 @@ import { EventPreview } from "../components/EventPreview";
 import { getAdminAuthHeader, clearAdminAuth } from "../lib/adminAuth";
 import { useI18n } from "../lib/i18n";
 import { BannerProgress } from "../components/BannerProgress";
+import { LanguageSwitcher } from "../components/LanguageSwitcher";
 import { SAMPLE_BANNERS, renderSampleBanner } from "../lib/sampleBanners";
 
 const EVENT_TYPES = ["Wedding", "Gala", "Birthday", "Corporate", "Other"];
@@ -36,6 +37,10 @@ export default function Admin() {
   const [sampleCoverFile, setSampleCoverFile] = useState<File | null>(null);
   const [generatingBanner, setGeneratingBanner] = useState(false);
   const [bannerError, setBannerError] = useState<string | null>(null);
+  // A freshly generated AI banner awaiting the admin's confirm/reject. It's
+  // shown in the preview but NOT applied to the form until "Confirm" — so the
+  // admin can reject and regenerate without an unwanted banner being saved.
+  const [pendingBannerUrl, setPendingBannerUrl] = useState<string | null>(null);
   const selfieInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
@@ -88,6 +93,7 @@ export default function Admin() {
       // backend's precedence rule), so drop the AI banner state here too —
       // keeps the live preview consistent with what will actually be sent.
       setAiBannerUrl(null);
+      setPendingBannerUrl(null);
       setSampleCoverFile(null);
       const url = URL.createObjectURL(file);
       previewCoverUrlRef.current = url;
@@ -115,8 +121,9 @@ export default function Admin() {
     }
     setPreviewCoverUrl(null);
     setSampleCoverFile(null);
+    setPendingBannerUrl(null);
+    setAiBannerUrl(null);
   }
-
   // Falls back to one of the prebuilt gradient banners when AI generation
   // failed (or isn't configured). Rendered to a PNG File so it rides the same
   // `cover` upload path as a hand-picked photo — see handleCreate, which sets
@@ -129,6 +136,7 @@ export default function Admin() {
 
     if (coverInputRef.current) coverInputRef.current.value = "";
     setAiBannerUrl(null);
+    setPendingBannerUrl(null);
     setSampleCoverFile(file);
     if (previewCoverUrlRef.current) URL.revokeObjectURL(previewCoverUrlRef.current);
     const url = URL.createObjectURL(file);
@@ -160,13 +168,13 @@ export default function Admin() {
       fd.append("theme", bannerTheme);
       const { banner_url } = await generateBanner(fd);
 
-      // A freshly generated AI banner should win over any manual cover file
-      // already sitting in the file input (mirrors handleCoverChange's
-      // symmetric clear of aiBannerUrl) — otherwise the preview shows the AI
-      // banner but the backend's "manual file wins" rule would silently save
-      // the stale manual cover instead.
+      // Don't apply the banner to the form yet — hold it as a candidate so the
+      // admin can review it and Confirm or Regenerate. Clear any manual cover
+      // sitting in the file input (mirrors handleCoverChange's symmetric clear
+      // of aiBannerUrl) so the preview reflects only this candidate.
       if (coverInputRef.current) coverInputRef.current.value = "";
-      setAiBannerUrl(banner_url);
+      setPendingBannerUrl(banner_url);
+      setAiBannerUrl(null);
       setSampleCoverFile(null);
       if (previewCoverUrlRef.current) {
         URL.revokeObjectURL(previewCoverUrlRef.current);
@@ -184,6 +192,22 @@ export default function Admin() {
     } finally {
       setGeneratingBanner(false);
     }
+  }
+
+  // Confirm the candidate banner: apply it to the form so it'll be saved on
+  // submit, and clear the pending review state.
+  function confirmBanner() {
+    if (!pendingBannerUrl) return;
+    setAiBannerUrl(pendingBannerUrl);
+    setPendingBannerUrl(null);
+  }
+
+  // Reject the candidate and generate a fresh one. The discarded banner is
+  // left orphaned in R2 (cheap, one-off) and we immediately kick off a new
+  // generate using the same selfie + theme.
+  function regenerateBanner() {
+    setPendingBannerUrl(null);
+    void handleGenerateBanner();
   }
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
@@ -215,6 +239,7 @@ export default function Admin() {
       setSelfieFile(null);
       setBannerTheme("");
       setAiBannerUrl(null);
+      setPendingBannerUrl(null);
       setSampleCoverFile(null);
       setBannerError(null);
       if (selfieInputRef.current) selfieInputRef.current.value = "";
@@ -244,12 +269,15 @@ export default function Admin() {
             </h1>
             <p className="mt-1 text-sm text-[var(--color-text-muted)]">{t("adminTagline")}</p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="shrink-0 whitespace-nowrap rounded-full border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent-dark)]"
-          >
-            {t("logOut")}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <LanguageSwitcher variant="inline" />
+            <button
+              onClick={handleLogout}
+              className="shrink-0 whitespace-nowrap rounded-full border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent-dark)]"
+            >
+              {t("logOut")}
+            </button>
+          </div>
         </div>
 
         <form
@@ -403,6 +431,35 @@ export default function Admin() {
             </button>
             {generatingBanner && <BannerProgress />}
             {bannerError && <p className="text-xs text-red-600">{bannerError}</p>}
+            {pendingBannerUrl && !generatingBanner && (
+              <div className="flex flex-col gap-2 rounded-lg border border-[var(--color-accent)]/40 bg-[var(--color-bg-alt)] p-3">
+                <p className="font-mono text-xs text-[var(--color-text-muted)]">
+                  {t("bannerReviewHeading")}
+                </p>
+                <img
+                  src={pendingBannerUrl}
+                  alt={t("bannerReviewAlt")}
+                  className="aspect-[3/2] w-full rounded-md object-cover"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={confirmBanner}
+                    className="flex-1 rounded-lg bg-[var(--color-accent)] px-3 py-2 font-mono text-xs font-medium text-white transition hover:bg-[var(--color-accent-dark)]"
+                  >
+                    {t("confirmBanner")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={regenerateBanner}
+                    disabled={generatingBanner}
+                    className="flex-1 rounded-lg border border-[var(--color-border)] px-3 py-2 font-mono text-xs font-medium text-[var(--color-text-muted)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent-dark)] disabled:opacity-50"
+                  >
+                    {t("regenerateBanner")}
+                  </button>
+                </div>
+              </div>
+            )}
             {bannerError && (
               <div className="flex flex-col gap-1.5">
                 <p className="font-mono text-xs text-[var(--color-text-muted)]">{t("bannerFallbackHeading")}</p>

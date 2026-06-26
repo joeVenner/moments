@@ -35,14 +35,130 @@ h2 {
    over the raised surface, replacing the old solid-orange block. Keeps a hint
    of brand warmth without the garish saturated fill (per the "orange sparingly"
    rule). The animated hero glow on the landing page is separate (PLAN P2.2). */
-.event-banner-fallback {
-  background:
-    radial-gradient(
-      130% 110% at 50% 0%,
-      color-mix(in oklab, var(--color-accent) 22%, transparent),
-      transparent 62%
-    ),
-    var(--color-bg-alt);
+/* Type-aware banner scenes (see lib/eventBanners.tsx). Each motif is driven by
+   a slow keyframe so a no-cover event still feels alive. All frozen under
+   prefers-reduced-motion at the bottom of this file. */
+@keyframes banner-drift {
+  0%,
+  100% {
+    transform: translate3d(-3%, -2%, 0);
+  }
+  50% {
+    transform: translate3d(3%, 2%, 0);
+  }
+}
+.animate-banner-drift {
+  animation: banner-drift 16s ease-in-out infinite;
+}
+
+@keyframes banner-rings {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 0.8;
+  }
+}
+.animate-banner-rings {
+  animation: banner-rings 9s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes banner-sparkle {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scale(0.6);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-banner-sparkle {
+  animation: banner-sparkle 2.6s ease-in-out infinite;
+}
+
+@keyframes banner-confetti {
+  0% {
+    transform: translateY(-10%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(120%);
+    opacity: 0;
+  }
+}
+.animate-banner-confetti {
+  animation: banner-confetti 5s ease-in infinite;
+}
+
+@keyframes banner-scan {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+.animate-banner-scan {
+  animation: banner-scan 7s ease-in-out infinite;
+}
+
+/* Bottom-up dark scrim so overlaid title/characters stay legible on any cover
+   image or banner scene. Sits above the media, below the text. */
+.banner-scrim {
+  background: linear-gradient(
+    to top,
+    var(--color-bg) 8%,
+    color-mix(in oklab, var(--color-bg) 72%, transparent) 45%,
+    transparent 100%
+  );
+}
+
+/* Hero mount: title block slides up + fades in once on page entry. */
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-hero-rise {
+  animation: hero-rise 520ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* Skeleton shimmer: a slow gradient sweep across the border token, replacing
+   the flat animate-pulse for a more "live" loading feel. */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -150% 0;
+  }
+  100% {
+    background-position: 250% 0;
+  }
+}
+.skeleton-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-border) 0%,
+    color-mix(in oklab, var(--color-border) 60%, var(--color-text) 8%) 50%,
+    var(--color-border) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
 }
 
 /* Shared one-time "pop-in" entrance — plays once on DOM mount because it's
@@ -140,10 +256,29 @@ h2 {
   will-change: transform, opacity;
 }
 
-/* Continuous "live feed" marquee (PLAN P1.3): the track holds two copies of the
-   tile set and slides left by exactly half its width, so the loop is seamless.
-   Hover pauses it; reduced-motion stops it and the strip falls back to manual
-   horizontal scroll on its container. */
+/* Gentle hero "float": a slow vertical bob + micro-zoom so the hero image feels
+   alive instead of a static pasted rectangle (PLAN P2.2). Lives on its own
+   wrapper so it never fights the parallax transform (outer) or the mount
+   transition (the img itself). */
+@keyframes hero-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-14px) scale(1.012);
+  }
+}
+.animate-hero-float {
+  animation: hero-float 8s ease-in-out infinite;
+}
+
+/* Continuous "live feed" marquee (PLAN P1.3): the track holds TWO identical
+   tile groups and slides left by exactly one group width (-50% of the track),
+   so the loop is perfectly seamless. Each group is 3× the moments so one group
+   is wider than any realistic viewport — otherwise the -50% end would run past
+   the last tile into empty space on wide screens. Hover pauses; reduced-motion
+   stops it. Duration scales with the 3× content so per-tile speed stays gentle. */
 @keyframes marquee-scroll {
   from {
     transform: translateX(0);
@@ -153,18 +288,37 @@ h2 {
   }
 }
 .animate-marquee {
-  animation: marquee-scroll 40s linear infinite;
+  animation: marquee-scroll 90s linear infinite;
   width: max-content;
 }
 .animate-marquee:hover {
   animation-play-state: paused;
 }
 
+/* Soft fade at both ends of the marquee so tiles melt in/out rather than
+   clipping hard against the page edges. */
+.marquee-mask {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 5%,
+    black 95%,
+    transparent
+  );
+  mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .hero-glow {
-    animation: none;
-  }
-  .animate-marquee {
+  .hero-glow,
+  .animate-hero-float,
+  .animate-marquee,
+  .animate-banner-drift,
+  .animate-banner-rings,
+  .animate-banner-sparkle,
+  .animate-banner-confetti,
+  .animate-banner-scan,
+  .animate-hero-rise,
+  .skeleton-shimmer {
     animation: none;
   }
 }
@@ -172,7 +326,12 @@ h2 {
 /* Printable QR flyer: hide everything on the page except the flyer card.
    `visibility` (not `display`) is used because it lets a descendant
    re-show itself even though intervening ancestors (the admin page chrome,
-   the QRPanel wrapper) have no special print styling of their own. */
+   the QRPanel wrapper) have no special print styling of its own.
+
+   `print-color-adjust: exact` is set on the flyer + descendants so the Poster
+   accent band and the Dark-native charcoal surface actually print (browsers
+   otherwise drop backgrounds). Each variant carries `qr-flyer--<style>` and
+   overrides the default white-paper background below. */
 @media print {
   body * {
     visibility: hidden;
@@ -180,15 +339,24 @@ h2 {
   .qr-flyer,
   .qr-flyer * {
     visibility: visible;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
   .qr-flyer {
     position: absolute;
     top: 0;
     left: 0;
-    /* Pin to paper: the dark theme sets a near-white body color, so force a
-       white background + dark default ink here so nothing prints invisibly.
-       The flyer's own text already uses explicit dark "paper ink" colors. */
+    /* Default: white paper + dark ink (Editorial + Poster). The Dark variant
+       overrides this below to keep its charcoal surface. */
     color: #18181b;
     background: #ffffff;
   }
+  .qr-flyer--dark {
+    color: var(--color-text);
+    background: var(--color-bg);
+  }
+}
+
+@page {
+  margin: 0.5cm;
 }

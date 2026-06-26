@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { createAvatar } from "@dicebear/core";
-import { funEmoji } from "@dicebear/collection";
 import { useI18n } from "../lib/i18n";
+import { renderAvatarSvg } from "../lib/avatar";
 
 interface Participant {
   id: string;
@@ -43,7 +42,10 @@ function ParticipantAvatar({ participant }: { participant: Participant }) {
     );
   }
 
-  const svg = createAvatar(funEmoji, { seed: participant.avatar_seed }).toString();
+  // Render through the shared allowlists so this face matches the one the guest
+  // picked in the nickname gate (funEmoji is seed-deterministic only for
+  // identical options — see lib/avatar.ts).
+  const svg = renderAvatarSvg(participant.avatar_seed);
   return (
     <div
       className="h-12 w-12 overflow-hidden rounded-full border-2 border-white shadow-sm [&>svg]:h-full [&>svg]:w-full"
@@ -52,7 +54,15 @@ function ParticipantAvatar({ participant }: { participant: Participant }) {
   );
 }
 
-export function ParticipantStrip({ slug }: { slug: string }) {
+export function ParticipantStrip({
+  slug,
+  version = 0,
+}: {
+  slug: string;
+  // Bumped by the parent after a join (or any other membership change) so the
+  // strip refetches immediately instead of waiting for a page refresh.
+  version?: number;
+}) {
   const { t } = useI18n();
   const [participants, setParticipants] = useState<Participant[] | null>(null);
 
@@ -74,7 +84,7 @@ export function ParticipantStrip({ slug }: { slug: string }) {
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, version]);
 
   if (!participants || participants.length === 0) return null;
 

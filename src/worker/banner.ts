@@ -6,12 +6,22 @@ const REQUEST_TIMEOUT_MS = 90_000; // gpt-image-2 edits at this size routinely t
 
 export class BannerGenerationError extends Error {}
 
+// The banner is displayed as a 3:2 landscape header card (matches the
+// `aspect-[3/2]` event hero). gpt-image-2 only accepts three fixed sizes, so we
+// request `1536x1024` (the 3:2 landscape option) and tell the model the exact
+// target so it composes for a header — subject kept centrally, clear of the
+// bottom edge where the title overlay + scrim sit.
+const BANNER_SIZE = "1536x1024";
+
 function promptForTheme(theme: string): string {
   return (
     `Create an elegant, professional event banner inspired by this photo. ` +
     `Theme: ${theme || "celebration"}. Warm, inviting lighting, tasteful and ` +
     `not overly literal — a banner background, not a portrait collage. ` +
-    `Landscape orientation, suitable as a header image.`
+    `The image is a landscape header banner displayed at a 3:2 ratio ` +
+    `(1536x1024). Compose with the main interest centered and keep the bottom ` +
+    `third relatively uncluttered and darker, since a title and a short ` +
+    `description overlay it. No text, no watermarks.`
   );
 }
 
@@ -34,7 +44,7 @@ export async function generateAiBanner(
   form.append("model", AI_BANNER_MODEL);
   form.append("image", selfie, selfie.name || "selfie.jpg");
   form.append("prompt", promptForTheme(theme));
-  form.append("size", "1536x1024");
+  form.append("size", BANNER_SIZE);
   form.append("n", "1");
 
   const controller = new AbortController();

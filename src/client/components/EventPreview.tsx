@@ -1,4 +1,5 @@
 import { useI18n } from "../lib/i18n";
+import { EventBannerScene } from "../lib/eventBanners";
 
 export function EventPreview({
   title,
@@ -28,7 +29,7 @@ export function EventPreview({
             className="h-28 w-full object-cover"
           />
         ) : (
-          <div className="h-28 w-full bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-dark)]" />
+          <EventBannerScene type={type} className="h-28 w-full" />
         )}
 
         <div className="w-full min-w-0 p-4">

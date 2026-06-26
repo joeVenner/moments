@@ -9,10 +9,10 @@ export function EventCardSkeleton() {
 
 export function MomentCardSkeleton() {
   return (
-    <div className="animate-pulse overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-alt)]">
-      <div className="aspect-square w-full bg-[var(--color-border)]" />
+    <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-alt)]">
+      <div className="aspect-square w-full skeleton-shimmer" />
       <div className="p-3">
-        <div className="h-3 w-1/2 rounded bg-[var(--color-border)]" />
+        <div className="h-3 w-1/2 rounded skeleton-shimmer" />
       </div>
     </div>
   );

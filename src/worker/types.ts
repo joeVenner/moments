@@ -33,6 +33,8 @@ export interface MomentRow {
   caption: string | null;
   points_awarded: number;
   created_at: string;
+  size_bytes: number | null;
+  mime_type: string | null;
 }
 
 export interface ParticipantRow {
