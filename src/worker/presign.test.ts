@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isR2Configured, presignPutUrl, MAX_DIRECT_UPLOAD_BYTES } from "./presign";
+import {
+  isR2Configured,
+  presignPutUrl,
+  registrationKeyBelongsToEvent,
+  MAX_DIRECT_UPLOAD_BYTES,
+} from "./presign";
 import type { Env } from "./types";
 
 function envWithR2(overrides: Partial<Env> = {}): Env {
@@ -46,6 +51,28 @@ describe("presignPutUrl", () => {
       await presignPutUrl(envWithR2({ R2_S3_ENDPOINT: "https://acct123.r2.cloudflarestorage.com/" }), "k")
     );
     expect(url.pathname).toBe("/moments-media/k");
+  });
+});
+
+describe("registrationKeyBelongsToEvent", () => {
+  it("accepts a key under the event's own moments prefix", () => {
+    expect(registrationKeyBelongsToEvent("e1", "events/e1/moments/uuid-photo.jpg")).toBe(true);
+  });
+
+  it("rejects a key for a different event", () => {
+    expect(registrationKeyBelongsToEvent("e1", "events/e2/moments/uuid-photo.jpg")).toBe(false);
+  });
+
+  it("rejects the bare prefix with no object name", () => {
+    expect(registrationKeyBelongsToEvent("e1", "events/e1/moments/")).toBe(false);
+  });
+
+  it("rejects a different folder under the same event", () => {
+    expect(registrationKeyBelongsToEvent("e1", "events/e1/cover/uuid.jpg")).toBe(false);
+  });
+
+  it("rejects path-traversal attempts", () => {
+    expect(registrationKeyBelongsToEvent("e1", "events/e1/moments/../../e2/moments/x")).toBe(false);
   });
 });
 

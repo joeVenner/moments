@@ -39,3 +39,15 @@ export async function presignPutUrl(env: Env, key: string): Promise<string> {
   const signed = await client.sign(target, { method: "PUT", aws: { signQuery: true } });
   return signed.url;
 }
+
+/**
+ * Security gate for upload registration. The client tells us which R2 object key
+ * it just PUT to, so before trusting that key we must confirm it lives under THIS
+ * event's moments prefix — otherwise a caller could register an object from
+ * another event, or an arbitrary key. The presign endpoint only ever issues keys
+ * of exactly this shape (`events/<id>/moments/<uuid>-<name>`).
+ */
+export function registrationKeyBelongsToEvent(eventId: string, key: string): boolean {
+  const prefix = `events/${eventId}/moments/`;
+  return key.startsWith(prefix) && key.length > prefix.length && !key.includes("..");
+}
