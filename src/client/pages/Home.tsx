@@ -37,6 +37,34 @@ function useCountUp(target: number, durationMs = 1400) {
   return value;
 }
 
+function useScrollParallax(factor = 0.15) {
+  // Damped translateY driven by scroll position; reduced motion → stays at 0.
+  const [offset, setOffset] = useState(0);
+
+  useEffect(() => {
+    if (prefersReducedMotion()) return;
+
+    let frameId = 0;
+    function update() {
+      frameId = 0;
+      setOffset(window.scrollY * factor);
+    }
+    function onScroll() {
+      // Coalesce bursts of scroll events into one rAF-aligned update — no thrash.
+      if (frameId === 0) frameId = requestAnimationFrame(update);
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    update(); // seed for a non-zero initial scroll (e.g. refresh mid-page)
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (frameId) cancelAnimationFrame(frameId);
+    };
+  }, [factor]);
+
+  return offset;
+}
+
 function FeatureCard({
   icon,
   title,
@@ -92,6 +120,7 @@ export default function Home() {
   const [heroVisible, setHeroVisible] = useState(() => prefersReducedMotion());
   const [eventCode, setEventCode] = useState("");
   const momentsCaptured = useCountUp(MOMENTS_COUNTER_TARGET);
+  const heroParallax = useScrollParallax();
 
   useEffect(() => {
     if (prefersReducedMotion()) return;
@@ -162,13 +191,17 @@ export default function Home() {
           </p>
         </div>
 
-        <img
-          src={heroIllustration}
-          alt=""
-          className={`w-full max-w-2xl transition-all delay-150 duration-700 ${
-            heroVisible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
-          }`}
-        />
+        {/* Wrapper owns the scroll parallax transform; the img keeps its own
+            mount transition so the two transforms don't overwrite each other. */}
+        <div className="w-full max-w-2xl" style={{ transform: `translateY(${heroParallax}px)` }}>
+          <img
+            src={heroIllustration}
+            alt=""
+            className={`w-full transition-all delay-150 duration-700 ${
+              heroVisible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
+            }`}
+          />
+        </div>
       </section>
 
       {/* Feature highlights */}
