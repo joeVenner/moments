@@ -9,6 +9,18 @@ import qrFeature from "../assets/qr-feature.png";
 
 const MOMENTS_COUNTER_TARGET = 12482;
 
+// Static preview tiles for the landing "moments" strip (PLAN P1.3). Deliberately
+// CSS-rendered (emoji + accent glow) rather than the baked-white illustration
+// PNGs, which would read as white rectangles on the dark surface (PLAN P0.4).
+const SAMPLE_MOMENTS = [
+  { emoji: "💃", captionKey: "momentCaptionFirstDance", name: "Léa" },
+  { emoji: "🥂", captionKey: "momentCaptionToast", name: "Marco" },
+  { emoji: "🎂", captionKey: "momentCaptionCake", name: "Aïsha" },
+  { emoji: "🕺", captionKey: "momentCaptionDanceFloor", name: "Sam" },
+  { emoji: "🌅", captionKey: "momentCaptionGoldenHour", name: "Priya" },
+  { emoji: "🎤", captionKey: "momentCaptionSpeeches", name: "Tom" },
+] as const;
+
 function useCountUp(target: number, durationMs = 1400) {
   // Reduced motion → snap to the final value (no animated ramp).
   const [value, setValue] = useState(() => (prefersReducedMotion() ? target : 0));
@@ -201,6 +213,34 @@ export default function Home() {
               heroVisible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
             }`}
           />
+        </div>
+      </section>
+
+      {/* Moments marquee — a swipeable peek at what a live feed feels like.
+          User-driven horizontal scroll, no auto-motion, so it's reduced-motion
+          safe by construction. */}
+      <section className="pb-16">
+        <h2 className="mx-auto max-w-lg px-6 text-center text-2xl font-semibold text-[var(--color-text)] sm:text-3xl">
+          {t("marqueeHeading")}
+        </h2>
+        <div className="no-scrollbar mt-8 flex snap-x snap-mandatory gap-4 overflow-x-auto px-6 pb-2">
+          {SAMPLE_MOMENTS.map((m, i) => (
+            <article
+              key={m.captionKey}
+              className="flex aspect-[3/4] w-40 shrink-0 snap-start flex-col justify-end rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-4 shadow-sm sm:w-44"
+              style={{
+                backgroundImage: `radial-gradient(120% 90% at 50% 0%, color-mix(in oklab, var(--color-accent) ${
+                  10 + (i % 3) * 6
+                }%, transparent), transparent 70%)`,
+              }}
+            >
+              <span aria-hidden className="mb-auto text-4xl">
+                {m.emoji}
+              </span>
+              <p className="text-sm font-medium text-[var(--color-text)]">{t(m.captionKey)}</p>
+              <p className="font-mono text-xs text-[var(--color-text-muted)]">{m.name}</p>
+            </article>
+          ))}
         </div>
       </section>
 

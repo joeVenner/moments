@@ -100,6 +100,17 @@ h2 {
   }
 }
 
+/* Hide the scrollbar on a horizontal swipe strip while keeping it scrollable
+   (the landing "moments" marquee, PLAN P1.3). Touch/trackpad/keyboard scroll
+   still work — this only removes the visual scrollbar chrome. */
+.no-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* old Edge */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* WebKit/Blink */
+}
+
 /* Printable QR flyer: hide everything on the page except the flyer card.
    `visibility` (not `display`) is used because it lets a descendant
    re-show itself even though intervening ancestors (the admin page chrome,

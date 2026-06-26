@@ -31,6 +31,14 @@ const dict: Record<Lang, Record<string, Entry>> = {
     featureScanBody:
       "No app to install — scan the event's QR code, pick a name, and start sharing in seconds.",
 
+    marqueeHeading: "A glimpse of the night",
+    momentCaptionFirstDance: "First dance",
+    momentCaptionToast: "The toast",
+    momentCaptionCake: "Cutting the cake",
+    momentCaptionDanceFloor: "On the dance floor",
+    momentCaptionGoldenHour: "Golden hour",
+    momentCaptionSpeeches: "Speeches & laughs",
+
     adminSignInPrompt: "Sign in to manage events",
     usernamePlaceholder: "Username",
     passwordPlaceholder: "Password",
@@ -150,6 +158,14 @@ const dict: Record<Lang, Record<string, Entry>> = {
     featureScanTitle: "Scanner et rejoindre instantanément",
     featureScanBody:
       "Aucune application à installer — scannez le QR code de l'événement, choisissez un nom et commencez à partager en quelques secondes.",
+
+    marqueeHeading: "Un aperçu de la soirée",
+    momentCaptionFirstDance: "Première danse",
+    momentCaptionToast: "Le toast",
+    momentCaptionCake: "La pièce montée",
+    momentCaptionDanceFloor: "Sur la piste",
+    momentCaptionGoldenHour: "L'heure dorée",
+    momentCaptionSpeeches: "Discours & rires",
 
     adminSignInPrompt: "Connectez-vous pour gérer les événements",
     usernamePlaceholder: "Identifiant",
