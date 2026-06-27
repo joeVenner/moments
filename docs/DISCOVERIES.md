@@ -162,3 +162,47 @@ Append-only. Newest at the bottom. Follow the global CLAUDE.md format.
 - **Reference:** commit pending (feat/interactive-landing-page). Stage 1 verified
   by `tsc -b --noEmit` + `vitest` (37/37); remote migration + deploy pending
   Yassir's OK.
+
+## [2026-06-27] Context Update
+- **What changed:** Flyer expanded to 5 styles (3 simple + 2 graphic-rich).
+  Graphic-rich = **Leaves** (decorative botanical *frame* restored from the
+  original `flyer-frame.png` in git history, commit 33d06cf — QR + text
+  composited in its light center, no scrim, dark "paper inks") and **Celebration**
+  (OpenAI `gpt-image-2` scene of guests raising phones to capture the moment —
+  full-bleed photographic art + dark scrim + QR on a white tile, light ink). The
+  first attempt used two polaroid-cascade backgrounds Yassir rejected; those were
+  dropped. Removed the printed website URL from every flyer (QR is the only join
+  path, per Yassir). Fixed the bottom-cropping bug by replacing the fixed
+  `aspect-[2/3]` (locked height to 480px, clipped long titles via `overflow-hidden`)
+  with `min-h-[480px]` so content defines height; kept `overflow-hidden` so
+  full-bleed art rounds to the card corners. Header logo is now a `Link` to `/`
+  and hides on mobile after 80px scroll (sticky greeting/points bar takes over
+  the top; no impact on desktop). Made the flyer **print-ready at A6** (105×148mm
+  postcard, full-bleed): `@page { size: 105mm 148mm; margin: 0 }` and the print
+  rule stretches `.qr-flyer` + its child card to `width:100% / min-height:100vh`
+  with rounded corners + border dropped, so the printed PDF is an exact A6 card
+  a print center can run as-is — not the previous tiny ~3.3×5in card in the page
+  corner. Bumped the QR source from 320→600px so it stays crisp on paper.
+- **Why:** Two flyer-art lessons. (1) A *frame* image (decorative border, light
+  center) is NOT a full-bleed background — it needs the frame layout (object-cover
+  + centered content, no scrim, dark ink), distinct from a photographic scene
+  (full-bleed + scrim + light ink). Reusing one component for both was wrong;
+  split into `LeavesFlyer` + `CelebrationFlyer`. (2) Photographic AI art as PNG was
+  ~1.9MB each; JPG at 900px max edge is ~80KB — ~19x smaller, no visible loss under
+  the scrim / in the frame. The codebase's other PNGs are small illustrations
+  where PNG is appropriate; photographic art → JPG. (3) The print path had no
+  explicit page/size — it emitted a screen-sized card in the page corner; A6
+  full-bleed makes it a real printable artifact. The visible styled card is a
+  *child* of `.qr-flyer`, so the child must be forced to fill the page (not just
+  the outer wrapper) or full-bleed fails.
+- **Impact:** `components/QRFlyer.tsx` (5 styles, `LeavesFlyer`+`CelebrationFlyer`,
+  dropped `guestUrl` prop), `components/QRPanel.tsx` (5-style wrapped picker,
+  image-thumbnail swatches), `lib/i18n.tsx` (`flyerStyleLeaves`/`flyerStyleCelebration`
+  en+fr), `index.css` (A6 `@page` + full-bleed print rule; print group:
+  `dark`+`celebration` dark-ink, leaves stays light-ink), `lib/useQrDataUrl.ts`
+  (QR 320→600px for print crispness), `scripts/gen-flyer-art.mjs` (regenerates
+  only the Celebration JPG via `sips`; Leaves is restored-from-git, not
+  generated), `assets/flyer/flyer-leaves.jpg` + `flyer-celebration.jpg`.
+- **Reference:** commit pending (feat/interactive-landing-page). Verified by
+  `tsc -b --noEmit`, `vitest` (37/37), and `vite build` (art bundles at ~75-82KB
+  each). Remote deploy pending Yassir's OK.
