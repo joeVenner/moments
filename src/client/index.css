@@ -329,9 +329,16 @@ h2 {
    the QRPanel wrapper) have no special print styling of its own.
 
    `print-color-adjust: exact` is set on the flyer + descendants so the Poster
-   accent band and the Dark-native charcoal surface actually print (browsers
-   otherwise drop backgrounds). Each variant carries `qr-flyer--<style>` and
-   overrides the default white-paper background below. */
+   accent band, the Dark-native charcoal surface, and the art backgrounds
+   actually print (browsers otherwise drop backgrounds). Each variant carries
+   `qr-flyer--<style>` and overrides the default white-paper background below.
+
+   The page is sized to A6 (105x148mm postcard) with zero margin, and the flyer
+   is stretched edge-to-edge (full-bleed): the visible styled card is a *child*
+   of `.qr-flyer` (the outer node is just the print-isolation wrapper), so the
+   child is forced to width:100% / min-height:100vh with its on-screen rounded
+   corners and border dropped — otherwise they'd leave white gaps at the page
+   edge. This makes the printed PDF an exact A6 card a print center can run as-is. */
 @media print {
   body * {
     visibility: hidden;
@@ -346,17 +353,31 @@ h2 {
     position: absolute;
     top: 0;
     left: 0;
-    /* Default: white paper + dark ink (Editorial + Poster). The Dark variant
-       overrides this below to keep its charcoal surface. */
+    width: 100%;
+    min-height: 100vh;
+    /* Default: white paper + dark ink (Editorial + Poster + Leaves — the Leaves
+       frame has a light center). The dark-surface variants (Dark + Celebration)
+       override this below to keep their charcoal background and light ink. */
     color: #18181b;
     background: #ffffff;
   }
-  .qr-flyer--dark {
+  /* The actual styled card is a direct child of .qr-flyer — make it fill the
+     A6 page edge-to-edge and drop the on-screen rounded corners + border so
+     nothing leaves a white gap at the page edge. */
+  .qr-flyer > * {
+    width: 100% !important;
+    min-height: 100vh !important;
+    border-radius: 0 !important;
+    border: none !important;
+  }
+  .qr-flyer--dark,
+  .qr-flyer--celebration {
     color: var(--color-text);
     background: var(--color-bg);
   }
 }
 
 @page {
-  margin: 0.5cm;
+  size: 105mm 148mm;
+  margin: 0;
 }

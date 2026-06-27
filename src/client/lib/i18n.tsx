@@ -80,6 +80,8 @@ const dict: Record<Lang, Record<string, Entry>> = {
     flyerStyleEditorial: "Editorial",
     flyerStylePoster: "Poster",
     flyerStyleDark: "Dark",
+    flyerStyleLeaves: "Leaves",
+    flyerStyleCelebration: "Celebration",
 
     enterNameToJoin: "Enter your name to join",
     joinTheFeed: "Join the Feed",
@@ -223,6 +225,8 @@ const dict: Record<Lang, Record<string, Entry>> = {
     flyerStyleEditorial: "Éditorial",
     flyerStylePoster: "Poster",
     flyerStyleDark: "Sombre",
+    flyerStyleLeaves: "Feuilles",
+    flyerStyleCelebration: "Célébration",
 
     enterNameToJoin: "Entrez votre nom pour participer",
     joinTheFeed: "Rejoindre le fil",

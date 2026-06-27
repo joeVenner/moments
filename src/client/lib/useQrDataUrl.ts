@@ -12,7 +12,9 @@ export function useQrDataUrl(url: string): string | null {
   useEffect(() => {
     let cancelled = false;
     QRCode.toDataURL(url, {
-      width: 320,
+      // Rendered on-screen at ~144px but sourced at a higher resolution so the
+      // printed flyer (A6) stays crisp and reliably scannable from paper.
+      width: 600,
       margin: 2,
       color: { dark: "#C15F3C", light: "#FCFAF6" },
     }).then((result) => {
