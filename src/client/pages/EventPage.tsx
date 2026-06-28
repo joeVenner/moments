@@ -328,19 +328,21 @@ export default function EventPage() {
                 <p className="mt-3 text-sm">{t("noMomentsYetBeFirst")}</p>
               </div>
             )}
-            {/* Infinite-scroll sentinel: when this scrolls into view the
-                IntersectionObserver fetches the next page. The skeleton row
-                doubles as its visible mass while a page is loading. */}
+            {/* Infinite-scroll sentinel + explicit control. The ref'd button is
+                what the IntersectionObserver watches: it has real height (unlike
+                the old empty grid), so auto-load on scroll fires reliably, AND it
+                gives a visible, clickable way to reach the next page. Disabled
+                while a page is loading. */}
             {hasMore && (
-              <div ref={sentinelRef} className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {loadingMore && (
-                  <>
-                    <MomentCardSkeleton />
-                    <MomentCardSkeleton />
-                    <MomentCardSkeleton />
-                    <MomentCardSkeleton />
-                  </>
-                )}
+              <div ref={sentinelRef} className="mt-8 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => loadMore()}
+                  disabled={loadingMore}
+                  className="rounded-full border border-[var(--color-border)] bg-[var(--color-bg-alt)] px-5 py-2 text-sm font-medium text-[var(--color-text)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] disabled:opacity-60"
+                >
+                  {loadingMore ? t("loadingMore") : t("loadMore")}
+                </button>
               </div>
             )}
           </div>
