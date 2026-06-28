@@ -103,7 +103,11 @@ export default function EventPage() {
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [loadMore]);
+    // Re-run when `hasMore` flips so the observer re-attaches if the sentinel
+    // ever remounts — e.g. after a failed load (which sets hasMore false and
+    // unmounts the sentinel) is followed by a successful retry that flips it
+    // true again. Without this, the new sentinel node would never be observed.
+  }, [loadMore, hasMore]);
 
   const myPoints = moments
     .filter((m) => m.uploader_name === nickname)
@@ -344,6 +348,15 @@ export default function EventPage() {
                   {loadingMore ? t("loadingMore") : t("loadMore")}
                 </button>
               </div>
+            )}
+            {/* End-of-feed marker. The "Load more" button correctly unmounts
+                once a page returns fewer than 25 items (the feed is exhausted),
+                but without a signal that reads as "the feed is done, not broken."
+                Shown only once there's content and nothing left to load. */}
+            {!hasMore && moments.length > 0 && (
+              <p className="mt-10 text-center font-mono text-xs text-[var(--color-text-muted)]">
+                {t("endOfFeed")}
+              </p>
             )}
           </div>
         )}

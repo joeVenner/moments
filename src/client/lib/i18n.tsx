@@ -104,6 +104,7 @@ const dict: Record<Lang, Record<string, Entry>> = {
     filesTooLarge: "{skipped} file(s) too large (max {maxMb}MB) and were skipped",
     loadMore: "Load more",
     loadingMore: "Loading…",
+    endOfFeed: "You're all caught up",
     pointsAdded: (v) =>
       Number(v.points) === 1 ? "+{points} Point Added!" : "+{points} Points Added!",
     milestoneReached: "Milestone!",
@@ -253,6 +254,7 @@ const dict: Record<Lang, Record<string, Entry>> = {
     filesTooLarge: "{skipped} fichier(s) trop volumineux (max {maxMb}Mo), ignorés",
     loadMore: "Charger plus",
     loadingMore: "Chargement…",
+    endOfFeed: "Vous êtes à jour",
     pointsAdded: (v) =>
       Number(v.points) === 1 ? "+{points} point ajouté !" : "+{points} points ajoutés !",
     milestoneReached: "Étape franchie !",
