@@ -206,3 +206,33 @@ Append-only. Newest at the bottom. Follow the global CLAUDE.md format.
 - **Reference:** commit pending (feat/interactive-landing-page). Verified by
   `tsc -b --noEmit`, `vitest` (37/37), and `vite build` (art bundles at ~75-82KB
   each). Remote deploy pending Yassir's OK.
+
+## [2026-06-28] Context Update
+- **What changed:** Fixed large-file (>25MB) uploads failing on the deployed
+  site. Root cause: the R2 bucket's S3 CORS policy only allowed the local dev
+  origins (localhost:5173 / 127.0.0.1:5173), so the browser's presigned PUT to
+  R2 from `https://moments.ylafrimi.workers.dev` was blocked by CORS
+  (`xhr.onerror` → generic "upload failed"). Small files (≤25MB) were
+  unaffected because they go through the Worker (same-origin), which is why the
+  bug surfaced only for large files (typically phone videos). Added the
+  production origin to the R2 CORS policy (kept localhost for dev). Also added a
+  client-side guard mirroring `presign.ts` MAX_DIRECT_UPLOAD_BYTES (512MB) so a
+  file over the cap is rejected up front with a clear "too large (max 512MB)"
+  message instead of starting the upload and failing generically.
+- **Why:** Two lessons. (1) **R2 S3 CORS is a separate config from the Worker**
+  and must list every browser origin that will PUT directly to R2 — the
+  presigned path bypasses the Worker entirely, so the Worker's origin is
+  irrelevant to that request; only the bucket's CORS policy gates it. The PUT
+  URL is a signed short-lived credential, so opening the origin is safe (CORS
+  is just a browser gate on top of the signature). (2) A server-side cap with no
+  matching client pre-check produces a confusing generic error on mobile, where
+  cameras routinely exceed it — mirror every server upload cap on the client.
+- **Impact:** R2 bucket `moments-media` CORS policy (infra, applied via
+  `wrangler r2 bucket cors set`, live immediately — no deploy), `client/lib/api.ts`
+  (+`DIRECT_UPLOAD_MAX_BYTES`), `pages/EventPage.tsx` (up-front >512MB skip +
+  composed error message), `lib/i18n.tsx` (`filesTooLarge` en+fr).
+- **Reference:** commit dffc82a (feat/interactive-landing-page), deployed as
+  Worker version b93a063e. Verified live at the edge (new bundle hash served +
+  guard string present). Note: the earlier 2026-06-26 note saying migration
+  0003 was "pending remote" was stale — `wrangler d1 migrations list --remote`
+  showed all 3 already applied.
