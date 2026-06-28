@@ -1,7 +1,7 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { Env, EventRow, MomentRow, ParticipantRow, LeaderboardEntry } from "./types";
 import { slugify, randomSuffix } from "./slugify";
-import { putMedia, pointsForContentType, sanitizeFilename, isAllowedContentType } from "./storage";
+import { putMedia, pointsForContentType, sanitizeFilename, isAllowedContentType, MAX_UPLOAD_BYTES } from "./storage";
 import {
   isR2Configured,
   presignPutUrl,
@@ -18,6 +18,24 @@ const app = new Hono<{ Bindings: Env }>();
 // (event by slug, moments, media, participants, leaderboard) stay public.
 app.use("/api/events", requireAdmin);
 app.use("/api/admin/*", requireAdmin);
+
+/**
+ * Early size gate for the multipart upload routes. parseBody() buffers the
+ * entire request body into the Worker isolate before storage.ts's 25MB check
+ * can reject it — so without this, a direct (non-UI) POST of a huge file would
+ * consume isolate memory (Workers isolate ≈ 128MB) before failing, with blast
+ * radius for other requests sharing that isolate. Reading Content-Length lets
+ * us reject >25MB with a 413 before a single byte is buffered. Best-effort:
+ * chunked transfers send no Content-Length and fall through to the post-buffer
+ * check, but the common abuse case (a single oversized file) carries one.
+ */
+function rejectOversizedMultipart(c: Context<{ Bindings: Env }>): Response | null {
+  const len = parseInt(c.req.header("content-length") ?? "", 10);
+  if (Number.isFinite(len) && len > MAX_UPLOAD_BYTES) {
+    return c.json({ error: "File too large (max 25MB)" }, 413);
+  }
+  return null;
+}
 
 async function uniqueSlug(db: D1Database, title: string): Promise<string> {
   const base = slugify(title) || "event";
@@ -78,6 +96,8 @@ app.get("/api/events", async (c) => {
 });
 
 app.post("/api/events", async (c) => {
+  const oversized = rejectOversizedMultipart(c);
+  if (oversized) return oversized;
   const body = await c.req.parseBody();
   const title = typeof body.title === "string" ? body.title.trim() : "";
   const type = typeof body.type === "string" ? body.type.trim() : "";
@@ -154,6 +174,8 @@ app.get("/api/events/:slug/moments", async (c) => {
 });
 
 app.post("/api/events/:slug/moments", async (c) => {
+  const oversized = rejectOversizedMultipart(c);
+  if (oversized) return oversized;
   const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
 

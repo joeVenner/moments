@@ -1,6 +1,6 @@
 import type { Env } from "./types";
 
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25MB — images + short clips only, not long-form video
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25MB — images + short clips only, not long-form video
 
 const ALLOWED_CONTENT_TYPES = new Set([
   "image/jpeg",
