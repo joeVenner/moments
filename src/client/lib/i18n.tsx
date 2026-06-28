@@ -101,6 +101,7 @@ const dict: Record<Lang, Record<string, Entry>> = {
     yourPoints: "Your points:",
     noMomentsYetBeFirst: "No moments yet — be the first to share one!",
     uploadFailed: "Failed to upload {failed} of {total} file(s)",
+    filesTooLarge: "{skipped} file(s) too large (max {maxMb}MB) and were skipped",
     pointsAdded: (v) =>
       Number(v.points) === 1 ? "+{points} Point Added!" : "+{points} Points Added!",
     milestoneReached: "Milestone!",
@@ -247,6 +248,7 @@ const dict: Record<Lang, Record<string, Entry>> = {
     yourPoints: "Tes points :",
     noMomentsYetBeFirst: "Aucun souvenir pour l'instant — soyez le premier à en partager un !",
     uploadFailed: "Échec de l'envoi de {failed} fichier(s) sur {total}",
+    filesTooLarge: "{skipped} fichier(s) trop volumineux (max {maxMb}Mo), ignorés",
     pointsAdded: (v) =>
       Number(v.points) === 1 ? "+{points} point ajouté !" : "+{points} points ajoutés !",
     milestoneReached: "Étape franchie !",

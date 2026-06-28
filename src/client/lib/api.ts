@@ -69,6 +69,15 @@ export function uploadMoment(slug: string, data: FormData) {
  */
 export const NATIVE_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 
+/**
+ * Hard ceiling for the presigned direct-to-R2 path. Mirrors the Worker's
+ * `presign.ts` MAX_DIRECT_UPLOAD_BYTES — files above this are rejected at
+ * presign with a 400, so we surface a clear message up front instead of
+ * letting the upload start and fail with a generic error (common on mobile,
+ * where cameras produce large videos).
+ */
+export const DIRECT_UPLOAD_MAX_BYTES = 512 * 1024 * 1024;
+
 /** PUTs the raw file straight to R2 via XHR so upload progress is observable. */
 function putToR2(url: string, file: File, onProgress?: (fraction: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {

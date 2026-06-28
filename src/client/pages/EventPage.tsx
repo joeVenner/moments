@@ -7,6 +7,7 @@ import {
   directUploadMoment,
   joinEvent,
   NATIVE_UPLOAD_MAX_BYTES,
+  DIRECT_UPLOAD_MAX_BYTES,
 } from "../lib/api";
 import { getNickname, setNickname as saveNickname } from "../lib/nickname";
 import type { EventData } from "../lib/types";
@@ -112,9 +113,24 @@ export default function EventPage() {
     if (!slug || !nickname || !event) return;
     const pointsBefore = myPoints;
     setUploadError(null);
+
+    // Reject oversized files up front with a clear message. The presigned
+    // path caps at 512MB server-side (presign.ts MAX_DIRECT_UPLOAD_BYTES); without
+    // this guard a phone video over the cap would start "uploading" then fail
+    // with a generic error. Skip them and report; upload the rest normally.
+    const tooLarge = files.filter((f) => f.size > DIRECT_UPLOAD_MAX_BYTES);
+    const accepted = files.filter((f) => f.size <= DIRECT_UPLOAD_MAX_BYTES);
+    if (tooLarge.length > 0) {
+      setUploadError(t("filesTooLarge", { skipped: tooLarge.length, maxMb: 512 }));
+    }
+    if (accepted.length === 0) {
+      setUploading(false);
+      return;
+    }
+
     setUploading(true);
 
-    const pending = files.map((file) => ({
+    const pending = accepted.map((file) => ({
       file,
       tempId: `pending-${crypto.randomUUID()}`,
       previewUrl: URL.createObjectURL(file),
@@ -175,7 +191,10 @@ export default function EventPage() {
       if (milestone !== null) setMilestoneReached(milestone);
     }
     if (failures > 0) {
-      setUploadError(t("uploadFailed", { failed: failures, total: files.length }));
+      const failMsg = t("uploadFailed", { failed: failures, total: pending.length });
+      // Preserve the "too large" message if some files were skipped up front,
+      // rather than overwriting it with the per-upload failure count.
+      setUploadError((prev) => (prev ? `${prev} · ${failMsg}` : failMsg));
     }
     setUploading(false);
   }
