@@ -170,7 +170,40 @@ app.get("/api/events/:slug/moments", async (c) => {
     .bind(event.id, limit, offset)
     .all<MomentRow>();
 
-  return c.json({ moments: results, hasMore: results.length === limit });
+  // Total event moment count — drives the numbered page nav on the client (the
+  // old `hasMore` heuristic is off-by-one at the boundary: a full final page
+  // reports hasMore=true even though there's no next page). One cheap COUNT(*).
+  const totalRow = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS c FROM moments WHERE event_id = ?"
+  )
+    .bind(event.id)
+    .first<{ c: number }>();
+  const total = totalRow?.c ?? results.length;
+
+  // Optional: the requesting guest's running point total for this event. Lets
+  // the client render the sticky "Your points" bar correctly even though the
+  // paginated `moments` array now holds only the current page (it can no longer
+  // sum points across everything). Best-effort — absent when no nickname is sent
+  // (e.g. before the guest has joined).
+  const uploaderNameRaw = c.req.query("uploader_name");
+  const uploaderName =
+    typeof uploaderNameRaw === "string" ? uploaderNameRaw.trim() : "";
+  let your_points = 0;
+  if (uploaderName) {
+    const pts = await c.env.DB.prepare(
+      "SELECT COALESCE(SUM(points_awarded), 0) AS s FROM moments WHERE event_id = ? AND uploader_name = ?"
+    )
+      .bind(event.id, uploaderName)
+      .first<{ s: number }>();
+    your_points = pts?.s ?? 0;
+  }
+
+  return c.json({
+    moments: results,
+    hasMore: results.length === limit,
+    total,
+    your_points,
+  });
 });
 
 app.post("/api/events/:slug/moments", async (c) => {

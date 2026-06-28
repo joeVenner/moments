@@ -46,13 +46,22 @@ export function getEvent(slug: string) {
   return fetch(`/api/events/${slug}`).then((r) => asJson<{ event: EventData }>(r));
 }
 
-export function listMoments(slug: string, opts?: { limit?: number; offset?: number }) {
+export function listMoments(
+  slug: string,
+  opts?: { limit?: number; offset?: number; uploaderName?: string }
+) {
   const params = new URLSearchParams();
   if (opts?.limit != null) params.set("limit", String(opts.limit));
   if (opts?.offset != null) params.set("offset", String(opts.offset));
+  if (opts?.uploaderName) params.set("uploader_name", opts.uploaderName);
   const qs = params.toString();
   return fetch(`/api/events/${slug}/moments${qs ? `?${qs}` : ""}`).then((r) =>
-    asJson<{ moments: MomentData[]; hasMore: boolean }>(r)
+    asJson<{
+      moments: MomentData[];
+      hasMore: boolean;
+      total: number;
+      your_points: number;
+    }>(r)
   );
 }
 

@@ -236,3 +236,35 @@ Append-only. Newest at the bottom. Follow the global CLAUDE.md format.
   guard string present). Note: the earlier 2026-06-26 note saying migration
   0003 was "pending remote" was stale — `wrangler d1 migrations list --remote`
   showed all 3 already applied.
+
+## [2026-06-28] Context Update — feed switched from infinite scroll to numbered pages
+- **What changed:** Replaced the IntersectionObserver-based infinite scroll
+  (`hasMore`/`offsetRef`/`hasMoreRef`/`loadingMoreRef`/`sentinelRef` + a "Load
+  more" sentinel button) with explicit **numbered pagination** in
+  `pages/EventPage.tsx`: a `page` state, a windowed `Pagination` component
+  (first / last / current±1 / ellipses, all when ≤7 pages), and per-page fetch
+  that REPLACES `moments` (offset = (page-1)*PAGE_SIZE). The moments list route
+  (`worker/index.ts`) now also returns `total` (COUNT(*) for the event) and an
+  optional `your_points` (SUM(points_awarded) for `?uploader_name=`). Page nav
+  on page change scrolls the feed top into view (reduced-motion-aware). The
+  list response still includes `hasMore` for backward-compat but the client no
+  longer relies on it (it was off-by-one at the boundary: a full final page
+  reports hasMore=true even with no next page).
+- **Why:** Yassir reported >50-moment events weren't surfacing later pages —
+  the silent IntersectionObserver auto-load path could get stuck after one
+  page and there was no deterministic way to reach page 3+. Numbered pages are
+  button-driven (no observer to silently misbehave) and each button fetches its
+  own offset, so a large feed can't get stranded — and it's a better fit for a
+  bounded event feed. Switching to replace-on-page-load also broke the old
+  `myPoints = sum over loaded moments` (which now only holds one page), so the
+  worker now returns the guest's true running total via `your_points` and the
+  client keeps it in sync by bumping locally on each successful upload.
+- **Impact:** `worker/index.ts` (list route: +`total`, +`your_points`),
+  `client/lib/api.ts` (`listMoments` +`uploaderName` opt +`total`/`your_points`
+  in the response type), `pages/EventPage.tsx` (page/total/loadingPage/myPoints
+  state, `loadPage`, `Pagination` component, optimistic prepend gated to
+  page 1, post-join refetch so a returning guest's prior-upload points show),
+  `lib/i18n.tsx` (+`pagePrev`/`pageNext`; `loadMore`/`loadingMore` kept but now
+  unused). No schema change — `total`/`your_points` are computed at query time.
+- **Reference:** commit pending (feat/interactive-landing-page). Verified by
+  `tsc -b --noEmit`, `vitest` (37/37), `vite build`. Deploy pending Yassir's OK.

@@ -105,6 +105,8 @@ const dict: Record<Lang, Record<string, Entry>> = {
     loadMore: "Load more",
     loadingMore: "Loading…",
     endOfFeed: "You're all caught up",
+    pagePrev: "Previous page",
+    pageNext: "Next page",
     pointsAdded: (v) =>
       Number(v.points) === 1 ? "+{points} Point Added!" : "+{points} Points Added!",
     milestoneReached: "Milestone!",
@@ -255,6 +257,8 @@ const dict: Record<Lang, Record<string, Entry>> = {
     loadMore: "Charger plus",
     loadingMore: "Chargement…",
     endOfFeed: "Vous êtes à jour",
+    pagePrev: "Page précédente",
+    pageNext: "Page suivante",
     pointsAdded: (v) =>
       Number(v.points) === 1 ? "+{points} point ajouté !" : "+{points} points ajoutés !",
     milestoneReached: "Étape franchie !",
