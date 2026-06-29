@@ -50,3 +50,17 @@ export interface LeaderboardEntry {
   total_points: number;
   moment_count: number;
 }
+
+/** A resumable multipart upload in flight. See migrations/0004_uploads.sql. */
+export interface UploadRow {
+  id: string;
+  event_id: string;
+  uploader_name: string;
+  key: string;
+  upload_id: string;
+  content_type: string | null;
+  size_bytes: number;
+  status: "open" | "completed" | "aborted";
+  created_at: string;
+  completed_at: string | null;
+}

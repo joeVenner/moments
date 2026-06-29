@@ -1,5 +1,5 @@
 import { Hono, type Context } from "hono";
-import type { Env, EventRow, MomentRow, ParticipantRow, LeaderboardEntry } from "./types";
+import type { Env, EventRow, MomentRow, ParticipantRow, LeaderboardEntry, UploadRow } from "./types";
 import { slugify, randomSuffix } from "./slugify";
 import { putMedia, pointsForContentType, sanitizeFilename, isAllowedContentType, MAX_UPLOAD_BYTES } from "./storage";
 import {
@@ -9,6 +9,15 @@ import {
   MAX_DIRECT_UPLOAD_BYTES,
   PRESIGN_EXPIRY_SECONDS,
 } from "./presign";
+import {
+  createMultipartUpload,
+  presignPartUrl,
+  completeMultipartUpload,
+  abortMultipartUpload,
+  listParts,
+  partCountForSize,
+  MULTIPART_PART_BYTES,
+} from "./multipartPresign";
 import { requireAdmin } from "./auth";
 import { generateAiBanner, BannerGenerationError } from "./banner";
 
@@ -352,6 +361,309 @@ app.post("/api/events/:slug/moments/register", async (c) => {
     .first<MomentRow>();
 
   return c.json({ moment, points_awarded: points }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// Resumable multipart large-upload flow (P3.1 evolution). The monolithic
+// presigned PUT above dies + restarts from byte zero when iOS suspends the
+// background tab; this flow splits the file into 8 MiB parts the browser PUTs
+// straight to R2, so an interruption only costs one part and resume is
+// instant. The Worker stays out of the data path (it only signs part URLs and
+// runs Create/Complete/Abort/ListParts server-side). R2 ListParts is the
+// resume source of truth; the D1 `uploads` row is accounting/cleanup.
+//
+// Security mirrors the single-PUT register path: every route re-checks the
+// key belongs to this event, and every part/complete/abort/status call binds
+// the uploadId to an OPEN uploads row under THIS event — so a caller can't
+// drive another event's upload or complete a partial one (the assembled size
+// must equal the size declared at init).
+// ---------------------------------------------------------------------------
+
+/** Look up an open upload owned by this event. Returns null if missing/owned
+ *  by another event/already closed — the caller treats that as a 404/400. */
+async function getOpenUpload(
+  db: D1Database,
+  eventId: string,
+  uploadId: string,
+  key: string
+): Promise<UploadRow | null> {
+  return db
+    .prepare("SELECT * FROM uploads WHERE upload_id = ? AND key = ? AND event_id = ? AND status = 'open'")
+    .bind(uploadId, key, eventId)
+    .first<UploadRow>();
+}
+
+/**
+ * Post-assembly validation shared by the complete step. Confirms the assembled
+ * object exists on R2, is an allowed type, is ≤ 512 MB, and (multipart only)
+ * matches the size declared at init — so dropping parts can't smuggle through a
+ * truncated object as "complete". Deletes the object on failure (mirrors the
+ * register path) and returns a JSON error Response for the caller to return.
+ */
+async function validateAssembledObject(
+  c: Context<{ Bindings: Env }>,
+  key: string,
+  expectedSize?: number
+): Promise<{ contentType: string; size: number } | Response> {
+  const object = await c.env.BUCKET.head(key);
+  if (!object) return c.json({ error: "uploaded object not found" }, 404);
+  const contentType = object.httpMetadata?.contentType?.toLowerCase() ?? "";
+  if (!isAllowedContentType(contentType)) {
+    await c.env.BUCKET.delete(key);
+    return c.json({ error: "Unsupported file type" }, 400);
+  }
+  if (object.size <= 0 || object.size > MAX_DIRECT_UPLOAD_BYTES) {
+    await c.env.BUCKET.delete(key);
+    return c.json({ error: "File too large (max 512MB)" }, 400);
+  }
+  if (expectedSize !== undefined && object.size !== expectedSize) {
+    // A smaller assembled object means the client completed with missing parts.
+    await c.env.BUCKET.delete(key);
+    return c.json({ error: "uploaded object size mismatch" }, 400);
+  }
+  return { contentType, size: object.size };
+}
+
+// Step 1: initiate. Validates type + size, builds the key, opens the R2
+// multipart upload, and writes a D1 `uploads` row. Inert (501) until R2 S3
+// creds are configured, same as the single-PUT presign route.
+app.post("/api/events/:slug/moments/multipart/init", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  if (!isR2Configured(c.env)) {
+    return c.json({ error: "Large direct uploads are not configured" }, 501);
+  }
+
+  const body = (await c.req.json().catch(() => null)) as {
+    uploader_name?: unknown;
+    content_type?: unknown;
+    size?: unknown;
+    filename?: unknown;
+  } | null;
+
+  const uploaderName = typeof body?.uploader_name === "string" ? body.uploader_name.trim() : "";
+  const contentType = typeof body?.content_type === "string" ? body.content_type.toLowerCase() : "";
+  const size = typeof body?.size === "number" ? body.size : NaN;
+  const filename = typeof body?.filename === "string" ? body.filename : "upload";
+
+  if (!uploaderName) return c.json({ error: "uploader_name is required" }, 400);
+  if (!isAllowedContentType(contentType)) return c.json({ error: "Unsupported file type" }, 400);
+  if (!Number.isFinite(size) || size <= 0 || size > MAX_DIRECT_UPLOAD_BYTES) {
+    return c.json({ error: "File too large (max 512MB)" }, 400);
+  }
+
+  const key = `events/${event.id}/moments/${crypto.randomUUID()}-${sanitizeFilename(filename)}`;
+  let uploadId: string;
+  try {
+    uploadId = await createMultipartUpload(c.env, key, contentType);
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "init failed" }, 502);
+  }
+
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare(
+    `INSERT INTO uploads (id, event_id, uploader_name, key, upload_id, content_type, size_bytes, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'open')`
+  )
+    .bind(id, event.id, uploaderName, key, uploadId, contentType || null, size)
+    .run();
+
+  return c.json({
+    upload_id: uploadId,
+    key,
+    part_size: MULTIPART_PART_BYTES,
+    part_count: partCountForSize(size),
+    media_url: `/media/${key}`,
+    expires_in: PRESIGN_EXPIRY_SECONDS,
+  });
+});
+
+// Step 2: mint a presigned UploadPart URL. One cheap call per part; the URL is
+// query-signed (no creds in the browser) and bound to partNumber + uploadId.
+app.post("/api/events/:slug/moments/multipart/part-url", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  if (!isR2Configured(c.env)) {
+    return c.json({ error: "Large direct uploads are not configured" }, 501);
+  }
+
+  const body = (await c.req.json().catch(() => null)) as {
+    upload_id?: unknown;
+    key?: unknown;
+    part_number?: unknown;
+  } | null;
+
+  const uploadId = typeof body?.upload_id === "string" ? body.upload_id : "";
+  const key = typeof body?.key === "string" ? body.key : "";
+  const partNumber = typeof body?.part_number === "number" ? body.part_number : NaN;
+
+  if (!uploadId || !key || !Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
+    return c.json({ error: "upload_id, key, and part_number (1..10000) are required" }, 400);
+  }
+  if (!registrationKeyBelongsToEvent(event.id, key)) {
+    return c.json({ error: "key does not belong to this event" }, 400);
+  }
+  const upload = await getOpenUpload(c.env.DB, event.id, uploadId, key);
+  if (!upload) return c.json({ error: "upload not found" }, 404);
+
+  let url: string;
+  try {
+    url = await presignPartUrl(c.env, key, uploadId, partNumber);
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "presign failed" }, 502);
+  }
+  return c.json({ url, part_number: partNumber });
+});
+
+// Resume query: which parts R2 already has. The client skips these and re-PUTs
+// the rest. Source of truth (survives reload + cross-device) — the D1 row only
+// confirms the upload is still open + owned by this event.
+app.get("/api/events/:slug/moments/multipart/status", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  if (!isR2Configured(c.env)) {
+    return c.json({ error: "Large direct uploads are not configured" }, 501);
+  }
+
+  const uploadId = c.req.query("upload_id") ?? "";
+  const key = c.req.query("key") ?? "";
+  if (!uploadId || !key) return c.json({ error: "upload_id and key are required" }, 400);
+  if (!registrationKeyBelongsToEvent(event.id, key)) {
+    return c.json({ error: "key does not belong to this event" }, 400);
+  }
+  const upload = await c.env.DB.prepare("SELECT * FROM uploads WHERE upload_id = ? AND key = ? AND event_id = ?")
+    .bind(uploadId, key, event.id)
+    .first<UploadRow>();
+  if (!upload) return c.json({ error: "upload not found" }, 404);
+  if (upload.status === "completed") return c.json({ error: "upload already completed" }, 409);
+  // 'aborted' or 'open' — either way, list what R2 actually has. If aborted,
+  // the client should re-init (returned parts let it decide).
+  let parts;
+  try {
+    parts = await listParts(c.env, key, uploadId);
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "listParts failed" }, 502);
+  }
+  return c.json({
+    status: upload.status,
+    part_size: MULTIPART_PART_BYTES,
+    part_count: partCountForSize(upload.size_bytes),
+    parts, // [{partNumber, etag}]
+  });
+});
+
+// Step 3: finalize. Completes the R2 multipart, head()-validates the assembled
+// object (type + size, including a match against the size declared at init so a
+// truncated upload can't slip through), writes the moment row, and closes the
+// uploads row. On any validation failure the object is deleted + the upload is
+// marked aborted.
+app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  if (!isR2Configured(c.env)) {
+    return c.json({ error: "Large direct uploads are not configured" }, 501);
+  }
+
+  const body = (await c.req.json().catch(() => null)) as {
+    upload_id?: unknown;
+    key?: unknown;
+    caption?: unknown;
+    uploader_name?: unknown;
+    parts?: unknown;
+  } | null;
+
+  const uploadId = typeof body?.upload_id === "string" ? body.upload_id : "";
+  const key = typeof body?.key === "string" ? body.key : "";
+  const caption = typeof body?.caption === "string" ? body.caption.trim() : null;
+  const uploaderName = typeof body?.uploader_name === "string" ? body.uploader_name.trim() : "";
+  const parts = Array.isArray(body?.parts) ? body.parts : null;
+
+  if (!uploadId || !key || !uploaderName || !parts) {
+    return c.json({ error: "upload_id, key, uploader_name, and parts are required" }, 400);
+  }
+  if (!registrationKeyBelongsToEvent(event.id, key)) {
+    return c.json({ error: "key does not belong to this event" }, 400);
+  }
+  const upload = await getOpenUpload(c.env.DB, event.id, uploadId, key);
+  if (!upload) return c.json({ error: "upload not found or already closed" }, 404);
+
+  // Normalize + sanity-check the part list the client sends (ETags captured
+  // from each part PUT's response header). R2's Complete call is the final
+  // authority on ETag correctness; we just need numbers + strings in order.
+  const cleanedParts = parts
+    .map((p: unknown) =>
+      p && typeof p === "object" && "partNumber" in p && "etag" in p
+        ? { partNumber: Number((p as { partNumber: unknown }).partNumber), etag: String((p as { etag: unknown }).etag) }
+        : null
+    )
+    .filter((p: { partNumber: number; etag: string } | null): p is { partNumber: number; etag: string } => p !== null);
+  if (cleanedParts.length !== partCountForSize(upload.size_bytes)) {
+    return c.json({ error: "part count does not match file size" }, 400);
+  }
+
+  try {
+    await completeMultipartUpload(c.env, key, uploadId, cleanedParts);
+  } catch (err) {
+    // Leave the upload OPEN — the client can retry complete with corrected ETags.
+    return c.json({ error: err instanceof Error ? err.message : "complete failed" }, 502);
+  }
+
+  const validated = await validateAssembledObject(c, key, upload.size_bytes);
+  if (validated instanceof Response) {
+    await c.env.DB.prepare("UPDATE uploads SET status = 'aborted' WHERE id = ?").bind(upload.id).run();
+    return validated;
+  }
+
+  const points = pointsForContentType(validated.contentType);
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare(
+    `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(id, event.id, uploaderName, `/media/${key}`, caption, points, validated.size, validated.contentType || null)
+    .run();
+  await c.env.DB.prepare(
+    "UPDATE uploads SET status = 'completed', completed_at = datetime('now') WHERE id = ?"
+  )
+    .bind(upload.id)
+    .run();
+  await upsertParticipant(c.env.DB, event.id, uploaderName);
+
+  const moment = await c.env.DB.prepare("SELECT * FROM moments WHERE id = ?")
+    .bind(id)
+    .first<MomentRow>();
+  return c.json({ moment, points_awarded: points }, 201);
+});
+
+// Cancel: frees the storage held by uploaded parts. Always call on give-up.
+app.post("/api/events/:slug/moments/multipart/abort", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  if (!isR2Configured(c.env)) {
+    return c.json({ error: "Large direct uploads are not configured" }, 501);
+  }
+
+  const body = (await c.req.json().catch(() => null)) as {
+    upload_id?: unknown;
+    key?: unknown;
+  } | null;
+
+  const uploadId = typeof body?.upload_id === "string" ? body.upload_id : "";
+  const key = typeof body?.key === "string" ? body.key : "";
+  if (!uploadId || !key) return c.json({ error: "upload_id and key are required" }, 400);
+  if (!registrationKeyBelongsToEvent(event.id, key)) {
+    return c.json({ error: "key does not belong to this event" }, 400);
+  }
+
+  try {
+    await abortMultipartUpload(c.env, key, uploadId);
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "abort failed" }, 502);
+  }
+  await c.env.DB.prepare("UPDATE uploads SET status = 'aborted' WHERE upload_id = ? AND key = ? AND event_id = ?")
+    .bind(uploadId, key, event.id)
+    .run();
+  return c.json({ aborted: true });
 });
 
 app.get("/api/events/:slug/participants", async (c) => {
