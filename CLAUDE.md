@@ -65,11 +65,27 @@ light text), and do not flatten back to pure-black — flat near-black reads as 
 ---
 
 ## Stack & layout cheatsheet
-- **Client:** `src/client/` — `pages/`, `components/`, `lib/` (i18n, api, points, motion).
+- **Client:** `src/client/` — `pages/`, `components/`, `lib/` (i18n, api, points, motion,
+  `multipartUpload`, `uploadStore`, `useUploadWakeLock`).
 - **Worker:** `src/worker/` — Hono routes (`index.ts`), `storage.ts` (R2), `banner.ts` (AI),
-  `auth.ts` (admin). D1 migrations in `migrations/`.
-- **Upload ceiling:** `storage.ts` caps at 25 MB via `parseBody` (buffers in the 128 MB isolate).
-  Raising it is an architecture change, NOT a cap bump — see `.agent/PLAN.md` P3.1.
+  `auth.ts` (admin), `presign.ts` + `multipartPresign.ts` (R2 S3 signing). D1 migrations in `migrations/`.
+- **Upload paths (two):**
+  - **≤25 MB** → native multipart route (`POST /moments`, `parseBody` → `BUCKET.put`). Buffers
+    in the 128 MB isolate; that's why the cap is 25 MB.
+  - **>25 MB up to 512 MB** → **resumable S3 multipart direct-to-R2** (`multipartUpload.ts` +
+    worker `multipartPresign.ts` + `/moments/multipart/*` routes). The file is split into 8 MiB
+    parts the browser PUTs straight to R2 (Worker never sees the bytes); 3 parts concurrent, XHR
+    per-part progress, resume from R2 `ListParts` on `visibilitychange→visible`, progress mirrored
+    to IndexedDB, screen wake lock while foregrounded. An interruption costs one ~8 MiB part,
+    not the whole file. Raising the 512 MB cap is now a one-config change (R2 allows 5 TB /
+    10 000 parts); see `.agent/PLAN.md` P3.1.
+- **R2 bucket CORS (load-bearing for multipart):** the browser must read each part's `ETag` from
+  the UploadPart PUT response, so the `moments-media` bucket CORS MUST `ExposeHeaders: ["ETag"]`
+  (the old single-PUT path never needed it — it `head()`-validated). Policy + apply command:
+  `scripts/r2-cors.json` + `wrangler r2 bucket cors put moments-media --file scripts/r2-cors.json`.
+  Without `ETag` exposed, multipart completes fail with "R2 returned no ETag".
+- **R2 S3 creds prereq:** `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_S3_ENDPOINT` /
+  `R2_BUCKET_NAME` in `.dev.vars` + `wrangler secret put`. Both upload paths return 501 until set.
 - Tests: `vitest run`. Typecheck: `tsc -b --noEmit`.
 
 ## Working agreements

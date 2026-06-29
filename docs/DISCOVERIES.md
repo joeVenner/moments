@@ -268,3 +268,41 @@ Append-only. Newest at the bottom. Follow the global CLAUDE.md format.
   unused). No schema change — `total`/`your_points` are computed at query time.
 - **Reference:** commit pending (feat/interactive-landing-page). Verified by
   `tsc -b --noEmit`, `vitest` (37/37), `vite build`. Deploy pending Yassir's OK.
+
+## [2026-06-30] Context Update — resumable chunked uploads (background-safe large video)
+- **What changed:** Replaced the monolithic presigned PUT large-upload path with a
+  **resumable S3 multipart** path so a 100MB–512MB phone video no longer requires the
+  user to babysit the phone. The file is split into 8 MiB parts the browser PUTs
+  straight to R2 (Worker stays out of the data path, same Fork B decision); 3 parts
+  concurrent with XHR per-part progress; on `visibilitychange→visible` the client
+  reconciles against R2 `ListParts` (the resume source of truth) so iOS background
+  suspension can't desync the local map and we never re-upload a part R2 already has;
+  progress mirrored to IndexedDB for zero-round-trip same-session resume and
+  cold-reload re-matching of a re-picked file; screen wake lock while foregrounded.
+  An interruption now costs ONE ~8 MiB part, not the whole file.
+- **Why:** No web API in 2026 keeps an upload alive after iOS fully backgrounds the
+  app (Background Fetch is absent on iOS + download-only on Chrome; Background Sync
+  is absent on iOS and can't carry large bodies; fetch streaming-upload progress is
+  Chrome-only and inaccurate). True background uploads need a native app
+  (`URLSessionConfiguration.background`). The realistic web answer is *resumable
+  chunking*: bound the loss to one part and resume instantly on return, plus a wake
+  lock so the foregrounded tab doesn't dim-throttle. XHR (not fetch) is required for
+  real upload-acked progress.
+- **Impact:** new `worker/multipartPresign.ts` (+tests: create/presign-part/
+  complete/abort/list-parts via `aws4fetch`, no live network), `migrations/0004_uploads.sql`
+  (accounting/cleanup only — R2 ListParts is the resume truth), worker
+  `/api/events/:slug/moments/multipart/{init,part-url,status,complete,abort}` routes,
+  client `lib/multipartUpload.ts` + `lib/uploadStore.ts` (IndexedDB) +
+  `lib/useUploadWakeLock.ts`, `EventPage` routing >25MB files here with per-card
+  progress (`MomentCard` `_progress`) + `findResumableUpload` resume, `i18n` (512MB
+  hint + `uploadPaused` en+fr). The old single-PUT `directUploadMoment` /
+  `/presign` / `/register` path is superseded but left in place (inert, still tested).
+- **Prereq (infra, NOT code):** the `moments-media` bucket CORS MUST
+  `ExposeHeaders: ["ETag"]` — the browser reads each part's ETag from the UploadPart
+  PUT response to send to Complete; the old path never needed it (it `head()`-validated).
+  Apply via `wrangler r2 bucket cors put moments-media --file scripts/r2-cors.json`.
+  R2 S3 creds already set (presign path). Without `ETag` exposed, completes fail with
+  "R2 returned no ETag (check bucket CORS ExposeHeaders)".
+- **Reference:** commits pending (feat/interactive-landing-page). Verified by
+  `tsc -b --noEmit`, `vitest` (47/47), `vite build`. Deploy + remote D1 migration
+  `0004` + CORS update pending Yassir's OK.
