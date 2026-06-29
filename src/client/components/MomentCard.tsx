@@ -21,6 +21,8 @@ function formatSize(bytes: number | null): string | null {
 export interface PendingMoment extends MomentData {
   _pending?: boolean;
   _mimeType?: string;
+  /** Upload progress 0..1 for large resumable uploads (undefined = indeterminate). */
+  _progress?: number;
 }
 
 export function MomentCard({ moment, index = 0 }: { moment: PendingMoment; index?: number }) {
@@ -90,7 +92,23 @@ export function MomentCard({ moment, index = 0 }: { moment: PendingMoment; index
       )}
       {moment._pending && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-white border-t-transparent" />
+          {moment._progress != null ? (
+            // Real per-part progress for large resumable uploads — a thin accent
+            // bar across the bottom of the card, plus the percentage.
+            <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-1 p-2">
+              <span className="font-mono text-[10px] text-white">
+                {Math.round(moment._progress * 100)}%
+              </span>
+              <div className="h-1 w-full overflow-hidden rounded-full bg-white/20">
+                <div
+                  className="h-full rounded-full bg-[var(--color-accent)] transition-[width] duration-150 ease-out"
+                  style={{ width: `${Math.round(moment._progress * 100)}%` }}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-white border-t-transparent" />
+          )}
         </div>
       )}
       <div className="p-3">

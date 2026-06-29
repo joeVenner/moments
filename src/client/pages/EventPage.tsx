@@ -4,11 +4,16 @@ import {
   getEvent,
   listMoments,
   uploadMoment,
-  directUploadMoment,
   joinEvent,
   NATIVE_UPLOAD_MAX_BYTES,
   DIRECT_UPLOAD_MAX_BYTES,
 } from "../lib/api";
+import {
+  resumableUploadMoment,
+  UploadInterruptedError,
+} from "../lib/multipartUpload";
+import { findResumableUpload } from "../lib/uploadStore";
+import { useUploadWakeLock } from "../lib/useUploadWakeLock";
 import { getNickname, setNickname as saveNickname } from "../lib/nickname";
 import type { EventData } from "../lib/types";
 import { NicknameGate } from "../components/NicknameGate";
@@ -57,6 +62,11 @@ export default function EventPage() {
   const [loadingPage, setLoadingPage] = useState(false);
   const [myPoints, setMyPoints] = useState(0);
   const feedTopRef = useRef<HTMLDivElement>(null);
+
+  // Keep the screen awake while a large upload is in flight so the OS doesn't
+  // dim → throttle → kill the tab's upload. Foreground keep-alive only — see
+  // useUploadWakeLock + multipartUpload.ts for the resumable-chunk fallback.
+  useUploadWakeLock(uploading);
 
   useEffect(() => {
     if (!slug) return;
@@ -164,11 +174,28 @@ export default function EventPage() {
 
     const results = await Promise.allSettled(
       pending.map(async ({ file, tempId }) => {
-        // Files past the native cap can't fit the Worker's request body — send them
-        // straight to R2 via a presigned PUT; everything else takes the multipart route.
+        // Files past the native cap go through the resumable chunked path: the
+        // file is split into 8 MiB parts PUT straight to R2, so an interruption
+        // only costs one part and resumes from R2's ListParts on return. Small
+        // files keep the simple native multipart route. If this file already has
+        // an in-progress upload (paused earlier / re-picked after a reload),
+        // resume it instead of starting over.
         let result;
         if (file.size > NATIVE_UPLOAD_MAX_BYTES) {
-          result = await directUploadMoment(slug, file, caption, nickname);
+          const resume = await findResumableUpload(slug, file);
+          result = await resumableUploadMoment({
+            slug,
+            file,
+            caption,
+            uploaderName: nickname,
+            resume: resume ?? undefined,
+            onProgress: (loaded, total) => {
+              const frac = total > 0 ? loaded / total : 0;
+              setMoments((prev) =>
+                prev.map((m) => (m.id === tempId ? { ...m, _progress: frac } : m))
+              );
+            },
+          });
         } else {
           const formData = new FormData();
           formData.append("file", file);
@@ -183,11 +210,18 @@ export default function EventPage() {
 
     let totalPoints = 0;
     let failures = 0;
+    const pausedNames: string[] = [];
     results.forEach((result, i) => {
       if (result.status === "fulfilled") {
         totalPoints += result.value;
       } else {
         failures += 1;
+        const reason = result.reason;
+        if (reason instanceof UploadInterruptedError) {
+          // The R2 upload is left open — the guest can resume by re-selecting
+          // the file (findResumableUpload will rematch it). Keep the hint clear.
+          pausedNames.push(pending[i].file.name);
+        }
         setMoments((prev) => prev.filter((m) => m.id !== pending[i].tempId));
       }
     });
@@ -212,6 +246,12 @@ export default function EventPage() {
       // Preserve the "too large" message if some files were skipped up front,
       // rather than overwriting it with the per-upload failure count.
       setUploadError((prev) => (prev ? `${prev} · ${failMsg}` : failMsg));
+    }
+    // A paused upload isn't a hard failure — tell the guest exactly how to
+    // resume (re-select the file; the chunked uploader skips parts R2 already has).
+    if (pausedNames.length > 0) {
+      const pausedMsg = t("uploadPaused", { name: pausedNames[0] });
+      setUploadError((prev) => (prev ? `${prev} · ${pausedMsg}` : pausedMsg));
     }
     setUploading(false);
   }

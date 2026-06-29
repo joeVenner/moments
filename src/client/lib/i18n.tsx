@@ -89,12 +89,13 @@ const dict: Record<Lang, Record<string, Entry>> = {
     filesSelected: (v) =>
       Number(v.count) === 1 ? "{count} file selected" : "{count} files selected",
     tapToChoose: "Tap to capture or choose photos/videos",
-    uploadHint: "JPG, PNG, MP4 — up to 25MB each",
+    uploadHint: "Photos & videos up to 512MB — large clips resume if interrupted",
     addCaptionPlaceholder: "Add a caption (optional)",
     removeFile: "Remove {name}",
     optimizing: "Optimizing…",
     uploading: "Uploading…",
     shareMoment: (v) => (Number(v.count) > 1 ? "Share {count} Moments" : "Share Moment"),
+    uploadPaused: "Upload paused — re-select “{name}” to resume from where it stopped",
 
     eventNotFound: "Event not found.",
     greetingName: "Hi {name}",
@@ -240,13 +241,14 @@ const dict: Record<Lang, Record<string, Entry>> = {
     filesSelected: (v) =>
       Number(v.count) === 1 ? "{count} fichier sélectionné" : "{count} fichiers sélectionnés",
     tapToChoose: "Appuyez pour prendre ou choisir des photos/vidéos",
-    uploadHint: "JPG, PNG, MP4 — jusqu'à 25 Mo chacun",
+    uploadHint: "Photos et vidéos jusqu'à 512 Mo — les gros clips reprennent s'ils sont interrompus",
     addCaptionPlaceholder: "Ajouter une légende (optionnel)",
     removeFile: "Retirer {name}",
     optimizing: "Optimisation…",
     uploading: "Envoi en cours…",
     shareMoment: (v) =>
       Number(v.count) > 1 ? "Partager {count} souvenirs" : "Partager ce souvenir",
+    uploadPaused: "Envoi en pause — re-sélectionnez « {name} » pour reprendre",
 
     eventNotFound: "Événement introuvable.",
     greetingName: "Salut {name}",
