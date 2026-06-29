@@ -295,8 +295,11 @@ Append-only. Newest at the bottom. Follow the global CLAUDE.md format.
   client `lib/multipartUpload.ts` + `lib/uploadStore.ts` (IndexedDB) +
   `lib/useUploadWakeLock.ts`, `EventPage` routing >25MB files here with per-card
   progress (`MomentCard` `_progress`) + `findResumableUpload` resume, `i18n` (512MB
-  hint + `uploadPaused` en+fr). The old single-PUT `directUploadMoment` /
-  `/presign` / `/register` path is superseded but left in place (inert, still tested).
+  hint + `uploadPaused` en+fr). The superseded single-PUT path (`directUploadMoment` +
+  `putToR2` in `lib/api.ts`, worker `/presign` + `/register` routes, `presignPutUrl`
+  in `presign.ts`) has since been removed; `presign.ts` now keeps only the constants
+  + validation gates (`isR2Configured`, `registrationKeyBelongsToEvent`,
+  `MAX_DIRECT_UPLOAD_BYTES`, `PRESIGN_EXPIRY_SECONDS`) the multipart flow reuses.
 - **Prereq (infra, NOT code):** the `moments-media` bucket CORS MUST
   `ExposeHeaders: ["ETag"]` — the browser reads each part's ETag from the UploadPart
   PUT response to send to Complete; the old path never needed it (it `head()`-validated).

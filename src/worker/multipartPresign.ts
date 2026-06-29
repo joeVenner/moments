@@ -98,8 +98,8 @@ export async function createMultipartUpload(
 /**
  * Step 2: presign a single UploadPart PUT URL. The browser PUTs the chunk
  * straight to R2 and reads the ETag from the response header. Query-signed
- * (signQuery) exactly like `presignPutUrl`, with partNumber + uploadId folded
- * into the canonical query string so the signature binds them.
+ * (signQuery) with partNumber + uploadId folded into the canonical query
+ * string so the signature binds them.
  */
 export async function presignPartUrl(
   env: Env,
