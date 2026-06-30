@@ -96,6 +96,7 @@ const dict: Record<Lang, Record<string, Entry>> = {
     uploading: "Uploading…",
     shareMoment: (v) => (Number(v.count) > 1 ? "Share {count} Moments" : "Share Moment"),
     uploadPaused: "Upload paused — re-select “{name}” to resume from where it stopped",
+    optimizeVideos: "Optimize videos before upload (slower, uses less data) — experimental",
 
     eventNotFound: "Event not found.",
     greetingName: "Hi {name}",
@@ -249,6 +250,7 @@ const dict: Record<Lang, Record<string, Entry>> = {
     shareMoment: (v) =>
       Number(v.count) > 1 ? "Partager {count} souvenirs" : "Partager ce souvenir",
     uploadPaused: "Envoi en pause — re-sélectionnez « {name} » pour reprendre",
+    optimizeVideos: "Optimiser les vidéos avant l'envoi (plus lent, moins de données) — expérimental",
 
     eventNotFound: "Événement introuvable.",
     greetingName: "Salut {name}",

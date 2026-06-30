@@ -1,5 +1,12 @@
 import { createFile, DataStream, Endianness, type Movie, type Box } from "mp4box";
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
+import { shouldOptimize } from "./optimizeDetect";
+
+// Re-exported so existing tests keep importing from this module. The app imports
+// the lightweight `shouldOptimize`/`canTranscodeVideo` from optimizeDetect.ts and
+// dynamic-imports THIS module only when actually transcoding — keeping mp4box +
+// mp4-muxer out of the default bundle.
+export { canTranscodeVideo, shouldOptimize, _resetTranscodeCacheForTests } from "./optimizeDetect";
 
 /**
  * Opt-in client-side video transcode (the "optimize before upload" toggle).
@@ -34,7 +41,6 @@ import { Muxer, ArrayBufferTarget } from "mp4-muxer";
 
 const MAX_DIMENSION = 1280;
 const TARGET_OUTPUT_BYTES = 40 * 1024 * 1024; // aim for ~40MB regardless of source size
-const MIN_SIZE_TO_OPTIMIZE = 25 * 1024 * 1024; // only bother for large files
 const MIN_BITRATE = 800_000; // 0.8 Mbps floor — below this quality collapses
 const MAX_BITRATE = 4_000_000; // 4 Mbps ceiling
 const TARGET_FPS = 30;
@@ -43,34 +49,6 @@ const EXTRACTION_TIMEOUT_MS = 60_000;
 // Constrained Baseline 3.1 — no B-frames (DTS==CTS), supports 720p30, widest
 // device support incl. iOS 16.4+. isConfigSupported is checked at runtime.
 const H264_CODEC = "avc1.42E01F";
-
-let transcodeSupportCache: boolean | null = null;
-
-/** Feature-detect WebCodecs encode/decode + the muxer deps. Cached. */
-export function canTranscodeVideo(): boolean {
-  if (transcodeSupportCache !== null) return transcodeSupportCache;
-  transcodeSupportCache =
-    typeof VideoDecoder !== "undefined" &&
-    typeof VideoEncoder !== "undefined" &&
-    typeof EncodedVideoChunk !== "undefined" &&
-    typeof EncodedAudioChunk !== "undefined" &&
-    typeof OffscreenCanvas !== "undefined";
-  return transcodeSupportCache;
-}
-
-/** Test-only: clear the feature-detection cache so stubbed globals take effect. */
-export function _resetTranscodeCacheForTests(): void {
-  transcodeSupportCache = null;
-}
-
-/** Pure: should we even attempt to optimize this file? */
-export function shouldOptimize(file: File): boolean {
-  return (
-    canTranscodeVideo() &&
-    file.type.startsWith("video/") &&
-    file.size >= MIN_SIZE_TO_OPTIMIZE
-  );
-}
 
 const even = (n: number) => (n % 2 === 0 ? n : n - 1); // H.264 needs even w/h
 

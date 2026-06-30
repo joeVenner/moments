@@ -1,12 +1,15 @@
 import { useRef, useState } from "react";
 import { compressImage } from "../lib/compressImage";
+import { canTranscodeVideo } from "../lib/optimizeDetect";
 import { useI18n } from "../lib/i18n";
+
+const OPTIMIZE_KEY = "moments:optimize_uploads";
 
 export function UploadDropzone({
   onUpload,
   uploading,
 }: {
-  onUpload: (files: File[], caption: string) => Promise<void>;
+  onUpload: (files: File[], caption: string, opts?: { optimize?: boolean }) => Promise<void>;
   uploading: boolean;
 }) {
   const { t } = useI18n();
@@ -14,7 +17,22 @@ export function UploadDropzone({
   const [caption, setCaption] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
+  // Opt-in video transcode (default off). Needs WebCodecs, so the checkbox is
+  // hidden entirely where it can't run — no dead control. See lib/optimizeVideo.ts.
+  const supportsOptimize = canTranscodeVideo();
+  const [optimize, setOptimize] = useState(
+    () => (typeof localStorage !== "undefined" && localStorage.getItem(OPTIMIZE_KEY) === "1") || false
+  );
   const inputRef = useRef<HTMLInputElement>(null);
+
+  function toggleOptimize(next: boolean) {
+    setOptimize(next);
+    try {
+      localStorage.setItem(OPTIMIZE_KEY, next ? "1" : "0");
+    } catch {
+      // Private mode etc. — the toggle still works for this session.
+    }
+  }
 
   function removeFile(index: number) {
     setFiles((prev) => prev.filter((_, i) => i !== index));
@@ -27,7 +45,7 @@ export function UploadDropzone({
     const optimized = await Promise.all(files.map((f) => compressImage(f))).finally(() =>
       setOptimizing(false)
     );
-    await onUpload(optimized, caption);
+    await onUpload(optimized, caption, { optimize });
     setFiles([]);
     setCaption("");
     if (inputRef.current) inputRef.current.value = "";
@@ -96,6 +114,19 @@ export function UploadDropzone({
         placeholder={t("addCaptionPlaceholder")}
         className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-alt)] px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
       />
+
+      {supportsOptimize && (
+        <label className="flex items-center gap-2 font-mono text-xs text-[var(--color-text-muted)]">
+          <input
+            type="checkbox"
+            checked={optimize}
+            onChange={(e) => toggleOptimize(e.target.checked)}
+            disabled={busy}
+            className="h-3.5 w-3.5 accent-[var(--color-accent)]"
+          />
+          {t("optimizeVideos")}
+        </label>
+      )}
 
       <button
         type="submit"

@@ -14,6 +14,7 @@ import {
 } from "../lib/multipartUpload";
 import { findResumableUpload } from "../lib/uploadStore";
 import { useUploadWakeLock } from "../lib/useUploadWakeLock";
+import { shouldOptimize } from "../lib/optimizeDetect";
 import { getNickname, setNickname as saveNickname } from "../lib/nickname";
 import type { EventData } from "../lib/types";
 import { NicknameGate } from "../components/NicknameGate";
@@ -121,7 +122,7 @@ export default function EventPage() {
     [slug, total, nickname]
   );
 
-  async function handleUpload(files: File[], caption: string) {
+  async function handleUpload(files: File[], caption: string, opts?: { optimize?: boolean }) {
     if (!slug || !nickname || !event) return;
     const pointsBefore = myPoints;
     setUploadError(null);
@@ -174,6 +175,29 @@ export default function EventPage() {
 
     const results = await Promise.allSettled(
       pending.map(async ({ file, tempId }) => {
+        // Opt-in transcode (default off): shrink a large video before upload so
+        // it uses less data/time. The progress bar's first half tracks the
+        // transcode, the second half tracks the upload. Failure → upload the
+        // original (optimizeVideo returns null), so a buggy transcode never
+        // loses a video.
+        let effectiveFile = file;
+        let uploadBase = 0; // 0 = no optimize phase; 0.5 = optimize filled 0..0.5
+        if (opts?.optimize && shouldOptimize(file)) {
+          // Dynamic import keeps mp4box + mp4-muxer (~56KB gzip) out of the
+          // default bundle — only fetched when the opt-in toggle is actually
+          // used on a large video.
+          const { optimizeVideo } = await import("../lib/optimizeVideo");
+          const optimized = await optimizeVideo(file, (frac) => {
+            setMoments((prev) =>
+              prev.map((m) => (m.id === tempId ? { ...m, _progress: frac * 0.5 } : m))
+            );
+          });
+          if (optimized) {
+            effectiveFile = optimized;
+            uploadBase = 0.5;
+          }
+        }
+
         // Files past the native cap go through the resumable chunked path: the
         // file is split into 8 MiB parts PUT straight to R2, so an interruption
         // only costs one part and resumes from R2's ListParts on return. Small
@@ -181,24 +205,26 @@ export default function EventPage() {
         // an in-progress upload (paused earlier / re-picked after a reload),
         // resume it instead of starting over.
         let result;
-        if (file.size > NATIVE_UPLOAD_MAX_BYTES) {
-          const resume = await findResumableUpload(slug, file);
+        if (effectiveFile.size > NATIVE_UPLOAD_MAX_BYTES) {
+          const resume = await findResumableUpload(slug, effectiveFile);
           result = await resumableUploadMoment({
             slug,
-            file,
+            file: effectiveFile,
             caption,
             uploaderName: nickname,
             resume: resume ?? undefined,
             onProgress: (loaded, total) => {
-              const frac = total > 0 ? loaded / total : 0;
+              const up = total > 0 ? loaded / total : 0;
               setMoments((prev) =>
-                prev.map((m) => (m.id === tempId ? { ...m, _progress: frac } : m))
+                prev.map((m) =>
+                  m.id === tempId ? { ...m, _progress: uploadBase + up * (1 - uploadBase) } : m
+                )
               );
             },
           });
         } else {
           const formData = new FormData();
-          formData.append("file", file);
+          formData.append("file", effectiveFile);
           formData.append("uploader_name", nickname);
           if (caption) formData.append("caption", caption);
           result = await uploadMoment(slug, formData);
