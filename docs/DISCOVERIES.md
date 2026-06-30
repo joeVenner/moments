@@ -309,3 +309,38 @@ Append-only. Newest at the bottom. Follow the global CLAUDE.md format.
 - **Reference:** commits pending (feat/interactive-landing-page). Verified by
   `tsc -b --noEmit`, `vitest` (47/47), `vite build`. Deploy + remote D1 migration
   `0004` + CORS update pending Yassir's OK.
+
+## [2026-06-30] Context Update — removed dead single-PUT path + opt-in WebCodecs transcode
+- **What changed (cleanup):** removed the now-superseded single-PUT large-upload path
+  (`directUploadMoment`+`putToR2` in `lib/api.ts`, worker `/presign`+`/register` routes,
+  `presignPutUrl` in `presign.ts`). `presign.ts` now keeps only the constants + validation
+  gates the multipart flow reuses. No user-facing change (EventPage already routed >25MB
+  to multipart). The presignPutUrl test suite was dropped (its coverage already lives in
+  `multipartPresign.test.ts` for `presignPartUrl`).
+- **What changed (transcode):** added an opt-in "Optimize videos before upload" toggle
+  (default OFF) that shrinks a large phone video before upload via WebCodecs — downscale
+  to ≤1280px + bitrate from a 40MB target — using `mp4box` (demux) + `mp4-muxer` (mux),
+  H.264 Constrained Baseline (no B-frames ⇒ DTS==CTS), AAC-LC remuxed on the original
+  timeline. New deps: `mp4box`, `mp4-muxer` (note: mp4-muxer@5.x is superseded by
+  Mediabunny, same author — kept for the stable documented API in v1).
+- **Why:** the resumable multipart path already makes 500MB uploads work, so the
+  transcode is a bandwidth/time optimization, not a correctness fix. It's gated OFF +
+  any transcode failure returns null (caller uploads the original), so a buggy transcode
+  can never lose a video. Bundle hygiene: lightweight detection
+  (`lib/optimizeDetect.ts`, no heavy deps) drives the toggle visibility; the heavy
+  `lib/optimizeVideo.ts` (mp4box+mp4-muxer, ~56KB gzip) is dynamic-imported only when the
+  toggle is used on a large video — default bundle stays ~400KB, the 220KB transcode
+  chunk is fetched on demand.
+- **Impact:** `lib/optimizeVideo.ts` (+`optimizeDetect.ts`), `optimizeVideo.test.ts`
+  (15 tests for the pure helpers), `components/UploadDropzone.tsx` (toggle),
+  `pages/EventPage.tsx` (optimize-then-upload with split progress bar), `lib/i18n.tsx`
+  (`optimizeVideos` en+fr), `lib/api.ts`/`worker/index.ts`/`worker/presign.ts`/
+  `presign.test.ts` (cleanup).
+- **⚠️ ON-DEVICE VALIDATION REQUIRED:** the muxed MP4 is NOT runtime-verified in the
+  dev sandbox (no real device/codec/file). The demux→re-encode→remux follows the
+  canonical mp4box+mp4-muxer+WebCodecs pattern, but A/V sync, the avcC description
+  serialization, and the AAC-LC AudioSpecificConfig must be confirmed on a real iPhone
+  with a real .mov before flipping default-on. The toggle ships OFF, so default users
+  are unaffected.
+- **Reference:** commits pending (feat/interactive-landing-page). Verified by
+  `tsc -b --noEmit`, `vitest` (59/59), `vite build`. Deploy pending Yassir's OK.

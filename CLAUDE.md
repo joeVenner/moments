@@ -79,6 +79,13 @@ light text), and do not flatten back to pure-black — flat near-black reads as 
     to IndexedDB, screen wake lock while foregrounded. An interruption costs one ~8 MiB part,
     not the whole file. Raising the 512 MB cap is now a one-config change (R2 allows 5 TB /
     10 000 parts); see `.agent/PLAN.md` P3.1.
+  - **Opt-in "Optimize videos before upload" toggle** (default OFF): shrinks a large video
+    before upload via WebCodecs (`lib/optimizeVideo.ts`, mp4box demux + mp4-muxer mux, H.264
+    Baseline + AAC-LC remux). Gated + failure-safe (returns the original on any error). The
+    heavy pipeline is **dynamic-imported** so the default bundle stays lean; only the light
+    `lib/optimizeDetect.ts` (canTranscodeVideo/shouldOptimize, no heavy deps) is bundled.
+    **Needs on-device validation before flipping default-on** — the muxed MP4 isn't
+    verified in the dev sandbox.
 - **R2 bucket CORS (load-bearing for multipart):** the browser must read each part's `ETag` from
   the UploadPart PUT response, so the `moments-media` bucket CORS MUST `ExposeHeaders: ["ETag"]`
   (the old single-PUT path never needed it — it `head()`-validated). Policy + apply command:
