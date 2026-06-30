@@ -19,6 +19,8 @@
     "aws4fetch": "^1.0.20",
     "canvas-confetti": "^1.9.4",
     "hono": "^4.12.27",
+    "mp4-muxer": "^5.2.2",
+    "mp4box": "^2.4.1",
     "qrcode": "^1.5.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
