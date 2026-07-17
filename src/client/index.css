@@ -1,0 +1,449 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", monospace;
+
+  /* Dark neutral "black-and-white" theme — layered charcoal surfaces with a
+     visibly stepped hierarchy (page → raised surface → hairline border) for
+     depth, white/grey text, single Claude-orange accent (modeled on the
+     OpenAI / Claude Code platform consoles). Deliberately NOT pure-black:
+     flat near-black read as "too dark". See project CLAUDE.md → "Design
+     System" for the law. */
+  --color-bg: #1a1a1a;
+  --color-bg-alt: #262626;
+  --color-border: #383838;
+  --color-text: #ededed;
+  --color-text-muted: #a1a1a1;
+  --color-accent: #d97757;
+  --color-accent-dark: #c15f3c;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+h1,
+h2 {
+  font-family: var(--font-display);
+}
+
+/* Event header backdrop when an event has no cover image: a faint accent glow
+   over the raised surface, replacing the old solid-orange block. Keeps a hint
+   of brand warmth without the garish saturated fill (per the "orange sparingly"
+   rule). The animated hero glow on the landing page is separate (PLAN P2.2). */
+/* Type-aware banner scenes (see lib/eventBanners.tsx). Each motif is driven by
+   a slow keyframe so a no-cover event still feels alive. All frozen under
+   prefers-reduced-motion at the bottom of this file. */
+@keyframes banner-drift {
+  0%,
+  100% {
+    transform: translate3d(-3%, -2%, 0);
+  }
+  50% {
+    transform: translate3d(3%, 2%, 0);
+  }
+}
+.animate-banner-drift {
+  animation: banner-drift 16s ease-in-out infinite;
+}
+
+@keyframes banner-rings {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 0.8;
+  }
+}
+.animate-banner-rings {
+  animation: banner-rings 9s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes banner-sparkle {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scale(0.6);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-banner-sparkle {
+  animation: banner-sparkle 2.6s ease-in-out infinite;
+}
+
+@keyframes banner-confetti {
+  0% {
+    transform: translateY(-10%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(120%);
+    opacity: 0;
+  }
+}
+.animate-banner-confetti {
+  animation: banner-confetti 5s ease-in infinite;
+}
+
+@keyframes banner-scan {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+.animate-banner-scan {
+  animation: banner-scan 7s ease-in-out infinite;
+}
+
+/* Bottom-up dark scrim so overlaid title/characters stay legible on any cover
+   image or banner scene. Sits above the media, below the text. */
+.banner-scrim {
+  background: linear-gradient(
+    to top,
+    var(--color-bg) 8%,
+    color-mix(in oklab, var(--color-bg) 72%, transparent) 45%,
+    transparent 100%
+  );
+}
+
+/* Hero mount: title block slides up + fades in once on page entry. */
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-hero-rise {
+  animation: hero-rise 520ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* Skeleton shimmer: a slow gradient sweep across the border token, replacing
+   the flat animate-pulse for a more "live" loading feel. */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -150% 0;
+  }
+  100% {
+    background-position: 250% 0;
+  }
+}
+.skeleton-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-border) 0%,
+    color-mix(in oklab, var(--color-border) 60%, var(--color-text) 8%) 50%,
+    var(--color-border) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+/* Shared one-time "pop-in" entrance — plays once on DOM mount because it's
+   applied unconditionally; React's keyed reconciliation decides when that
+   mount actually happens (see MomentCard / ParticipantStrip). */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-pop-in {
+  animation: pop-in 320ms ease-out;
+}
+
+/* Simple fade used for the QR code reveal and tab-switch crossfade. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Punchier mount animation for the avatar shuffle — deliberately more than a
+   subtle scale, so it's gated behind prefers-reduced-motion below. */
+@keyframes pop-punch {
+  0% {
+    opacity: 0;
+    transform: scale(0.7) rotate(-6deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.15) rotate(2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.animate-pop-punch {
+  animation: pop-punch 350ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pop-punch {
+    animation: none;
+  }
+}
+
+/* Hide the scrollbar on a horizontal swipe strip while keeping it scrollable
+   (the landing "moments" marquee, PLAN P1.3). Touch/trackpad/keyboard scroll
+   still work — this only removes the visual scrollbar chrome. */
+.no-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* old Edge */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* WebKit/Blink */
+}
+
+/* Animated hero backdrop (PLAN P2.2): a slow-drifting warm orange glow over the
+   dark page, à la the OpenAI / Vercel / Linear dark heroes. Pure CSS, sits
+   behind the hero content, frozen under reduced-motion. */
+@keyframes hero-glow-drift {
+  0% {
+    transform: translate3d(-6%, -4%, 0) scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translate3d(6%, 4%, 0) scale(1.15);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate3d(-6%, -4%, 0) scale(1);
+    opacity: 0.55;
+  }
+}
+.hero-glow {
+  background:
+    radial-gradient(
+      40% 50% at 50% 38%,
+      color-mix(in oklab, var(--color-accent) 40%, transparent),
+      transparent 70%
+    );
+  filter: blur(40px);
+  animation: hero-glow-drift 14s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+/* Mobile-safe interpretation of the React Bits dot field. The base is static;
+   the brighter layer follows a fine pointer through CSS variables. No render
+   loop runs, and coarse-pointer devices receive the static texture only. */
+.dot-field {
+  --dot-x: 50%;
+  --dot-y: 38%;
+  overflow: hidden;
+  opacity: 0.8;
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 70%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0%, black 70%, transparent 100%);
+}
+.dot-field__base,
+.dot-field__glow {
+  position: absolute;
+  inset: -24px;
+  background-image: radial-gradient(circle, rgba(237, 237, 237, 0.2) 1px, transparent 1.2px);
+  background-size: 18px 18px;
+}
+.dot-field__base {
+  opacity: 0.32;
+}
+.dot-field__glow {
+  opacity: 0.9;
+  background-image: radial-gradient(circle, rgba(229, 138, 103, 0.75) 1.2px, transparent 1.5px);
+  -webkit-mask-image: radial-gradient(170px circle at var(--dot-x) var(--dot-y), black, transparent);
+  mask-image: radial-gradient(170px circle at var(--dot-x) var(--dot-y), black, transparent);
+  transition: -webkit-mask-position 80ms linear;
+  transition: mask-position 80ms linear;
+}
+
+@media (pointer: coarse) {
+  .dot-field__glow {
+    -webkit-mask-image: radial-gradient(140px circle at 50% 32%, black, transparent);
+    mask-image: radial-gradient(140px circle at 50% 32%, black, transparent);
+  }
+}
+
+/* Gentle hero "float": a slow vertical bob + micro-zoom so the hero image feels
+   alive instead of a static pasted rectangle (PLAN P2.2). Lives on its own
+   wrapper so it never fights the parallax transform (outer) or the mount
+   transition (the img itself). */
+@keyframes hero-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-14px) scale(1.012);
+  }
+}
+.animate-hero-float {
+  animation: hero-float 8s ease-in-out infinite;
+}
+
+@keyframes contact-orbit {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(18px, -12px, 0) scale(1.08);
+  }
+}
+.contact-cta__orb {
+  position: absolute;
+  width: 15rem;
+  height: 15rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-accent) 30%, transparent);
+  filter: blur(55px);
+  animation: contact-orbit 12s ease-in-out infinite;
+}
+.contact-cta__orb--one {
+  top: -8rem;
+  left: -4rem;
+}
+.contact-cta__orb--two {
+  right: -5rem;
+  bottom: -9rem;
+  animation-delay: -6s;
+}
+
+/* Continuous "live feed" marquee (PLAN P1.3): the track holds TWO identical
+   tile groups and slides left by exactly one group width (-50% of the track),
+   so the loop is perfectly seamless. Each group is 3× the moments so one group
+   is wider than any realistic viewport — otherwise the -50% end would run past
+   the last tile into empty space on wide screens. Hover pauses; reduced-motion
+   stops it. Duration scales with the 3× content so per-tile speed stays gentle. */
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.animate-marquee {
+  animation: marquee-scroll 90s linear infinite;
+  width: max-content;
+}
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* Soft fade at both ends of the marquee so tiles melt in/out rather than
+   clipping hard against the page edges. */
+.marquee-mask {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 5%,
+    black 95%,
+    transparent
+  );
+  mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-glow,
+  .animate-hero-float,
+  .contact-cta__orb,
+  .animate-marquee,
+  .animate-banner-drift,
+  .animate-banner-rings,
+  .animate-banner-sparkle,
+  .animate-banner-confetti,
+  .animate-banner-scan,
+  .animate-hero-rise,
+  .skeleton-shimmer {
+    animation: none;
+  }
+}
+
+/* Printable QR flyer: hide everything on the page except the flyer card.
+   `visibility` (not `display`) is used because it lets a descendant
+   re-show itself even though intervening ancestors (the admin page chrome,
+   the QRPanel wrapper) have no special print styling of its own.
+
+   `print-color-adjust: exact` is set on the flyer + descendants so the Poster
+   accent band, the Dark-native charcoal surface, and the art backgrounds
+   actually print (browsers otherwise drop backgrounds). Each variant carries
+   `qr-flyer--<style>` and overrides the default white-paper background below.
+
+   The page is sized to A6 (105x148mm postcard) with zero margin, and the flyer
+   is stretched edge-to-edge (full-bleed): the visible styled card is a *child*
+   of `.qr-flyer` (the outer node is just the print-isolation wrapper), so the
+   child is forced to width:100% / min-height:100vh with its on-screen rounded
+   corners and border dropped — otherwise they'd leave white gaps at the page
+   edge. This makes the printed PDF an exact A6 card a print center can run as-is. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .qr-flyer,
+  .qr-flyer * {
+    visibility: visible;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .qr-flyer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    min-height: 100vh;
+    /* Default: white paper + dark ink (Editorial + Poster + Leaves — the Leaves
+       frame has a light center). The dark-surface variants (Dark + Celebration)
+       override this below to keep their charcoal background and light ink. */
+    color: #18181b;
+    background: #ffffff;
+  }
+  /* The actual styled card is a direct child of .qr-flyer — make it fill the
+     A6 page edge-to-edge and drop the on-screen rounded corners + border so
+     nothing leaves a white gap at the page edge. */
+  .qr-flyer > * {
+    width: 100% !important;
+    min-height: 100vh !important;
+    border-radius: 0 !important;
+    border: none !important;
+  }
+  .qr-flyer--dark,
+  .qr-flyer--celebration {
+    color: var(--color-text);
+    background: var(--color-bg);
+  }
+}
+
+@page {
+  size: 105mm 148mm;
+  margin: 0;
+}

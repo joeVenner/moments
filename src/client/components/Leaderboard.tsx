@@ -1,0 +1,216 @@
+import { useEffect, useRef, useState } from "react";
+import { useI18n, randomQuote } from "../lib/i18n";
+import { safeConfetti } from "../lib/motion";
+import emptyLeaderboard from "../assets/empty-leaderboard.png";
+import winnerTrophy from "../assets/winner-trophy.png";
+
+interface LeaderboardEntry {
+  uploader_name: string;
+  total_points: number;
+  moment_count: number;
+}
+
+const MEDALS = ["🥇", "🥈", "🥉"];
+
+export function Leaderboard({ slug }: { slug: string }) {
+  const { t, lang } = useI18n();
+  const [entries, setEntries] = useState<LeaderboardEntry[] | null>(null);
+  const [error, setError] = useState(false);
+  const [quote] = useState(() => randomQuote(lang));
+  const [podiumGrown, setPodiumGrown] = useState(false);
+  const confettiFiredRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setError(false);
+      try {
+        const res = await fetch(`/api/events/${slug}/leaderboard`);
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        const data: { leaderboard: LeaderboardEntry[] } = await res.json();
+        if (cancelled) return;
+        setEntries(data.leaderboard);
+
+        if (
+          !confettiFiredRef.current &&
+          data.leaderboard.length > 0 &&
+          data.leaderboard[0].total_points > 0
+        ) {
+          confettiFiredRef.current = true;
+          safeConfetti({
+            particleCount: 120,
+            spread: 70,
+            origin: { y: 0.6 },
+          });
+        }
+      } catch {
+        if (!cancelled) setError(true);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
+
+  useEffect(() => {
+    // Podium only exists in the DOM once entries have loaded, so wait for
+    // that before arming the rAF flip — otherwise the bars would already be
+    // "grown" by the time they first paint and the animation would no-op.
+    if (entries === null) return;
+    setPodiumGrown(false);
+    const id = requestAnimationFrame(() => setPodiumGrown(true));
+    return () => cancelAnimationFrame(id);
+  }, [entries]);
+
+  if (error) {
+    return (
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-6 text-center text-sm text-[var(--color-text-muted)]">
+        {t("serverUnreachable")}
+      </div>
+    );
+  }
+
+  if (entries === null) {
+    return (
+      <div className="space-y-3">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="h-16 animate-pulse rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-4"
+          >
+            <div className="h-3 w-1/3 rounded bg-[var(--color-border)]" />
+            <div className="mt-2 h-3 w-1/4 rounded bg-[var(--color-border)]" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (entries.length === 0) {
+    return (
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-6 text-center">
+        <img
+          src={emptyLeaderboard}
+          alt=""
+          className="mx-auto h-24 w-24"
+        />
+        <p className="mt-2 text-sm text-[var(--color-text-muted)]">{t("noLeaderboardYet")}</p>
+        <p className="mt-3 text-xs italic text-[var(--color-text-muted)]">{quote}</p>
+      </div>
+    );
+  }
+
+  // Top 3 podium slots only count people who've actually uploaded something.
+  // Zero-point joiners sink to the plain ranked list below, never onto the podium.
+  const podium = entries.filter((e) => e.moment_count > 0).slice(0, 3);
+  const podiumNames = new Set(podium.map((e) => e.uploader_name));
+  const rest = entries
+    .map((e, idx) => ({ ...e, rank: idx + 1 }))
+    .filter((e) => !podiumNames.has(e.uploader_name));
+
+  const winner = entries[0];
+  const showWinnerBanner = winner.total_points > 0;
+
+  // Podium order for display: 2nd, 1st, 3rd (classic podium silhouette).
+  const podiumDisplayOrder = [podium[1], podium[0], podium[2]];
+  const heightClass = ["h-20", "h-28", "h-16"]; // matches display order: 2nd, 1st, 3rd
+
+  return (
+    <div className="space-y-4">
+      <h2 className="font-serif text-lg text-[var(--color-text)]">{t("topPhotographers")}</h2>
+
+      {showWinnerBanner && (
+        <div
+          className="flex items-center justify-center gap-2 rounded-xl border p-3 text-center text-sm font-medium"
+          style={{
+            borderColor: "var(--color-accent)",
+            backgroundColor: "var(--color-bg-alt)",
+            color: "var(--color-accent-dark)",
+          }}
+        >
+          <img src={winnerTrophy} alt="" className="h-8 w-8 shrink-0" />
+          {t("winnerAnnouncement", { name: winner.uploader_name })}
+        </div>
+      )}
+
+      {podium.length > 0 && (
+        <div className="flex items-end justify-center gap-2 px-1">
+          {podiumDisplayOrder.map((entry, i) => {
+            if (!entry) return <div key={i} className="w-[100px]" />;
+            const isFirst = entry === podium[0];
+            return (
+              <div
+                key={entry.uploader_name}
+                className="flex w-[100px] flex-col items-center"
+              >
+                <span className="text-2xl leading-none">
+                  {MEDALS[podium.indexOf(entry)]}
+                </span>
+                <span
+                  className="mt-1 max-w-[80px] truncate text-center text-xs font-medium text-[var(--color-text)]"
+                  title={entry.uploader_name}
+                >
+                  {entry.uploader_name}
+                </span>
+                <span className="font-mono text-[11px] text-[var(--color-text-muted)]">
+                  {entry.total_points} {t("ptsLabel")}
+                </span>
+                <span className="font-mono text-[10px] text-[var(--color-text-muted)]">
+                  {t("momentsLabel", { count: entry.moment_count })}
+                </span>
+                <div
+                  className={`mt-2 flex w-full items-end justify-center overflow-hidden rounded-t-lg transition-all duration-700 ${
+                    podiumGrown ? heightClass[i] : "h-0"
+                  } ${isFirst ? "shadow-[0_0_12px_rgba(217,119,87,0.6)]" : ""}`}
+                  style={{
+                    backgroundColor: isFirst
+                      ? "var(--color-accent)"
+                      : "var(--color-bg-alt)",
+                    border: isFirst ? "2px solid var(--color-accent-dark)" : "1px solid #e2e8f0",
+                  }}
+                >
+                  <span
+                    className={`pb-1 font-mono text-xs font-bold ${
+                      isFirst ? "text-white" : "text-[var(--color-text-muted)]"
+                    }`}
+                  >
+                    #{entries.indexOf(entry) + 1}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="text-center text-xs italic text-[var(--color-text-muted)]">{quote}</p>
+
+      {rest.length > 0 && (
+        <div className="space-y-2">
+          {rest.map((entry) => (
+            <div
+              key={entry.uploader_name}
+              className="flex items-center justify-between rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-3"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="font-mono text-xs text-[var(--color-text-muted)]">#{entry.rank}</span>
+                <span className="max-w-[140px] truncate text-sm text-[var(--color-text)]">
+                  {entry.uploader_name}
+                </span>
+              </div>
+              <div className="flex shrink-0 items-center gap-2 font-mono text-xs text-[var(--color-text-muted)]">
+                <span>{t("momentsLabel", { count: entry.moment_count })}</span>
+                <span className="font-semibold text-[var(--color-text)]">
+                  {entry.total_points} {t("ptsLabel")}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
