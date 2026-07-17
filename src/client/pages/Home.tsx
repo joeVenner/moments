@@ -8,6 +8,7 @@ import cake from "../assets/moments/cake.jpg";
 import danceFloor from "../assets/moments/dance-floor.jpg";
 import goldenHour from "../assets/moments/golden-hour.jpg";
 import speeches from "../assets/moments/speeches.jpg";
+import { DotField } from "../components/DotField";
 
 const MOMENTS_COUNTER_TARGET = 12482;
 
@@ -32,15 +33,6 @@ const MARQUEE_TILES = [...SAMPLE_MOMENTS, ...SAMPLE_MOMENTS, ...SAMPLE_MOMENTS];
 
 // Crisp inline SVG feature icons (accent-colored, scalable) — replace the old
 // baked-white PNG icons that read as bright squares on the dark cards (P0.4).
-function TrophyIcon({ className = "h-9 w-9" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z" />
-      <path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3" />
-    </svg>
-  );
-}
-
 function CameraIcon({ className = "h-9 w-9" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -50,14 +42,76 @@ function CameraIcon({ className = "h-9 w-9" }: { className?: string }) {
   );
 }
 
-function ScanIcon({ className = "h-9 w-9" }: { className?: string }) {
+function SlideshowIcon({ className = "h-9 w-9" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" />
-      <path d="M7 12h10" />
+      <rect x="3" y="4" width="18" height="13" rx="2" />
+      <path d="m10 8 5 2.5-5 2.5V8ZM8 21h8M12 17v4" />
     </svg>
   );
 }
+
+function LockIcon({ className = "h-9 w-9" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="4" y="10" width="16" height="11" rx="2" />
+      <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3" />
+    </svg>
+  );
+}
+
+function UploadIcon({ className = "h-9 w-9" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" />
+      <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
+    </svg>
+  );
+}
+
+function HeartIcon({ className = "h-9 w-9" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M20.8 5.7a5.4 5.4 0 0 0-7.6 0L12 6.9l-1.2-1.2a5.4 5.4 0 1 0-7.6 7.6L12 22l8.8-8.7a5.4 5.4 0 0 0 0-7.6Z" />
+    </svg>
+  );
+}
+
+function DownloadIcon({ className = "h-9 w-9" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
+    </svg>
+  );
+}
+
+function AnalyticsIcon({ className = "h-9 w-9" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+    </svg>
+  );
+}
+
+function WhatsAppIcon({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.4-4.7A8.5 8.5 0 1 1 20.5 11.7Z" />
+      <path d="M8.2 7.7c.3 3.8 2.4 5.9 6.2 6.3l1.2-1.5-2.4-1.1-.9 1c-1.4-.6-2.4-1.6-3-3l1-.8-1.1-2.4-1 .5Z" />
+    </svg>
+  );
+}
+
+const WHATSAPP_URL =
+  "https://wa.me/212708080301?text=Bonjour%20Moments%2C%20j%27ai%20un%20%C3%A9v%C3%A9nement%20%C3%A0%20venir%20et%20je%20souhaite%20cr%C3%A9er%20mon%20espace.";
+
+const FAQ_ITEMS = [
+  ["faqWhatQuestion", "faqWhatAnswer"],
+  ["faqAppQuestion", "faqAppAnswer"],
+  ["faqPrivateQuestion", "faqPrivateAnswer"],
+  ["faqUploadQuestion", "faqUploadAnswer"],
+  ["faqDownloadQuestion", "faqDownloadAnswer"],
+] as const;
 
 function useCountUp(target: number, durationMs = 1400) {
   // Reduced motion → snap to the final value (no animated ramp).
@@ -248,6 +302,7 @@ export default function Home() {
       {/* Hero — asymmetric split (PLAN landing-wow): copy + join left, scattered
           real-moment polaroid pile right. Replaces the single centered AI image. */}
       <section className="relative overflow-hidden px-6 pt-20 pb-16 sm:pt-28 sm:pb-24">
+        <DotField className="absolute inset-0" />
         {/* Animated warm-orange glow backdrop (PLAN P2.2), frozen under reduced motion. */}
         <div aria-hidden className="hero-glow pointer-events-none absolute inset-0" />
 
@@ -275,6 +330,7 @@ export default function Home() {
               />
               <button
                 type="submit"
+                data-spark
                 disabled={!eventCode.trim()}
                 className="inline-flex items-center justify-center gap-1.5 rounded-full bg-[var(--color-accent)] px-4 py-2 font-mono text-sm font-medium text-white shadow-lg shadow-[var(--color-accent)]/20 transition hover:bg-[var(--color-accent-dark)] disabled:opacity-50"
               >
@@ -293,6 +349,16 @@ export default function Home() {
                 </svg>
               </button>
             </form>
+
+            <a
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 font-mono text-xs text-[var(--color-text-muted)] underline decoration-[var(--color-border)] underline-offset-4 transition hover:text-[var(--color-accent)]"
+            >
+              <WhatsAppIcon className="h-4 w-4" />
+              {t("contactUsShort")}
+            </a>
 
             {/* Live-count stat chip — big number over a two-line label with an
                 icon, so it reads as a graphic element instead of a plain text line. */}
@@ -354,31 +420,94 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Feature highlights */}
+      {/* Product feature showcase — capabilities available in production. */}
       <section className="px-6 pb-24">
-        <h2 className="mx-auto max-w-lg text-center text-2xl font-semibold text-[var(--color-text)] sm:text-3xl">
+        <div className="mx-auto max-w-3xl text-center">
+          <p className="font-mono text-xs uppercase tracking-[0.22em] text-[var(--color-accent)]">{t("featuresEyebrow")}</p>
+          <h2 className="mt-3 text-3xl font-semibold text-[var(--color-text)] sm:text-4xl">
           {t("featuresHeading")}
-        </h2>
+          </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-[var(--color-text-muted)]">{t("featuresIntro")}</p>
+        </div>
 
-        <div className="mx-auto mt-10 grid max-w-4xl gap-5 sm:grid-cols-3">
+        <div className="mx-auto mt-10 grid max-w-5xl gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <FeatureCard
-            icon={<TrophyIcon />}
-            title={t("featurePointsTitle")}
-            body={t("featurePointsBody")}
+            icon={<SlideshowIcon />}
+            title={t("featureSlideshowTitle")}
+            body={t("featureSlideshowBody")}
             delayMs={0}
           />
           <FeatureCard
-            icon={<CameraIcon />}
-            title={t("featureSharingTitle")}
-            body={t("featureSharingBody")}
-            delayMs={120}
+            icon={<LockIcon />}
+            title={t("featurePrivacyTitle")}
+            body={t("featurePrivacyBody")}
+            delayMs={80}
           />
           <FeatureCard
-            icon={<ScanIcon />}
-            title={t("featureScanTitle")}
-            body={t("featureScanBody")}
-            delayMs={240}
+            icon={<UploadIcon />}
+            title={t("featureResumableTitle")}
+            body={t("featureResumableBody")}
+            delayMs={160}
           />
+          <FeatureCard
+            icon={<HeartIcon />}
+            title={t("featureHighlightsTitle")}
+            body={t("featureHighlightsBody")}
+            delayMs={0}
+          />
+          <FeatureCard
+            icon={<DownloadIcon />}
+            title={t("featureExportTitle")}
+            body={t("featureExportBody")}
+            delayMs={80}
+          />
+          <FeatureCard
+            icon={<AnalyticsIcon />}
+            title={t("featureControlTitle")}
+            body={t("featureControlBody")}
+            delayMs={160}
+          />
+        </div>
+      </section>
+
+      <section className="px-6 pb-24">
+        <div className="mx-auto max-w-3xl">
+          <p className="text-center font-mono text-xs uppercase tracking-[0.22em] text-[var(--color-accent)]">{t("faqEyebrow")}</p>
+          <h2 className="mt-3 text-center text-3xl font-semibold text-[var(--color-text)] sm:text-4xl">{t("faqHeading")}</h2>
+          <p className="mx-auto mt-4 max-w-2xl text-center text-[var(--color-text-muted)]">{t("faqIntro")}</p>
+          <div className="mt-8 divide-y divide-[var(--color-border)] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-alt)]">
+            {FAQ_ITEMS.map(([question, answer]) => (
+              <details key={question} className="group px-5 py-4 open:bg-black/10 sm:px-6">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium text-[var(--color-text)]">
+                  {t(question)}
+                  <span aria-hidden className="text-xl text-[var(--color-accent)] transition-transform group-open:rotate-45">+</span>
+                </summary>
+                <p className="mt-3 max-w-2xl pr-8 text-sm leading-6 text-[var(--color-text-muted)]">{t(answer)}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-6 pb-24">
+        <div className="contact-cta relative mx-auto max-w-5xl overflow-hidden rounded-[2rem] border border-[var(--color-border)] bg-[var(--color-bg-alt)] px-6 py-12 text-center sm:px-12 sm:py-16">
+          <div aria-hidden className="contact-cta__orb contact-cta__orb--one" />
+          <div aria-hidden className="contact-cta__orb contact-cta__orb--two" />
+          <div className="relative z-10 mx-auto max-w-2xl">
+            <p className="font-mono text-xs uppercase tracking-[0.22em] text-[var(--color-accent)]">{t("contactEyebrow")}</p>
+            <h2 className="mt-3 text-3xl font-semibold text-[var(--color-text)] sm:text-4xl">{t("contactTitle")}</h2>
+            <p className="mx-auto mt-4 max-w-xl text-[var(--color-text-muted)]">{t("contactBody")}</p>
+            <a
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-spark
+              className="mt-7 inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 font-mono text-sm font-semibold text-[#07150b] shadow-lg shadow-[#25D366]/15 transition hover:-translate-y-0.5 hover:bg-[#31e675]"
+            >
+              <WhatsAppIcon />
+              {t("contactWhatsApp")}
+            </a>
+          </div>
         </div>
       </section>
     </div>

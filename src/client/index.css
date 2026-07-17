@@ -256,6 +256,43 @@ h2 {
   will-change: transform, opacity;
 }
 
+/* Mobile-safe interpretation of the React Bits dot field. The base is static;
+   the brighter layer follows a fine pointer through CSS variables. No render
+   loop runs, and coarse-pointer devices receive the static texture only. */
+.dot-field {
+  --dot-x: 50%;
+  --dot-y: 38%;
+  overflow: hidden;
+  opacity: 0.8;
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 70%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0%, black 70%, transparent 100%);
+}
+.dot-field__base,
+.dot-field__glow {
+  position: absolute;
+  inset: -24px;
+  background-image: radial-gradient(circle, rgba(237, 237, 237, 0.2) 1px, transparent 1.2px);
+  background-size: 18px 18px;
+}
+.dot-field__base {
+  opacity: 0.32;
+}
+.dot-field__glow {
+  opacity: 0.9;
+  background-image: radial-gradient(circle, rgba(229, 138, 103, 0.75) 1.2px, transparent 1.5px);
+  -webkit-mask-image: radial-gradient(170px circle at var(--dot-x) var(--dot-y), black, transparent);
+  mask-image: radial-gradient(170px circle at var(--dot-x) var(--dot-y), black, transparent);
+  transition: -webkit-mask-position 80ms linear;
+  transition: mask-position 80ms linear;
+}
+
+@media (pointer: coarse) {
+  .dot-field__glow {
+    -webkit-mask-image: radial-gradient(140px circle at 50% 32%, black, transparent);
+    mask-image: radial-gradient(140px circle at 50% 32%, black, transparent);
+  }
+}
+
 /* Gentle hero "float": a slow vertical bob + micro-zoom so the hero image feels
    alive instead of a static pasted rectangle (PLAN P2.2). Lives on its own
    wrapper so it never fights the parallax transform (outer) or the mount
@@ -271,6 +308,34 @@ h2 {
 }
 .animate-hero-float {
   animation: hero-float 8s ease-in-out infinite;
+}
+
+@keyframes contact-orbit {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(18px, -12px, 0) scale(1.08);
+  }
+}
+.contact-cta__orb {
+  position: absolute;
+  width: 15rem;
+  height: 15rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-accent) 30%, transparent);
+  filter: blur(55px);
+  animation: contact-orbit 12s ease-in-out infinite;
+}
+.contact-cta__orb--one {
+  top: -8rem;
+  left: -4rem;
+}
+.contact-cta__orb--two {
+  right: -5rem;
+  bottom: -9rem;
+  animation-delay: -6s;
 }
 
 /* Continuous "live feed" marquee (PLAN P1.3): the track holds TWO identical
@@ -311,6 +376,7 @@ h2 {
 @media (prefers-reduced-motion: reduce) {
   .hero-glow,
   .animate-hero-float,
+  .contact-cta__orb,
   .animate-marquee,
   .animate-banner-drift,
   .animate-banner-rings,
