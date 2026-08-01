@@ -27,11 +27,15 @@ import { grantEventAccess, hasEventAccess, hashEventPin, randomAccessToken } fro
 
 const app = new Hono<{ Bindings: Env }>();
 
-// The document (index.html, /admin, etc.) is served by the ASSETS binding and
-// never reaches this app — its security headers come from public/_headers.
-// This covers only what run_worker_first routes here: /api/* and /media/*.
-// CSP is left unset here (it's an HTML-document concern, handled by _headers).
-app.use(secureHeaders({ contentSecurityPolicy: undefined }));
+// Document routes (/, /admin, /e/*) are proxied through this app too (for the
+// www redirect and X-Robots-Tag), but they still forward to the ASSETS
+// binding, whose response already carries public/_headers' security headers
+// (CSP included). Scoping secureHeaders() to /api/* and /media/* only keeps
+// it from clobbering those _headers values with its own defaults — and from
+// throwing on "/", whose handler returns the ASSETS response's immutable
+// Headers object directly (secureHeaders mutates c.res.headers in place).
+app.use("/api/*", secureHeaders({ contentSecurityPolicy: undefined }));
+app.use("/media/*", secureHeaders({ contentSecurityPolicy: undefined }));
 
 const NO_INDEX = "noindex, nofollow, noarchive, nosnippet";
 
