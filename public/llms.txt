@@ -1,0 +1,23 @@
+# Moments
+
+> Moments is a QR-based event photo and video sharing platform for weddings, parties, graduations, launches, conferences, and private gatherings.
+
+Canonical website: https://moments-hq.com/
+Contact: https://wa.me/212708080301
+
+## What Moments does
+
+- Guests scan an event QR code and upload photos or videos from a browser; no app or account is required.
+- Hosts can run a live slideshow that refreshes as guests share new moments.
+- Events can be public or protected with a PIN and private invitation link.
+- Large uploads are queued, retried, and resumed after connectivity interruptions.
+- Guests can react to moments and view crowd-selected highlights.
+- Hosts can moderate content, review event analytics, set retention, and export complete or selected albums as ZIP files.
+
+## Privacy and indexing
+
+Individual event galleries, uploaded media, APIs, and the administration area are not intended for search indexing. Public product information is available on the canonical homepage.
+
+## Languages
+
+The application is available in English and French.

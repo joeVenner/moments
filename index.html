@@ -3,18 +3,127 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Moments</title>
+    <title>Moments | Event Photo Sharing &amp; Live Slideshow</title>
+    <meta
+      name="description"
+      content="Collect event photos and videos with one QR code. Run a live slideshow, protect private galleries, resume large uploads, and download the full album."
+    />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="author" content="Moments" />
+    <meta name="theme-color" content="#1a1a1a" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="canonical" href="https://moments-hq.com/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Moments" />
+    <meta property="og:title" content="Moments | Event Photo Sharing &amp; Live Slideshow" />
+    <meta property="og:description" content="One QR code for event photos, videos, private galleries, live slideshows, and resilient uploads." />
+    <meta property="og:url" content="https://moments-hq.com/" />
+    <meta property="og:image" content="https://moments-hq.com/moments-social.webp" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Moments event gallery with private access, live slideshow, and completed uploads" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="fr_FR" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Moments | Event Photo Sharing &amp; Live Slideshow" />
+    <meta name="twitter:description" content="Collect every event photo and video through one QR code—without asking guests to install an app." />
+    <meta name="twitter:image" content="https://moments-hq.com/moments-social.webp" />
+    <meta name="twitter:image:alt" content="Moments live event gallery" />
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="alternate icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap"
     />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://moments-hq.com/#organization",
+            "name": "Moments",
+            "url": "https://moments-hq.com/",
+            "logo": "https://moments-hq.com/favicon.png",
+            "contactPoint": {
+              "@type": "ContactPoint",
+              "telephone": "+212708080301",
+              "contactType": "sales",
+              "availableLanguage": ["English", "French"]
+            }
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://moments-hq.com/#website",
+            "url": "https://moments-hq.com/",
+            "name": "Moments",
+            "description": "QR-based event photo and video sharing with private galleries and live slideshows.",
+            "publisher": { "@id": "https://moments-hq.com/#organization" },
+            "inLanguage": ["en", "fr"]
+          },
+          {
+            "@type": "WebApplication",
+            "@id": "https://moments-hq.com/#application",
+            "name": "Moments",
+            "url": "https://moments-hq.com/",
+            "applicationCategory": "MultimediaApplication",
+            "operatingSystem": "Any",
+            "browserRequirements": "Requires a modern web browser",
+            "description": "An event photo-sharing web app where guests scan a QR code to upload photos and videos, join a live slideshow, and save their favorite moments.",
+            "featureList": [
+              "QR code event access",
+              "Live event slideshow",
+              "Public and PIN-protected private galleries",
+              "Resumable large photo and video uploads",
+              "Guest reactions and highlights",
+              "Album ZIP export",
+              "Event moderation and analytics"
+            ],
+            "publisher": { "@id": "https://moments-hq.com/#organization" }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Crawlable first response. React replaces this with the interactive
+         version, which presents the same claims and capabilities. -->
+    <div id="root">
+      <main style="max-width: 960px; margin: 0 auto; padding: 72px 24px; font-family: Inter, system-ui, sans-serif; color: #ededed; background: #1a1a1a">
+        <header>
+          <p style="color: #d97757; letter-spacing: .12em; text-transform: uppercase">Moments</p>
+          <h1>Event photo sharing, live the instant it happens</h1>
+          <p>Moments turns one QR code into a shared event gallery. Guests upload photos and videos from their browser—no app, account, or registration required.</p>
+        </header>
+        <section aria-labelledby="seo-features">
+          <h2 id="seo-features">Everything your event gallery needs</h2>
+          <ul>
+            <li><strong>Live slideshow:</strong> show new guest photos and videos on any screen as they arrive.</li>
+            <li><strong>Public or private:</strong> use an open gallery or protect the event with a PIN and invitation link.</li>
+            <li><strong>Reliable large uploads:</strong> interrupted uploads are queued, retried, and resumed when the connection returns.</li>
+            <li><strong>Highlights and reactions:</strong> let guests favorite the best moments.</li>
+            <li><strong>Album export:</strong> download the complete gallery or a selected set as a ZIP file.</li>
+            <li><strong>Host controls:</strong> moderate content, review analytics, and manage event retention.</li>
+          </ul>
+        </section>
+        <section aria-labelledby="seo-how">
+          <h2 id="seo-how">How Moments works</h2>
+          <ol>
+            <li>Create an event and share its QR code.</li>
+            <li>Guests scan, choose a name, and upload from their phones.</li>
+            <li>Enjoy the live gallery, then export the memories after the event.</li>
+          </ol>
+        </section>
+        <p><a href="https://wa.me/212708080301" style="color: #d97757">Contact Moments on WhatsApp to create your event.</a></p>
+      </main>
+    </div>
     <script type="module" src="/src/client/main.tsx"></script>
   </body>
 </html>

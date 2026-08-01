@@ -20,6 +20,11 @@ export interface Env {
   R2_SECRET_ACCESS_KEY?: string;
   R2_S3_ENDPOINT?: string;
   R2_BUCKET_NAME?: string;
+  // Optional Cloudflare Stream direct-creator upload configuration. Account ID
+  // and customer code are non-secret; the token must be a Worker secret.
+  STREAM_ACCOUNT_ID?: string;
+  STREAM_API_TOKEN?: string;
+  STREAM_CUSTOMER_CODE?: string;
 }
 
 export interface EventRow {
@@ -31,6 +36,13 @@ export interface EventRow {
   description: string | null;
   cover_image_url: string | null;
   created_at: string;
+  starts_at: string | null;
+  expires_at: string | null;
+  archived_at: string | null;
+  access_mode: "public" | "private";
+  access_pin_hash: string | null;
+  access_pin_salt: string | null;
+  invite_token: string | null;
 }
 
 export interface MomentRow {
@@ -43,6 +55,9 @@ export interface MomentRow {
   created_at: string;
   size_bytes: number | null;
   mime_type: string | null;
+  moderation_status: "approved" | "hidden";
+  reaction_count?: number;
+  reacted?: number;
 }
 
 export interface ParticipantRow {

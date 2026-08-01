@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { MomentData } from "../lib/types";
+import { toggleMomentReaction } from "../lib/api";
 
 const VIDEO_EXT = /\.(mp4|webm|mov|m4v)$/i;
 
@@ -7,6 +8,10 @@ function isVideoMoment(moment: PendingMoment): boolean {
   const mime = moment.mime_type ?? moment._mimeType;
   if (mime) return mime.startsWith("video/");
   return VIDEO_EXT.test(moment.media_url);
+}
+
+function isStreamMoment(moment: PendingMoment): boolean {
+  return moment.media_url.includes(".cloudflarestream.com/") && moment.media_url.includes("/iframe");
 }
 
 /** "12 MB" / "1.4 GB" — null when the size was never recorded (older uploads). */
@@ -25,10 +30,20 @@ export interface PendingMoment extends MomentData {
   _progress?: number;
 }
 
-export function MomentCard({ moment, index = 0 }: { moment: PendingMoment; index?: number }) {
+export function MomentCard({ moment, index = 0, slug }: { moment: PendingMoment; index?: number; slug?: string }) {
   const [activated, setActivated] = useState(false);
+  const [reactionCount, setReactionCount] = useState(moment.reaction_count ?? 0);
+  const [reacted, setReacted] = useState(Boolean(moment.reacted));
+  const [reacting, setReacting] = useState(false);
   const video = isVideoMoment(moment);
+  const stream = isStreamMoment(moment);
   const sizeLabel = formatSize(moment.size_bytes);
+  const pendingPercent = Math.round((moment._progress ?? 0) * 100);
+  const pendingPercentLabel = (moment._progress ?? 0) > 0 && pendingPercent === 0 ? "<1%" : `${pendingPercent}%`;
+  useEffect(() => {
+    setReactionCount(moment.reaction_count ?? 0);
+    setReacted(Boolean(moment.reacted));
+  }, [moment.id, moment.reaction_count, moment.reacted]);
   // Stagger the pop-in so the grid fills in like a cascade rather than all at
   // once. Cap the delay so a long feed doesn't make late items lag on scroll.
   const delay = `${Math.min(index, 8) * 40}ms`;
@@ -53,6 +68,14 @@ export function MomentCard({ moment, index = 0 }: { moment: PendingMoment; index
           aria-label="Play video"
           className="group relative block aspect-square w-full bg-[var(--color-bg)]"
         >
+          {stream && (
+            <img
+              src={moment.media_url.replace("/iframe", "/thumbnails/thumbnail.jpg?height=480&fit=crop")}
+              alt=""
+              loading="lazy"
+              className="absolute inset-0 h-full w-full object-cover opacity-70"
+            />
+          )}
           {/* Subtle diagonal scan-lines so the placeholder reads as "video, tap to play". */}
           <div
             className="absolute inset-0 opacity-[0.08]"
@@ -74,6 +97,14 @@ export function MomentCard({ moment, index = 0 }: { moment: PendingMoment; index
             </span>
           )}
         </button>
+      ) : stream ? (
+        <iframe
+          src={`${moment.media_url}?autoplay=true`}
+          title={moment.caption ?? `Video by ${moment.uploader_name}`}
+          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+          allowFullScreen
+          className="aspect-square w-full border-0 bg-black"
+        />
       ) : video ? (
         <video
           src={moment.media_url}
@@ -97,12 +128,12 @@ export function MomentCard({ moment, index = 0 }: { moment: PendingMoment; index
             // bar across the bottom of the card, plus the percentage.
             <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-1 p-2">
               <span className="font-mono text-[10px] text-white">
-                {Math.round(moment._progress * 100)}%
+                {pendingPercentLabel}
               </span>
               <div className="h-1 w-full overflow-hidden rounded-full bg-white/20">
                 <div
                   className="h-full rounded-full bg-[var(--color-accent)] transition-[width] duration-150 ease-out"
-                  style={{ width: `${Math.round(moment._progress * 100)}%` }}
+                  style={{ width: `${Math.max(pendingPercent, moment._progress > 0 ? 1 : 0)}%` }}
                 />
               </div>
             </div>
@@ -112,9 +143,32 @@ export function MomentCard({ moment, index = 0 }: { moment: PendingMoment; index
         </div>
       )}
       <div className="p-3">
-        <p className="font-mono text-xs font-medium text-[var(--color-accent-dark)]">
-          {moment.uploader_name}
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="min-w-0 truncate font-mono text-xs font-medium text-[var(--color-accent-dark)]">
+            {moment.uploader_name}
+          </p>
+          {slug && !moment._pending && (
+            <button
+              type="button"
+              disabled={reacting}
+              aria-label={reacted ? "Remove from favorites" : "Add to favorites"}
+              aria-pressed={reacted}
+              onClick={() => {
+                setReacting(true);
+                void toggleMomentReaction(slug, moment.id)
+                  .then((result) => {
+                    setReacted(result.reacted);
+                    setReactionCount(result.reaction_count);
+                  })
+                  .finally(() => setReacting(false));
+              }}
+              className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-1 font-mono text-[10px] transition ${reacted ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]" : "text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"}`}
+            >
+              <span aria-hidden>{reacted ? "♥" : "♡"}</span>
+              {reactionCount}
+            </button>
+          )}
+        </div>
         {moment.caption && <p className="mt-1 text-sm text-[var(--color-text)]">{moment.caption}</p>}
       </div>
     </div>

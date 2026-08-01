@@ -1,0 +1,35 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /media/
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /api/
+Disallow: /media/
+
+User-agent: GPTBot
+Allow: /
+Disallow: /admin
+Disallow: /api/
+Disallow: /media/
+Disallow: /e/
+
+User-agent: Claude-SearchBot
+Allow: /
+Disallow: /api/
+Disallow: /media/
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /admin
+Disallow: /api/
+Disallow: /media/
+Disallow: /e/
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /api/
+Disallow: /media/
+
+Sitemap: https://moments-hq.com/sitemap.xml

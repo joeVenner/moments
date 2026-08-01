@@ -7,6 +7,11 @@ export interface EventData {
   description: string | null;
   cover_image_url: string | null;
   created_at: string;
+  starts_at?: string | null;
+  expires_at?: string | null;
+  archived_at?: string | null;
+  access_mode?: "public" | "private";
+  invite_token?: string | null;
 }
 
 export interface MomentData {
@@ -19,4 +24,7 @@ export interface MomentData {
   created_at: string;
   size_bytes: number | null;
   mime_type: string | null;
+  moderation_status?: "approved" | "hidden";
+  reaction_count?: number;
+  reacted?: number | boolean;
 }

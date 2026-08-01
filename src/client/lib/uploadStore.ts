@@ -6,22 +6,35 @@
  * resume with zero server round-trips, and lets a cold reload re-match a file
  * the user re-picks to its in-progress upload (skip already-PUT parts).
  *
- * We deliberately do NOT persist the File blob here: a 500 MB IDB write on init
- * is slow and quota-fragile. The File lives in an in-memory Map for the session
- * (multipartUpload.ts); on a cold reload the user re-selects the file and we
- * match it back to its upload by {name, size, lastModified}.
+ * Upload metadata lives in IndexedDB. The file bytes live in the Origin Private
+ * File System (OPFS), which is designed for large local files and is available
+ * to both the page and its service worker. Keeping the bytes makes a cold-start
+ * resume possible without asking the guest to re-select the file.
  */
 
 const DB_NAME = "moments-uploads";
 const STORE = "uploads";
 const DB_VERSION = 1;
+const FILE_DIR = "pending-upload-files";
 
-export type UploadStatus = "uploading" | "paused" | "completed" | "failed";
+export type UploadStatus = "queued" | "uploading" | "paused" | "retrying" | "completed" | "failed";
+
+export const ACTIVE_UPLOAD_STATUSES: ReadonlySet<UploadStatus> = new Set([
+  "queued",
+  "uploading",
+  "paused",
+  "retrying",
+]);
+
+const UPLOAD_CHANGE_EVENT = "moment-upload-store-changed";
+const UPLOAD_CHANNEL = "moment-upload-store";
 
 export interface PersistedUpload {
-  /** Client-local id (uuid) — keys the in-memory File map too. */
+  /** Client-local id (uuid) — also names the staged OPFS file. */
   id: string;
   slug: string;
+  /** Missing on legacy rows, which are R2 multipart uploads. */
+  backend?: "r2" | "stream";
   /** R2 multipart handle — the only thing needed to resume on the server. */
   uploadId: string;
   key: string;
@@ -37,6 +50,32 @@ export interface PersistedUpload {
   completedParts: Record<number, string>;
   status: UploadStatus;
   createdAt: number;
+  updatedAt?: number;
+  loadedBytes?: number;
+  lastError?: string | null;
+  streamUid?: string;
+  streamUploadUrl?: string;
+  streamSessionId?: string;
+}
+
+function notifyUploadChanged(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(UPLOAD_CHANGE_EVENT));
+  if (typeof BroadcastChannel !== "undefined") {
+    const channel = new BroadcastChannel(UPLOAD_CHANNEL);
+    channel.postMessage("changed");
+    channel.close();
+  }
+}
+
+export function subscribeToUploadChanges(listener: () => void): () => void {
+  const onWindowChange = () => listener();
+  if (typeof window !== "undefined") window.addEventListener(UPLOAD_CHANGE_EVENT, onWindowChange);
+  const channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(UPLOAD_CHANNEL) : null;
+  if (channel) channel.onmessage = listener;
+  return () => {
+    if (typeof window !== "undefined") window.removeEventListener(UPLOAD_CHANGE_EVENT, onWindowChange);
+    channel?.close();
+  };
 }
 
 function openDB(): Promise<IDBDatabase> {
@@ -71,7 +110,9 @@ async function tx<T>(
 }
 
 export async function saveUpload(u: PersistedUpload): Promise<void> {
+  u.updatedAt = Date.now();
   await tx((store) => store.put(u));
+  notifyUploadChanged();
 }
 
 export async function getUpload(id: string): Promise<PersistedUpload | undefined> {
@@ -80,6 +121,61 @@ export async function getUpload(id: string): Promise<PersistedUpload | undefined
 
 export async function deleteUpload(id: string): Promise<void> {
   await tx((store) => store.delete(id));
+  await deleteUploadFile(id);
+  notifyUploadChanged();
+}
+
+async function uploadDirectory(create: boolean): Promise<FileSystemDirectoryHandle | undefined> {
+  if (!("storage" in navigator) || !("getDirectory" in navigator.storage)) return undefined;
+  const root = await navigator.storage.getDirectory();
+  try {
+    return await root.getDirectoryHandle(FILE_DIR, { create });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "NotFoundError") return undefined;
+    throw error;
+  }
+}
+
+/** Stage the exact bytes until R2 confirms multipart completion. */
+export async function saveUploadFile(id: string, file: File): Promise<void> {
+  const dir = await uploadDirectory(true);
+  if (!dir) throw new Error("durable browser storage is unavailable");
+  const handle = await dir.getFileHandle(id, { create: true });
+  const writable = await handle.createWritable();
+  try {
+    await writable.write(file);
+    await writable.close();
+  } catch (error) {
+    await writable.abort().catch(() => {});
+    await dir.removeEntry(id).catch(() => {});
+    throw error;
+  }
+}
+
+/** Rehydrate a staged upload with its original identity and MIME metadata. */
+export async function getUploadFile(upload: PersistedUpload): Promise<File | undefined> {
+  const dir = await uploadDirectory(false);
+  if (!dir) return undefined;
+  try {
+    const handle = await dir.getFileHandle(upload.id);
+    const stored = await handle.getFile();
+    if (stored.size !== upload.fileSize) return undefined;
+    return new File([stored], upload.fileName, {
+      type: upload.fileType,
+      lastModified: upload.fileLastModified,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "NotFoundError") return undefined;
+    throw error;
+  }
+}
+
+export async function deleteUploadFile(id: string): Promise<void> {
+  const dir = await uploadDirectory(false);
+  if (!dir) return;
+  await dir.removeEntry(id).catch((error: unknown) => {
+    if (!(error instanceof DOMException && error.name === "NotFoundError")) throw error;
+  });
 }
 
 export async function listUploads(slug?: string): Promise<PersistedUpload[]> {
@@ -113,6 +209,6 @@ export async function findResumableUpload(
       u.fileName === file.name &&
       u.fileSize === file.size &&
       u.fileLastModified === file.lastModified &&
-      (u.status === "uploading" || u.status === "paused")
+      ACTIVE_UPLOAD_STATUSES.has(u.status)
   );
 }

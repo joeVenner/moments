@@ -11,8 +11,13 @@ import { useI18n } from "../lib/i18n";
 import { BannerProgress } from "../components/BannerProgress";
 import { LanguageSwitcher } from "../components/LanguageSwitcher";
 import { SAMPLE_BANNERS, renderSampleBanner } from "../lib/sampleBanners";
+import { EventLifecycleControls } from "../components/EventLifecycleControls";
+import { EventAccessControls } from "../components/EventAccessControls";
+import { EventAnalytics } from "../components/EventAnalytics";
+import { EventTemplatePicker } from "../components/EventTemplatePicker";
+import type { EventTemplate } from "../lib/eventTemplates";
 
-const EVENT_TYPES = ["Wedding", "Gala", "Birthday", "Corporate", "Other"];
+const EVENT_TYPES = ["Wedding", "Gala", "Birthday", "Graduation", "Corporate", "Party", "Other"];
 const MAX_SELFIE_BYTES = 8 * 1024 * 1024; // mirrors src/worker/banner.ts MAX_SELFIE_BYTES
 
 export default function Admin() {
@@ -32,6 +37,8 @@ export default function Admin() {
   const [previewTitle, setPreviewTitle] = useState("");
   const [previewType, setPreviewType] = useState("Wedding");
   const [previewHosts, setPreviewHosts] = useState("");
+  const [previewDescription, setPreviewDescription] = useState("");
+  const [eventExpiry, setEventExpiry] = useState("");
   const [previewCoverUrl, setPreviewCoverUrl] = useState<string | null>(null);
   const previewCoverUrlRef = useRef<string | null>(null);
 
@@ -88,6 +95,15 @@ export default function Admin() {
     clearAdminAuth();
     setAuthStatus("unauthed");
     setEvents([]);
+  }
+
+  function applyTemplate(template: EventTemplate) {
+    setPreviewType(template.type);
+    setPreviewDescription(t(template.descriptionKey));
+    setBannerTheme(t(template.themeKey));
+    const expires = new Date();
+    expires.setDate(expires.getDate() + template.retentionDays);
+    setEventExpiry(expires.toISOString().slice(0, 10));
   }
 
   function handleCoverChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -239,6 +255,8 @@ export default function Admin() {
       setPreviewTitle("");
       setPreviewType("Wedding");
       setPreviewHosts("");
+      setPreviewDescription("");
+      setEventExpiry("");
       if (previewCoverUrlRef.current) {
         URL.revokeObjectURL(previewCoverUrlRef.current);
         previewCoverUrlRef.current = null;
@@ -292,6 +310,8 @@ export default function Admin() {
           </div>
         </div>
 
+        <EventTemplatePicker onSelect={applyTemplate} />
+
         <form
           onSubmit={handleCreate}
           className="mt-6 flex flex-col gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-5"
@@ -306,7 +326,7 @@ export default function Admin() {
           <select
             name="type"
             required
-            defaultValue="Wedding"
+            value={previewType}
             onChange={(e) => setPreviewType(e.target.value)}
             className="rounded-lg border border-[var(--color-border)] px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
           >
@@ -324,10 +344,16 @@ export default function Admin() {
           />
           <textarea
             name="description"
+            value={previewDescription}
+            onChange={(e) => setPreviewDescription(e.target.value)}
             placeholder={t("descriptionPlaceholder")}
             rows={2}
             className="rounded-lg border border-[var(--color-border)] px-3 py-3 text-base outline-none focus:border-[var(--color-accent)]"
           />
+          <label className="flex flex-col gap-1.5 font-mono text-xs text-[var(--color-text-muted)]">
+            {t("eventExpiryOptional")}
+            <input name="expires_at" type="date" value={eventExpiry} onChange={(event) => setEventExpiry(event.target.value)} className="rounded-lg border border-[var(--color-border)] px-3 py-3 text-base text-[var(--color-text)] outline-none focus:border-[var(--color-accent)]" />
+          </label>
           <div className="flex flex-col gap-1.5">
             <p className="text-xs font-mono text-[var(--color-text-muted)]">{t("coverPhotoLabel")}</p>
             {previewCoverUrl && !aiBannerUrl ? (
@@ -505,6 +531,7 @@ export default function Admin() {
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button
             type="submit"
+            data-spark
             disabled={creating}
             className="rounded-lg bg-[var(--color-accent)] px-4 py-2.5 font-mono text-sm font-medium text-white transition hover:bg-[var(--color-accent-dark)] disabled:opacity-50"
           >
@@ -550,11 +577,26 @@ export default function Admin() {
               {expandedSlug === event.slug && (
                 <div className="mt-4 flex flex-col gap-4">
                   <QRPanel slug={event.slug} title={event.title} />
+                  <EventLifecycleControls
+                    event={event}
+                    onUpdate={(updated) => setEvents((current) =>
+                      updated.archived_at
+                        ? current.filter((item) => item.id !== updated.id)
+                        : current.map((item) => item.id === updated.id ? updated : item)
+                    )}
+                  />
+                  <EventAccessControls
+                    event={event}
+                    onUpdate={(updated) => setEvents((current) =>
+                      current.map((item) => item.id === updated.id ? updated : item)
+                    )}
+                  />
+                  <EventAnalytics slug={event.slug} />
                   <div>
                     <p className="mb-2 font-mono text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
                       {t("collectedMoments")}
                     </p>
-                    <EventMoments slug={event.slug} />
+                    <EventMoments slug={event.slug} title={event.title} />
                   </div>
                 </div>
               )}

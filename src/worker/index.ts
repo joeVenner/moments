@@ -20,6 +20,10 @@ import {
 } from "./multipartPresign";
 import { requireAdmin } from "./auth";
 import { generateAiBanner, BannerGenerationError } from "./banner";
+import { isStreamConfigured, streamApiUrl, streamAuthHeaders, streamMediaUrl } from "./stream";
+import { deleteMomentMedia } from "./moderation";
+import { cleanupEvent, cleanupExpiredEvents } from "./lifecycle";
+import { grantEventAccess, hasEventAccess, hashEventPin, randomAccessToken } from "./eventAccess";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -28,6 +32,38 @@ const app = new Hono<{ Bindings: Env }>();
 // This covers only what run_worker_first routes here: /api/* and /media/*.
 // CSP is left unset here (it's an HTML-document concern, handled by _headers).
 app.use(secureHeaders({ contentSecurityPolicy: undefined }));
+
+const NO_INDEX = "noindex, nofollow, noarchive, nosnippet";
+
+app.use("/api/*", async (c, next) => {
+  await next();
+  c.res.headers.set("X-Robots-Tag", NO_INDEX);
+});
+
+app.use("/media/*", async (c, next) => {
+  await next();
+  c.res.headers.set("X-Robots-Tag", `${NO_INDEX}, noimageindex`);
+});
+
+app.get("/", (c) => {
+  const url = new URL(c.req.url);
+  if (url.hostname === "www.moments-hq.com") {
+    url.hostname = "moments-hq.com";
+    return c.redirect(url.toString(), 308);
+  }
+  return c.env.ASSETS.fetch(c.req.raw);
+});
+
+function logUpload(
+  level: "info" | "warn" | "error",
+  event: string,
+  details: Record<string, string | number | boolean | null>
+): void {
+  const message = JSON.stringify({ scope: "upload", event, ...details });
+  if (level === "error") console.error(message);
+  else if (level === "warn") console.warn(message);
+  else console.log(message);
+}
 
 // Admin-only: listing all events and creating new ones. Guest-facing routes
 // (event by slug, moments, media, participants, leaderboard) stay public.
@@ -66,7 +102,23 @@ async function uniqueSlug(db: D1Database, title: string): Promise<string> {
 }
 
 async function getEventBySlug(db: D1Database, slug: string): Promise<{ id: string } | null> {
-  return db.prepare("SELECT id FROM events WHERE slug = ?").bind(slug).first<{ id: string }>();
+  return db.prepare(
+    "SELECT id FROM events WHERE slug = ? AND archived_at IS NULL AND (expires_at IS NULL OR expires_at > datetime('now'))"
+  ).bind(slug).first<{ id: string }>();
+}
+
+async function getActiveEventBySlug(db: D1Database, slug: string): Promise<EventRow | null> {
+  return db.prepare(
+    "SELECT * FROM events WHERE slug = ? AND archived_at IS NULL AND (expires_at IS NULL OR expires_at > datetime('now'))"
+  ).bind(slug).first<EventRow>();
+}
+
+function normalizeDate(value: unknown): string | null | undefined {
+  if (value === null || value === "") return null;
+  if (typeof value !== "string") return undefined;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return parsed.toISOString().slice(0, 19).replace("T", " ");
 }
 
 async function upsertParticipant(
@@ -103,9 +155,20 @@ async function upsertParticipant(
     .run();
 }
 
+app.use("/api/events/:slug/*", async (c, next) => {
+  if (c.req.path.endsWith("/access")) return next();
+  const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
+  if (event?.access_mode === "private" && !hasEventAccess(c, event)) {
+    return c.json({ error: "access required", access_required: true }, 401);
+  }
+  return next();
+});
+
 app.get("/api/events", async (c) => {
   const { results } = await c.env.DB.prepare(
-    "SELECT * FROM events ORDER BY created_at DESC"
+    `SELECT id, slug, title, type, main_characters, description, cover_image_url,
+            created_at, starts_at, expires_at, archived_at, access_mode, invite_token
+       FROM events ORDER BY created_at DESC`
   ).all<EventRow>();
   return c.json({ events: results });
 });
@@ -122,10 +185,12 @@ app.post("/api/events", async (c) => {
   const cover = body.cover instanceof File && body.cover.size > 0 ? body.cover : null;
   const coverImageUrlField =
     typeof body.cover_image_url === "string" ? body.cover_image_url.trim() : null;
+  const expiresAt = body.expires_at === undefined ? null : normalizeDate(body.expires_at);
 
   if (!title || !type) {
     return c.json({ error: "title and type are required" }, 400);
   }
+  if (expiresAt === undefined) return c.json({ error: "expires_at is invalid" }, 400);
 
   const id = crypto.randomUUID();
   const slug = await uniqueSlug(c.env.DB, title);
@@ -146,10 +211,10 @@ app.post("/api/events", async (c) => {
   }
 
   await c.env.DB.prepare(
-    `INSERT INTO events (id, slug, title, type, main_characters, description, cover_image_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO events (id, slug, title, type, main_characters, description, cover_image_url, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   )
-    .bind(id, slug, title, type, mainCharacters, description, coverImageUrl)
+    .bind(id, slug, title, type, mainCharacters, description, coverImageUrl, expiresAt)
     .run();
 
   const event = await c.env.DB.prepare("SELECT * FROM events WHERE id = ?")
@@ -160,11 +225,83 @@ app.post("/api/events", async (c) => {
 });
 
 app.get("/api/events/:slug", async (c) => {
-  const event = await c.env.DB.prepare("SELECT * FROM events WHERE slug = ?")
-    .bind(c.req.param("slug"))
-    .first<EventRow>();
+  const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
-  return c.json({ event });
+  if (!hasEventAccess(c, event)) {
+    return c.json({ error: "access required", access_required: true }, 401);
+  }
+  const { access_pin_hash: _hash, access_pin_salt: _salt, invite_token: _token, ...publicEvent } = event;
+  return c.json({ event: publicEvent });
+});
+
+app.post("/api/events/:slug/access", async (c) => {
+  const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  if (event.access_mode !== "private") return c.json({ unlocked: true });
+  const body = (await c.req.json().catch(() => null)) as {
+    pin?: unknown;
+    invite_token?: unknown;
+  } | null;
+  const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
+  const inviteToken = typeof body?.invite_token === "string" ? body.invite_token : "";
+  let valid = Boolean(inviteToken && event.invite_token && inviteToken === event.invite_token);
+  if (!valid && pin && event.access_pin_hash && event.access_pin_salt) {
+    valid = (await hashEventPin(pin, event.access_pin_salt)) === event.access_pin_hash;
+  }
+  if (!valid) return c.json({ error: "invalid event access" }, 401);
+  grantEventAccess(c, event);
+  return c.json({ unlocked: true });
+});
+
+app.patch("/api/admin/events/:id/access", async (c) => {
+  const event = await c.env.DB.prepare("SELECT * FROM events WHERE id = ?")
+    .bind(c.req.param("id")).first<EventRow>();
+  if (!event) return c.json({ error: "event not found" }, 404);
+  const body = (await c.req.json().catch(() => null)) as { mode?: unknown; pin?: unknown } | null;
+  const mode = body?.mode;
+  if (mode !== "public" && mode !== "private") return c.json({ error: "invalid access mode" }, 400);
+
+  let salt = event.access_pin_salt;
+  let hash = event.access_pin_hash;
+  const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
+  if (pin) {
+    if (pin.length < 4 || pin.length > 20) return c.json({ error: "PIN must be 4 to 20 characters" }, 400);
+    salt = randomAccessToken().slice(0, 32);
+    hash = await hashEventPin(pin, salt);
+  }
+  if (mode === "private" && !hash) return c.json({ error: "a PIN is required for private events" }, 400);
+  const inviteToken = event.invite_token ?? randomAccessToken();
+  await c.env.DB.prepare(
+    "UPDATE events SET access_mode = ?, access_pin_hash = ?, access_pin_salt = ?, invite_token = ? WHERE id = ?"
+  ).bind(mode, hash, salt, inviteToken, event.id).run();
+  const updated = await c.env.DB.prepare(
+    `SELECT id, slug, title, type, main_characters, description, cover_image_url,
+            created_at, starts_at, expires_at, archived_at, access_mode, invite_token
+       FROM events WHERE id = ?`
+  ).bind(event.id).first<EventRow>();
+  return c.json({ event: updated });
+});
+
+app.patch("/api/admin/events/:id/lifecycle", async (c) => {
+  const body = (await c.req.json().catch(() => null)) as {
+    expires_at?: unknown;
+    archive_now?: unknown;
+  } | null;
+  const event = await c.env.DB.prepare("SELECT * FROM events WHERE id = ?")
+    .bind(c.req.param("id")).first<EventRow>();
+  if (!event) return c.json({ error: "event not found" }, 404);
+
+  if (body?.archive_now === true) {
+    await cleanupEvent(c.env, event);
+  } else {
+    const expiresAt = normalizeDate(body?.expires_at);
+    if (expiresAt === undefined) return c.json({ error: "expires_at is invalid" }, 400);
+    await c.env.DB.prepare("UPDATE events SET expires_at = ?, archived_at = NULL WHERE id = ?")
+      .bind(expiresAt, event.id).run();
+  }
+  const updated = await c.env.DB.prepare("SELECT * FROM events WHERE id = ?")
+    .bind(event.id).first<EventRow>();
+  return c.json({ event: updated });
 });
 
 app.get("/api/events/:slug/moments", async (c) => {
@@ -178,18 +315,24 @@ app.get("/api/events/:slug/moments", async (c) => {
   // Default 25, cap 100 — bounds the initial payload + DOM.
   const limit = Math.min(Math.max(parseInt(c.req.query("limit") ?? "25", 10) || 25, 1), 100);
   const offset = Math.max(parseInt(c.req.query("offset") ?? "0", 10) || 0, 0);
+  const reactorId = (c.req.query("reactor_id") ?? "").slice(0, 100);
 
   const { results } = await c.env.DB.prepare(
-    "SELECT * FROM moments WHERE event_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    `SELECT m.*,
+            (SELECT COUNT(*) FROM moment_reactions r WHERE r.moment_id = m.id) AS reaction_count,
+            EXISTS(SELECT 1 FROM moment_reactions r WHERE r.moment_id = m.id AND r.reactor_id = ?) AS reacted
+       FROM moments m
+      WHERE m.event_id = ? AND m.moderation_status = 'approved'
+      ORDER BY m.created_at DESC LIMIT ? OFFSET ?`
   )
-    .bind(event.id, limit, offset)
+    .bind(reactorId, event.id, limit, offset)
     .all<MomentRow>();
 
   // Total event moment count — drives the numbered page nav on the client (the
   // old `hasMore` heuristic is off-by-one at the boundary: a full final page
   // reports hasMore=true even though there's no next page). One cheap COUNT(*).
   const totalRow = await c.env.DB.prepare(
-    "SELECT COUNT(*) AS c FROM moments WHERE event_id = ?"
+    "SELECT COUNT(*) AS c FROM moments WHERE event_id = ? AND moderation_status = 'approved'"
   )
     .bind(event.id)
     .first<{ c: number }>();
@@ -206,7 +349,7 @@ app.get("/api/events/:slug/moments", async (c) => {
   let your_points = 0;
   if (uploaderName) {
     const pts = await c.env.DB.prepare(
-      "SELECT COALESCE(SUM(points_awarded), 0) AS s FROM moments WHERE event_id = ? AND uploader_name = ?"
+      "SELECT COALESCE(SUM(points_awarded), 0) AS s FROM moments WHERE event_id = ? AND uploader_name = ? AND moderation_status = 'approved'"
     )
       .bind(event.id, uploaderName)
       .first<{ s: number }>();
@@ -266,6 +409,128 @@ app.post("/api/events/:slug/moments", async (c) => {
   return c.json({ moment, points_awarded: points }, 201);
 });
 
+app.get("/api/events/:slug/highlights", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  const reactorId = (c.req.query("reactor_id") ?? "").slice(0, 100);
+  const { results } = await c.env.DB.prepare(
+    `SELECT m.*,
+            COUNT(r.id) AS reaction_count,
+            EXISTS(SELECT 1 FROM moment_reactions mine WHERE mine.moment_id = m.id AND mine.reactor_id = ?) AS reacted
+       FROM moments m
+       LEFT JOIN moment_reactions r ON r.moment_id = m.id
+      WHERE m.event_id = ? AND m.moderation_status = 'approved'
+      GROUP BY m.id
+      ORDER BY reaction_count DESC, m.created_at DESC
+      LIMIT 50`
+  ).bind(reactorId, event.id).all<MomentRow>();
+  return c.json({ moments: results });
+});
+
+app.post("/api/events/:slug/moments/:id/reactions", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  const body = (await c.req.json().catch(() => null)) as { reactor_id?: unknown } | null;
+  const reactorId = typeof body?.reactor_id === "string" ? body.reactor_id.slice(0, 100) : "";
+  if (!reactorId) return c.json({ error: "reactor_id is required" }, 400);
+  const moment = await c.env.DB.prepare(
+    "SELECT id FROM moments WHERE id = ? AND event_id = ? AND moderation_status = 'approved'"
+  ).bind(c.req.param("id"), event.id).first<{ id: string }>();
+  if (!moment) return c.json({ error: "moment not found" }, 404);
+  const existing = await c.env.DB.prepare(
+    "SELECT id FROM moment_reactions WHERE moment_id = ? AND reactor_id = ?"
+  ).bind(moment.id, reactorId).first<{ id: string }>();
+  let reacted: boolean;
+  if (existing) {
+    await c.env.DB.prepare("DELETE FROM moment_reactions WHERE id = ?").bind(existing.id).run();
+    reacted = false;
+  } else {
+    await c.env.DB.prepare(
+      "INSERT INTO moment_reactions (id, moment_id, event_id, reactor_id) VALUES (?, ?, ?, ?)"
+    ).bind(crypto.randomUUID(), moment.id, event.id, reactorId).run();
+    reacted = true;
+  }
+  const count = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS count FROM moment_reactions WHERE moment_id = ?"
+  ).bind(moment.id).first<{ count: number }>();
+  return c.json({ reacted, reaction_count: count?.count ?? 0 });
+});
+
+app.get("/api/admin/events/:slug/moments", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  const { results } = await c.env.DB.prepare(
+    "SELECT * FROM moments WHERE event_id = ? ORDER BY created_at DESC LIMIT 500"
+  ).bind(event.id).all<MomentRow>();
+  return c.json({ moments: results });
+});
+
+app.get("/api/admin/events/:slug/analytics", async (c) => {
+  const event = await c.env.DB.prepare("SELECT id FROM events WHERE slug = ?")
+    .bind(c.req.param("slug")).first<{ id: string }>();
+  if (!event) return c.json({ error: "event not found" }, 404);
+  const [summary, participants, reactions, activity, uploadStates] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT COUNT(*) AS total_moments,
+              SUM(CASE WHEN moderation_status = 'hidden' THEN 1 ELSE 0 END) AS hidden_moments,
+              SUM(CASE WHEN mime_type LIKE 'video/%' THEN 1 ELSE 0 END) AS videos,
+              SUM(CASE WHEN mime_type NOT LIKE 'video/%' OR mime_type IS NULL THEN 1 ELSE 0 END) AS photos,
+              COALESCE(SUM(size_bytes), 0) AS storage_bytes
+         FROM moments WHERE event_id = ?`
+    ).bind(event.id).first(),
+    c.env.DB.prepare("SELECT COUNT(*) AS count FROM participants WHERE event_id = ?")
+      .bind(event.id).first<{ count: number }>(),
+    c.env.DB.prepare("SELECT COUNT(*) AS count FROM moment_reactions WHERE event_id = ?")
+      .bind(event.id).first<{ count: number }>(),
+    c.env.DB.prepare(
+      `SELECT date(created_at) AS day, COUNT(*) AS count
+         FROM moments WHERE event_id = ? AND created_at >= datetime('now', '-13 days')
+        GROUP BY date(created_at) ORDER BY day ASC`
+    ).bind(event.id).all<{ day: string; count: number }>(),
+    c.env.DB.prepare(
+      "SELECT status, COUNT(*) AS count FROM uploads WHERE event_id = ? GROUP BY status"
+    ).bind(event.id).all<{ status: string; count: number }>(),
+  ]);
+  return c.json({
+    summary: {
+      ...(summary ?? {}),
+      participants: participants?.count ?? 0,
+      reactions: reactions?.count ?? 0,
+    },
+    activity: activity.results,
+    upload_states: uploadStates.results,
+  });
+});
+
+app.patch("/api/admin/moments/:id", async (c) => {
+  const status = ((await c.req.json().catch(() => null)) as { status?: unknown } | null)?.status;
+  if (status !== "approved" && status !== "hidden") {
+    return c.json({ error: "status must be approved or hidden" }, 400);
+  }
+  const result = await c.env.DB.prepare(
+    "UPDATE moments SET moderation_status = ? WHERE id = ?"
+  ).bind(status, c.req.param("id")).run();
+  if (!result.meta.changes) return c.json({ error: "moment not found" }, 404);
+  const moment = await c.env.DB.prepare("SELECT * FROM moments WHERE id = ?")
+    .bind(c.req.param("id")).first<MomentRow>();
+  return c.json({ moment });
+});
+
+app.delete("/api/admin/moments/:id", async (c) => {
+  const moment = await c.env.DB.prepare("SELECT * FROM moments WHERE id = ?")
+    .bind(c.req.param("id")).first<MomentRow>();
+  if (!moment) return c.json({ error: "moment not found" }, 404);
+
+  try {
+    await deleteMomentMedia(c.env, moment.media_url);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "unable to delete media" }, 502);
+  }
+
+  await c.env.DB.prepare("DELETE FROM moments WHERE id = ?").bind(moment.id).run();
+  return c.json({ deleted: true });
+});
+
 // ---------------------------------------------------------------------------
 // Resumable multipart large-upload flow (P3.1 evolution). The original
 // single presigned PUT died + restarted from byte zero when iOS suspended the
@@ -294,6 +559,29 @@ async function getOpenUpload(
     .prepare("SELECT * FROM uploads WHERE upload_id = ? AND key = ? AND event_id = ? AND status = 'open'")
     .bind(uploadId, key, eventId)
     .first<UploadRow>();
+}
+
+async function getUpload(
+  db: D1Database,
+  eventId: string,
+  uploadId: string,
+  key: string
+): Promise<UploadRow | null> {
+  return db
+    .prepare("SELECT * FROM uploads WHERE upload_id = ? AND key = ? AND event_id = ?")
+    .bind(uploadId, key, eventId)
+    .first<UploadRow>();
+}
+
+async function getMomentForUpload(
+  db: D1Database,
+  eventId: string,
+  key: string
+): Promise<MomentRow | null> {
+  return db
+    .prepare("SELECT * FROM moments WHERE event_id = ? AND media_url = ? ORDER BY created_at LIMIT 1")
+    .bind(eventId, `/media/${key}`)
+    .first<MomentRow>();
 }
 
 /**
@@ -326,6 +614,223 @@ async function validateAssembledObject(
   }
   return { contentType, size: object.size };
 }
+
+// Upload capabilities are explicit so the client never starts a Stream queue
+// item unless all server-side configuration is present. R2 remains the safe
+// fallback during rollout or if Stream is disabled.
+app.get("/api/upload-capabilities", (c) =>
+  c.json({ stream_tus: isStreamConfigured(c.env) })
+);
+
+// Cloudflare Stream tus creation proxy. Only the initial POST crosses the
+// Worker; Stream returns a one-time Location and the browser PATCHes bytes
+// directly to videodelivery.net without exposing the API token.
+app.post("/api/events/:slug/moments/stream/session", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  if (!isStreamConfigured(c.env)) return c.json({ error: "Stream uploads are not configured" }, 501);
+  const body = (await c.req.json().catch(() => null)) as {
+    uploader_name?: unknown;
+    content_type?: unknown;
+    size?: unknown;
+  } | null;
+  const uploaderName = typeof body?.uploader_name === "string" ? body.uploader_name.trim() : "";
+  const contentType = typeof body?.content_type === "string" ? body.content_type.toLowerCase() : "";
+  const size = typeof body?.size === "number" ? body.size : NaN;
+  if (!uploaderName) return c.json({ error: "uploader_name is required" }, 400);
+  if (!contentType.startsWith("video/") || !isAllowedContentType(contentType)) {
+    return c.json({ error: "unsupported video type" }, 400);
+  }
+  if (!Number.isFinite(size) || size <= 0 || size > MAX_DIRECT_UPLOAD_BYTES) {
+    return c.json({ error: "File too large (max 512MB)" }, 400);
+  }
+  const sessionId = crypto.randomUUID();
+  await c.env.DB.prepare(
+    `INSERT INTO uploads (id, event_id, uploader_name, key, upload_id, content_type, size_bytes, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'open')`
+  )
+    .bind(sessionId, event.id, uploaderName, `stream-session/${sessionId}`, sessionId, contentType, size)
+    .run();
+  return c.json({ session_id: sessionId });
+});
+
+app.post("/api/events/:slug/moments/stream/tus", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  if (!isStreamConfigured(c.env)) return c.json({ error: "Stream uploads are not configured" }, 501);
+
+  const tusVersion = c.req.header("Tus-Resumable") ?? "";
+  const uploadLength = Number(c.req.header("Upload-Length") ?? NaN);
+  const uploadMetadata = c.req.header("Upload-Metadata") ?? "";
+  const sessionId = c.req.query("session") ?? "";
+  const session = sessionId
+    ? await c.env.DB.prepare("SELECT * FROM uploads WHERE id = ? AND event_id = ? AND status = 'open'")
+        .bind(sessionId, event.id)
+        .first<UploadRow>()
+    : null;
+
+  if (tusVersion !== "1.0.0") return c.json({ error: "Tus-Resumable 1.0.0 is required" }, 412);
+  if (!session || !session.key.startsWith("stream-session/")) return c.json({ error: "upload session not found" }, 404);
+  if (uploadLength !== session.size_bytes) return c.json({ error: "upload size does not match session" }, 400);
+
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${streamApiUrl(c.env)}?direct_user=true`, {
+      method: "POST",
+      headers: {
+        ...streamAuthHeaders(c.env),
+        "Tus-Resumable": tusVersion,
+        "Upload-Length": String(uploadLength),
+        "Upload-Metadata": uploadMetadata,
+        "Upload-Creator": event.id,
+      },
+    });
+  } catch (error) {
+    logUpload("error", "stream_tus_create_failed", {
+      eventId: event.id,
+      sizeBytes: uploadLength,
+      error: error instanceof Error ? error.message : "Stream request failed",
+    });
+    return c.json({ error: "Unable to create Stream upload" }, 502);
+  }
+
+  const location = upstream.headers.get("Location");
+  const streamUid = upstream.headers.get("stream-media-id");
+  if (!upstream.ok || !location || !streamUid) {
+    logUpload("error", "stream_tus_create_rejected", {
+      eventId: event.id,
+      sizeBytes: uploadLength,
+      status: upstream.status,
+    });
+    return c.json({ error: "Stream rejected the upload" }, 502);
+  }
+
+  try {
+    await c.env.DB.prepare(
+      "UPDATE uploads SET key = ?, upload_id = ? WHERE id = ? AND event_id = ? AND status = 'open'"
+    )
+      .bind(`stream/${streamUid}`, streamUid, session.id, event.id)
+      .run();
+  } catch (error) {
+    await fetch(streamApiUrl(c.env, `/${streamUid}`), {
+      method: "DELETE",
+      headers: streamAuthHeaders(c.env),
+    }).catch(() => {});
+    logUpload("error", "stream_upload_record_failed", {
+      eventId: event.id,
+      error: error instanceof Error ? error.message : "D1 insert failed",
+    });
+    return c.json({ error: "Unable to persist Stream upload" }, 500);
+  }
+
+  logUpload("info", "stream_tus_created", {
+    eventId: event.id,
+    uploadRecordId: session.id,
+    sizeBytes: uploadLength,
+    contentType: session.content_type,
+  });
+  return new Response(null, {
+    status: 201,
+    headers: {
+      Location: location,
+      "Tus-Resumable": "1.0.0",
+      "stream-media-id": streamUid,
+      "Access-Control-Expose-Headers": "Location, stream-media-id, Tus-Resumable",
+    },
+  });
+});
+
+app.post("/api/events/:slug/moments/stream/complete", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  if (!isStreamConfigured(c.env)) return c.json({ error: "Stream uploads are not configured" }, 501);
+
+  const body = (await c.req.json().catch(() => null)) as {
+    stream_uid?: unknown;
+    uploader_name?: unknown;
+    caption?: unknown;
+  } | null;
+  const streamUid = typeof body?.stream_uid === "string" ? body.stream_uid : "";
+  const uploaderName = typeof body?.uploader_name === "string" ? body.uploader_name.trim() : "";
+  const caption = typeof body?.caption === "string" ? body.caption.trim() : null;
+  if (!streamUid || !uploaderName) return c.json({ error: "stream_uid and uploader_name are required" }, 400);
+
+  const upload = await getUpload(c.env.DB, event.id, streamUid, `stream/${streamUid}`);
+  if (!upload || upload.uploader_name !== uploaderName) return c.json({ error: "upload not found" }, 404);
+  const mediaUrl = streamMediaUrl(c.env, streamUid);
+  const existingMoment = await c.env.DB.prepare("SELECT * FROM moments WHERE event_id = ? AND media_url = ?")
+    .bind(event.id, mediaUrl)
+    .first<MomentRow>();
+  if (existingMoment) return c.json({ moment: existingMoment, points_awarded: existingMoment.points_awarded });
+  if (upload.status !== "open") return c.json({ error: "upload is not open" }, 409);
+
+  const detailsResponse = await fetch(streamApiUrl(c.env, `/${streamUid}`), {
+    headers: streamAuthHeaders(c.env),
+  });
+  const details = (await detailsResponse.json().catch(() => null)) as {
+    success?: boolean;
+    result?: { uid?: string; size?: number; status?: { state?: string } };
+  } | null;
+  if (!detailsResponse.ok || !details?.success || details.result?.uid !== streamUid) {
+    return c.json({ error: "Unable to verify Stream upload" }, 502);
+  }
+  if (details.result.status?.state === "error") return c.json({ error: "Stream could not process this video" }, 422);
+  if (typeof details.result.size === "number" && details.result.size !== upload.size_bytes) {
+    return c.json({ error: "Stream upload size mismatch" }, 400);
+  }
+
+  const points = pointsForContentType(upload.content_type ?? "video/mp4");
+  const momentId = crypto.randomUUID();
+  await c.env.DB.prepare(
+    `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(momentId, event.id, uploaderName, mediaUrl, caption, points, upload.size_bytes, upload.content_type)
+    .run();
+  await c.env.DB.prepare(
+    "UPDATE uploads SET status = 'completed', completed_at = datetime('now') WHERE id = ?"
+  ).bind(upload.id).run();
+  await upsertParticipant(c.env.DB, event.id, uploaderName);
+  const moment = await c.env.DB.prepare("SELECT * FROM moments WHERE id = ?").bind(momentId).first<MomentRow>();
+  logUpload("info", "stream_upload_completed", {
+    eventId: event.id,
+    uploadRecordId: upload.id,
+    momentId,
+    sizeBytes: upload.size_bytes,
+  });
+  return c.json({ moment, points_awarded: points }, 201);
+});
+
+app.post("/api/events/:slug/moments/stream/abort", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  if (!isStreamConfigured(c.env)) return c.json({ error: "Stream uploads are not configured" }, 501);
+  const body = (await c.req.json().catch(() => null)) as {
+    stream_uid?: unknown;
+    session_id?: unknown;
+  } | null;
+  const streamUid = typeof body?.stream_uid === "string" ? body.stream_uid : "";
+  const sessionId = typeof body?.session_id === "string" ? body.session_id : "";
+  if (!streamUid && !sessionId) return c.json({ error: "stream_uid or session_id is required" }, 400);
+  const upload = streamUid
+    ? await getUpload(c.env.DB, event.id, streamUid, `stream/${streamUid}`)
+    : await c.env.DB.prepare("SELECT * FROM uploads WHERE id = ? AND event_id = ?")
+        .bind(sessionId, event.id)
+        .first<UploadRow>();
+  if (!upload) return c.json({ error: "upload not found" }, 404);
+
+  const effectiveUid = upload.key.startsWith("stream/") ? upload.upload_id : "";
+  if (effectiveUid) {
+    const response = await fetch(streamApiUrl(c.env, `/${effectiveUid}`), {
+      method: "DELETE",
+      headers: streamAuthHeaders(c.env),
+    });
+    if (!response.ok && response.status !== 404) return c.json({ error: "Unable to delete Stream upload" }, 502);
+  }
+  await c.env.DB.prepare("UPDATE uploads SET status = 'aborted' WHERE id = ?").bind(upload.id).run();
+  logUpload("info", "stream_upload_aborted", { eventId: event.id, uploadRecordId: upload.id });
+  return c.json({ aborted: true });
+});
 
 // Step 1: initiate. Validates type + size, builds the key, opens the R2
 // multipart upload, and writes a D1 `uploads` row. Inert (501) until R2 S3
@@ -360,6 +865,12 @@ app.post("/api/events/:slug/moments/multipart/init", async (c) => {
   try {
     uploadId = await createMultipartUpload(c.env, key, contentType);
   } catch (err) {
+    logUpload("error", "multipart_init_failed", {
+      eventId: event.id,
+      sizeBytes: Number.isFinite(size) ? size : 0,
+      contentType,
+      error: err instanceof Error ? err.message : "init failed",
+    });
     return c.json({ error: err instanceof Error ? err.message : "init failed" }, 502);
   }
 
@@ -370,6 +881,13 @@ app.post("/api/events/:slug/moments/multipart/init", async (c) => {
   )
     .bind(id, event.id, uploaderName, key, uploadId, contentType || null, size)
     .run();
+  logUpload("info", "multipart_initialized", {
+    eventId: event.id,
+    uploadRecordId: id,
+    sizeBytes: size,
+    partCount: partCountForSize(size),
+    contentType,
+  });
 
   return c.json({
     upload_id: uploadId,
@@ -413,6 +931,12 @@ app.post("/api/events/:slug/moments/multipart/part-url", async (c) => {
   try {
     url = await presignPartUrl(c.env, key, uploadId, partNumber);
   } catch (err) {
+    logUpload("error", "multipart_part_presign_failed", {
+      eventId: event.id,
+      uploadRecordId: upload.id,
+      partNumber,
+      error: err instanceof Error ? err.message : "presign failed",
+    });
     return c.json({ error: err instanceof Error ? err.message : "presign failed" }, 502);
   }
   return c.json({ url, part_number: partNumber });
@@ -434,17 +958,48 @@ app.get("/api/events/:slug/moments/multipart/status", async (c) => {
   if (!registrationKeyBelongsToEvent(event.id, key)) {
     return c.json({ error: "key does not belong to this event" }, 400);
   }
-  const upload = await c.env.DB.prepare("SELECT * FROM uploads WHERE upload_id = ? AND key = ? AND event_id = ?")
-    .bind(uploadId, key, event.id)
-    .first<UploadRow>();
+  const upload = await getUpload(c.env.DB, event.id, uploadId, key);
   if (!upload) return c.json({ error: "upload not found" }, 404);
-  if (upload.status === "completed") return c.json({ error: "upload already completed" }, 409);
+  if (upload.status === "completed") {
+    const moment = await getMomentForUpload(c.env.DB, event.id, key);
+    if (!moment) return c.json({ error: "completed upload has no moment" }, 409);
+    return c.json({
+      status: "completed",
+      part_size: MULTIPART_PART_BYTES,
+      part_count: partCountForSize(upload.size_bytes),
+      parts: [],
+      moment,
+      points_awarded: moment.points_awarded,
+    });
+  }
   // 'aborted' or 'open' — either way, list what R2 actually has. If aborted,
   // the client should re-init (returned parts let it decide).
   let parts;
   try {
     parts = await listParts(c.env, key, uploadId);
   } catch (err) {
+    const error = err instanceof Error ? err.message : "listParts failed";
+    // CompleteMultipartUpload consumes the multipart session. If its response
+    // or the following registration was interrupted, ListParts correctly says
+    // NoSuchUpload even though the assembled object exists. Surface that state
+    // so the client can replay only the idempotent registration step.
+    if (error.includes("NoSuchUpload")) {
+      const assembled = await validateAssembledObject(c, key, upload.size_bytes);
+      if (!(assembled instanceof Response)) {
+        return c.json({
+          status: "assembled",
+          assembly_complete: true,
+          part_size: MULTIPART_PART_BYTES,
+          part_count: partCountForSize(upload.size_bytes),
+          parts: [],
+        });
+      }
+    }
+    logUpload("error", "multipart_status_failed", {
+      eventId: event.id,
+      uploadRecordId: upload.id,
+      error,
+    });
     return c.json({ error: err instanceof Error ? err.message : "listParts failed" }, 502);
   }
   return c.json({
@@ -487,8 +1042,32 @@ app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
   if (!registrationKeyBelongsToEvent(event.id, key)) {
     return c.json({ error: "key does not belong to this event" }, 400);
   }
-  const upload = await getOpenUpload(c.env.DB, event.id, uploadId, key);
-  if (!upload) return c.json({ error: "upload not found or already closed" }, 404);
+  const upload = await getUpload(c.env.DB, event.id, uploadId, key);
+  if (!upload) return c.json({ error: "upload not found" }, 404);
+  const existingMoment = await getMomentForUpload(c.env.DB, event.id, key);
+  if (existingMoment) {
+    if (upload.status !== "completed") {
+      await c.env.DB.prepare(
+        "UPDATE uploads SET status = 'completed', completed_at = COALESCE(completed_at, datetime('now')) WHERE id = ?"
+      ).bind(upload.id).run();
+    }
+    logUpload("info", "multipart_completion_replayed", {
+      eventId: event.id,
+      uploadRecordId: upload.id,
+      momentId: existingMoment.id,
+    });
+    return c.json({ moment: existingMoment, points_awarded: existingMoment.points_awarded });
+  }
+  let validated: { contentType: string; size: number } | Response | undefined;
+  if (upload.status !== "open") {
+    validated = await validateAssembledObject(c, key, upload.size_bytes);
+    if (validated instanceof Response) return c.json({ error: "upload is not open" }, 409);
+    logUpload("warn", "multipart_aborted_registration_recovered", {
+      eventId: event.id,
+      uploadRecordId: upload.id,
+      sizeBytes: validated.size,
+    });
+  }
 
   // Normalize + sanity-check the part list the client sends (ETags captured
   // from each part PUT's response header). R2's Complete call is the final
@@ -501,19 +1080,45 @@ app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
     )
     .filter((p: { partNumber: number; etag: string } | null): p is { partNumber: number; etag: string } => p !== null);
   if (cleanedParts.length !== partCountForSize(upload.size_bytes)) {
+    logUpload("warn", "multipart_part_count_rejected", {
+      eventId: event.id,
+      uploadRecordId: upload.id,
+      receivedParts: cleanedParts.length,
+      expectedParts: partCountForSize(upload.size_bytes),
+    });
     return c.json({ error: "part count does not match file size" }, 400);
   }
 
   try {
-    await completeMultipartUpload(c.env, key, uploadId, cleanedParts);
+    if (!validated) await completeMultipartUpload(c.env, key, uploadId, cleanedParts);
   } catch (err) {
-    // Leave the upload OPEN — the client can retry complete with corrected ETags.
-    return c.json({ error: err instanceof Error ? err.message : "complete failed" }, 502);
+    // The R2 Complete call may have succeeded even if its response was lost.
+    // If the final object is present and exact, continue registration instead
+    // of trapping the client in a permanent NoSuchUpload retry loop.
+    validated = await validateAssembledObject(c, key, upload.size_bytes);
+    if (validated instanceof Response) {
+      logUpload("error", "multipart_complete_failed", {
+        eventId: event.id,
+        uploadRecordId: upload.id,
+        error: err instanceof Error ? err.message : "complete failed",
+      });
+      return c.json({ error: err instanceof Error ? err.message : "complete failed" }, 502);
+    }
+    logUpload("warn", "multipart_complete_response_recovered", {
+      eventId: event.id,
+      uploadRecordId: upload.id,
+      sizeBytes: validated.size,
+    });
   }
 
-  const validated = await validateAssembledObject(c, key, upload.size_bytes);
+  validated ??= await validateAssembledObject(c, key, upload.size_bytes);
   if (validated instanceof Response) {
     await c.env.DB.prepare("UPDATE uploads SET status = 'aborted' WHERE id = ?").bind(upload.id).run();
+    logUpload("error", "multipart_validation_failed", {
+      eventId: event.id,
+      uploadRecordId: upload.id,
+      status: validated.status,
+    });
     return validated;
   }
 
@@ -535,6 +1140,13 @@ app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
   const moment = await c.env.DB.prepare("SELECT * FROM moments WHERE id = ?")
     .bind(id)
     .first<MomentRow>();
+  logUpload("info", "multipart_completed", {
+    eventId: event.id,
+    uploadRecordId: upload.id,
+    momentId: id,
+    sizeBytes: validated.size,
+    contentType: validated.contentType,
+  });
   return c.json({ moment, points_awarded: points }, 201);
 });
 
@@ -561,11 +1173,16 @@ app.post("/api/events/:slug/moments/multipart/abort", async (c) => {
   try {
     await abortMultipartUpload(c.env, key, uploadId);
   } catch (err) {
+    logUpload("error", "multipart_abort_failed", {
+      eventId: event.id,
+      error: err instanceof Error ? err.message : "abort failed",
+    });
     return c.json({ error: err instanceof Error ? err.message : "abort failed" }, 502);
   }
   await c.env.DB.prepare("UPDATE uploads SET status = 'aborted' WHERE upload_id = ? AND key = ? AND event_id = ?")
     .bind(uploadId, key, event.id)
     .run();
+  logUpload("info", "multipart_aborted", { eventId: event.id });
   return c.json({ aborted: true });
 });
 
@@ -615,7 +1232,7 @@ app.get("/api/events/:slug/leaderboard", async (c) => {
        COALESCE(SUM(m.points_awarded), 0) AS total_points,
        COUNT(m.id) AS moment_count
      FROM participants p
-     LEFT JOIN moments m ON m.event_id = p.event_id AND m.uploader_name = p.nickname
+     LEFT JOIN moments m ON m.event_id = p.event_id AND m.uploader_name = p.nickname AND m.moderation_status = 'approved'
      WHERE p.event_id = ?
      GROUP BY p.nickname
      ORDER BY total_points DESC, p.joined_at ASC`
@@ -650,6 +1267,17 @@ app.post("/api/admin/generate-banner", async (c) => {
 
 app.get("/media/*", async (c) => {
   const key = c.req.path.slice("/media/".length);
+  const eventId = /^events\/([^/]+)\//.exec(key)?.[1];
+  const mediaEvent = eventId
+    ? await c.env.DB.prepare("SELECT * FROM events WHERE id = ?").bind(eventId).first<EventRow>()
+    : await c.env.DB.prepare("SELECT * FROM events WHERE cover_image_url = ? LIMIT 1")
+        .bind(`/media/${key}`).first<EventRow>();
+  if (mediaEvent?.access_mode === "private" && !hasEventAccess(c, mediaEvent)) {
+    return c.json({ error: "access required" }, 401);
+  }
+  const mediaCacheControl = mediaEvent?.access_mode === "private"
+    ? "private, max-age=3600"
+    : "public, max-age=31536000, immutable";
   const ifNoneMatch = c.req.header("If-None-Match") ?? "";
   const rangeHeader = c.req.header("Range") ?? "";
   // Single byte range only (what browsers send for <video> seeking): bytes=a-b,
@@ -666,7 +1294,7 @@ app.get("/media/*", async (c) => {
     return new Response(object.body, {
       headers: {
         "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
-        "Cache-Control": "public, max-age=31536000, immutable",
+        "Cache-Control": mediaCacheControl,
         "Accept-Ranges": "bytes",
         ETag: object.httpEtag,
       },
@@ -681,7 +1309,7 @@ app.get("/media/*", async (c) => {
   const etag = meta.httpEtag;
   const baseHeaders: Record<string, string> = {
     "Content-Type": meta.httpMetadata?.contentType ?? "application/octet-stream",
-    "Cache-Control": "public, max-age=31536000, immutable",
+    "Cache-Control": mediaCacheControl,
     "Accept-Ranges": "bytes",
     ETag: etag,
   };
@@ -733,9 +1361,29 @@ app.get("/media/*", async (c) => {
   return new Response(object.body, { headers: baseHeaders });
 });
 
+async function serveNoIndexSpa(c: Context<{ Bindings: Env }>): Promise<Response> {
+  const response = await c.env.ASSETS.fetch(c.req.raw);
+  const headers = new Headers(response.headers);
+  headers.set("X-Robots-Tag", NO_INDEX);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+app.get("/admin", serveNoIndexSpa);
+app.get("/admin/*", serveNoIndexSpa);
+app.get("/e/*", serveNoIndexSpa);
+
 app.onError((err, c) => {
   console.error(err);
   return c.json({ error: "Internal server error" }, 500);
 });
 
-export default app;
+export default {
+  fetch: (request: Request, env: Env, ctx: ExecutionContext) => app.fetch(request, env, ctx),
+  scheduled: async (_controller: ScheduledController, env: Env, ctx: ExecutionContext) => {
+    ctx.waitUntil(cleanupExpiredEvents(env));
+  },
+} satisfies ExportedHandler<Env>;

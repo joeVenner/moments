@@ -69,30 +69,50 @@ light text), and do not flatten back to pure-black — flat near-black reads as 
   `multipartUpload`, `uploadStore`, `useUploadWakeLock`).
 - **Worker:** `src/worker/` — Hono routes (`index.ts`), `storage.ts` (R2), `banner.ts` (AI),
   `auth.ts` (admin), `presign.ts` + `multipartPresign.ts` (R2 S3 signing). D1 migrations in `migrations/`.
-- **Upload paths (two):**
-  - **≤25 MB** → native multipart route (`POST /moments`, `parseBody` → `BUCKET.put`). Buffers
-    in the 128 MB isolate; that's why the cap is 25 MB.
-  - **>25 MB up to 512 MB** → **resumable S3 multipart direct-to-R2** (`multipartUpload.ts` +
+- **Moment upload paths:**
+  - **Images and Stream-disabled fallback, up to 512 MB** → **resumable S3 multipart direct-to-R2** (`multipartUpload.ts` +
     worker `multipartPresign.ts` + `/moments/multipart/*` routes). The file is split into 8 MiB
-    parts the browser PUTs straight to R2 (Worker never sees the bytes); 3 parts concurrent, XHR
-    per-part progress, resume from R2 `ListParts` on `visibilitychange→visible`, progress mirrored
-    to IndexedDB, screen wake lock while foregrounded. An interruption costs one ~8 MiB part,
-    not the whole file. Raising the 512 MB cap is now a one-config change (R2 allows 5 TB /
-    10 000 parts); see `.agent/PLAN.md` P3.1.
-  - **Opt-in "Optimize videos before upload" toggle** (default OFF): shrinks a large video
-    before upload via WebCodecs (`lib/optimizeVideo.ts`, mp4box demux + mp4-muxer mux, H.264
-    Baseline + AAC-LC remux). Gated + failure-safe (returns the original on any error). The
-    heavy pipeline is **dynamic-imported** so the default bundle stays lean; only the light
-    `lib/optimizeDetect.ts` (canTranscodeVideo/shouldOptimize, no heavy deps) is bundled.
-    **Needs on-device validation before flipping default-on** — the muxed MP4 isn't
-    verified in the dev sandbox.
+    parts the browser PUTs straight to R2 (Worker never sees the bytes); 3 parts per file with
+    large files globally serialized to avoid mobile network overload. Metadata is persisted in
+    IndexedDB and the file bytes in OPFS. The queue resumes from R2 `ListParts` on app startup,
+    reconnect, visibility return, or Background Sync where supported. A root-scoped service
+    worker uploads staged files while the browser grants background execution; iOS resumes as
+    soon as the page is runnable again. An interruption costs at most one ~8 MiB part. The
+    screen wake lock remains a foreground optimization.
+  - **Videos when Stream is configured** → Cloudflare Stream direct-creator `tus` upload
+    (`streamUpload.ts` + `/moments/stream/{session,tus,complete,abort}`). The Worker proxies
+    only the authenticated creation request; bytes go browser→Stream. The client persists
+    its tus URL + file in the same upload queue, then renders the adaptive Stream iframe.
+    Requires `STREAM_ACCOUNT_ID`, secret `STREAM_API_TOKEN` (Stream Edit), and
+    `STREAM_CUSTOMER_CODE`; missing config is explicitly detected and falls back to R2.
+  - The old native `POST /moments` 25 MB route remains for compatibility, but the guest UI
+    sends every new moment through a durable path so the upload manager covers all items.
+  - The experimental on-device WebCodecs video optimizer is intentionally not exposed in
+    the UI. Even high-end iPhones can throttle or suspend a long transcode. Upload originals
+    through the resumable multipart path; do any future video processing server-side.
 - **R2 bucket CORS (load-bearing for multipart):** the browser must read each part's `ETag` from
   the UploadPart PUT response, so the `moments-media` bucket CORS MUST `ExposeHeaders: ["ETag"]`
   (the old single-PUT path never needed it — it `head()`-validated). Policy + apply command:
-  `scripts/r2-cors.json` + `wrangler r2 bucket cors put moments-media --file scripts/r2-cors.json`.
+  `scripts/r2-cors.json` + `wrangler r2 bucket cors set moments-media --file scripts/r2-cors.json`.
   Without `ETag` exposed, multipart completes fail with "R2 returned no ETag".
 - **R2 S3 creds prereq:** `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_S3_ENDPOINT` /
-  `R2_BUCKET_NAME` in `.dev.vars` + `wrangler secret put`. Both upload paths return 501 until set.
+  `R2_BUCKET_NAME` in `.dev.vars` + `wrangler secret put`.
+- **Local R2 must stay remote:** multipart bytes use the real R2 S3 API even during local
+  development, so the `BUCKET` binding has `remote: true`. Otherwise final validation checks
+  Miniflare's empty local bucket and every successful upload fails at 99% with a false 404.
+- **Observability:** Workers Logs enabled at 10% head sampling. Upload logs are structured
+  JSON and intentionally exclude filenames, captions, and uploader names.
+- **Client bundles:** routes are lazy-loaded. Keep Stream/tus dynamically imported so guests
+  do not download it until a Stream video upload/cancel is actually attempted.
+- **Admin/event controls:** migrations 0005–0008 add moderation, event expiry/archive,
+  PBKDF2-protected private events, reactions, and highlights. A daily 03:00 UTC cron removes
+  expired event media and owned D1 rows. Private media checks an HttpOnly event-access cookie.
+- **Exports & analytics:** admin galleries support selected/full streaming ZIP downloads
+  (`fflate` is dynamically imported), moderation bulk actions, storage/activity analytics,
+  and five reusable event templates with retention defaults.
+- **Roadmap verifier:** with local dev running, `npm run verify:roadmap` creates a disposable
+  private event and exercises PIN access, upload, reaction/highlight, analytics, moderation,
+  deletion, and archive cleanup end to end.
 - Tests: `vitest run`. Typecheck: `tsc -b --noEmit`.
 
 ## Working agreements

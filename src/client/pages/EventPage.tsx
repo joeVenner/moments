@@ -1,20 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   getEvent,
+  getUploadCapabilities,
   listMoments,
-  uploadMoment,
   joinEvent,
-  NATIVE_UPLOAD_MAX_BYTES,
   DIRECT_UPLOAD_MAX_BYTES,
+  AccessRequiredError,
+  unlockEvent,
 } from "../lib/api";
 import {
   resumableUploadMoment,
+  UploadAlreadyRunningError,
   UploadInterruptedError,
 } from "../lib/multipartUpload";
-import { findResumableUpload } from "../lib/uploadStore";
+import { ACTIVE_UPLOAD_STATUSES, findResumableUpload, getUploadFile, listUploads } from "../lib/uploadStore";
 import { useUploadWakeLock } from "../lib/useUploadWakeLock";
-import { shouldOptimize } from "../lib/optimizeDetect";
 import { getNickname, setNickname as saveNickname } from "../lib/nickname";
 import type { EventData } from "../lib/types";
 import { NicknameGate } from "../components/NicknameGate";
@@ -29,11 +30,37 @@ import { prefersReducedMotion } from "../lib/motion";
 import { EventBannerScene } from "../lib/eventBanners";
 import { useI18n } from "../lib/i18n";
 import { EmptyCamera } from "../components/EmptyCamera";
+import { PAGE_RESUME_EVENT } from "../lib/uploadSync";
+import { UploadManager } from "../components/UploadManager";
+import { EventAccessGate } from "../components/EventAccessGate";
+import { Highlights } from "../components/Highlights";
 
 // Server caps a feed page at 25 moments. Kept in one place so the client page
 // math and the worker default stay in sync (the worker clamps its own limit to
 // [1,100], so this is the contracted page size the nav is built against).
 const PAGE_SIZE = 25;
+const MAX_FILE_UPLOADS = 2;
+
+async function mapSettledWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  task: (item: T) => Promise<R>
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+      try {
+        results[index] = { status: "fulfilled", value: await task(items[index]) };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
 
 export default function EventPage() {
   const { t } = useI18n();
@@ -43,11 +70,14 @@ export default function EventPage() {
   const [nickname, setNicknameState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [accessRequired, setAccessRequired] = useState(false);
+  const [accessVersion, setAccessVersion] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [streamEnabled, setStreamEnabled] = useState(false);
   const [toastPoints, setToastPoints] = useState<number | null>(null);
   const [milestoneReached, setMilestoneReached] = useState<number | null>(null);
-  const [tab, setTab] = useState<"feed" | "leaderboard">("feed");
+  const [tab, setTab] = useState<"feed" | "highlights" | "leaderboard">("feed");
   // Bumped after a join so the ParticipantStrip refetches immediately (a newly
   // joined guest otherwise wouldn't appear until a page refresh).
   const [participantVersion, setParticipantVersion] = useState(0);
@@ -77,19 +107,132 @@ export default function EventPage() {
     setPage(1);
     setTotal(0);
     setMyPoints(0);
-    Promise.all([
-      getEvent(slug),
-      listMoments(slug, { limit: PAGE_SIZE, offset: 0, uploaderName: name ?? undefined }),
-    ])
+    void getUploadCapabilities()
+      .then((capabilities) => setStreamEnabled(capabilities.stream_tus))
+      .catch(() => setStreamEnabled(false));
+    const inviteToken = new URLSearchParams(window.location.search).get("invite");
+    const unlock = inviteToken ? unlockEvent(slug, { invite_token: inviteToken }) : Promise.resolve();
+    unlock.then(() => {
+      if (inviteToken) window.history.replaceState({}, "", window.location.pathname);
+      return Promise.all([
+        getEvent(slug),
+        listMoments(slug, { limit: PAGE_SIZE, offset: 0, uploaderName: name ?? undefined }),
+      ]);
+    })
       .then(([eventRes, momentsRes]) => {
+        setAccessRequired(false);
         setEvent(eventRes.event);
         setMoments(momentsRes.moments);
         setTotal(momentsRes.total ?? 0);
         setMyPoints(momentsRes.your_points ?? 0);
       })
-      .catch(() => setNotFound(true))
+      .catch((error) => {
+        if (error instanceof AccessRequiredError || error instanceof Error && error.message.includes("access")) {
+          setAccessRequired(true);
+        } else {
+          setNotFound(true);
+        }
+      })
       .finally(() => setLoading(false));
-  }, [slug]);
+  }, [slug, accessVersion]);
+
+  // Resume staged files on cold start, when connectivity returns, and when iOS
+  // gives the page execution time again. Background Sync covers browsers that
+  // support it; this path is the universal fallback.
+  useEffect(() => {
+    if (!slug || !nickname) return;
+    let disposed = false;
+    let running = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const refreshFeed = async () => {
+      const response = await listMoments(slug, {
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
+        uploaderName: nickname,
+      });
+      if (disposed) return;
+      setMoments(response.moments);
+      setTotal(response.total ?? 0);
+      setMyPoints(response.your_points ?? 0);
+    };
+
+    const resumeStaged = async () => {
+      if (disposed || running || !navigator.onLine) return;
+      running = true;
+      let completed = false;
+      let shouldRetry = false;
+      try {
+        const uploads = (await listUploads(slug)).sort((a, b) => a.createdAt - b.createdAt);
+        for (const upload of uploads.filter((row) => ACTIVE_UPLOAD_STATUSES.has(row.status))) {
+          if (disposed) break;
+          const file = await getUploadFile(upload);
+          if (!file) continue;
+          setUploading(true);
+          try {
+            if (upload.backend === "stream") {
+              if (!streamEnabled) {
+                shouldRetry = true;
+                continue;
+              }
+              const { streamUploadMoment } = await import("../lib/streamUpload");
+              await streamUploadMoment({
+                slug,
+                file,
+                caption: upload.caption ?? "",
+                uploaderName: upload.uploaderName,
+                resume: upload,
+              });
+            } else {
+              await resumableUploadMoment({
+                slug,
+                file,
+                caption: upload.caption ?? "",
+                uploaderName: upload.uploaderName,
+                resume: upload,
+              });
+            }
+            completed = true;
+          } catch (error) {
+            if (
+              !(error instanceof UploadAlreadyRunningError) &&
+              (!(error instanceof Error) || error.name !== "StreamUploadAlreadyRunningError")
+            ) {
+              shouldRetry = true;
+            }
+          }
+        }
+        if (completed) await refreshFeed();
+      } finally {
+        running = false;
+        if (!disposed) setUploading(false);
+        if (shouldRetry && !disposed) retryTimer = setTimeout(() => void resumeStaged(), 15_000);
+      }
+    };
+
+    const onOnline = () => void resumeStaged();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void resumeStaged();
+    };
+    const onServiceWorkerComplete = (event: Event) => {
+      const detail = (event as CustomEvent<{ slug?: string }>).detail;
+      if (!detail?.slug || detail.slug === slug) void refreshFeed();
+    };
+    window.addEventListener("online", onOnline);
+    window.addEventListener(PAGE_RESUME_EVENT, onOnline);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("moment-upload-completed", onServiceWorkerComplete);
+    void resumeStaged();
+
+    return () => {
+      disposed = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener(PAGE_RESUME_EVENT, onOnline);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("moment-upload-completed", onServiceWorkerComplete);
+    };
+  }, [slug, nickname, page, streamEnabled]);
 
   const loadPage = useCallback(
     async (n: number) => {
@@ -122,10 +265,13 @@ export default function EventPage() {
     [slug, total, nickname]
   );
 
-  async function handleUpload(files: File[], caption: string, opts?: { optimize?: boolean }) {
+  async function handleUpload(files: File[], caption: string) {
     if (!slug || !nickname || !event) return;
     const pointsBefore = myPoints;
     setUploadError(null);
+    // Ask the browser not to evict staged upload files under storage pressure.
+    // This is best-effort and intentionally happens during the user's click.
+    void navigator.storage?.persist?.().catch(() => false);
 
     // Reject oversized files up front with a clear message. The presigned
     // path caps at 512MB server-side (presign.ts MAX_DIRECT_UPLOAD_BYTES); without
@@ -168,70 +314,49 @@ export default function EventPage() {
           mime_type: file.type || null,
           _pending: true,
           _mimeType: file.type,
+          _progress: 0,
         })),
         ...prev,
       ]);
     }
 
-    const results = await Promise.allSettled(
-      pending.map(async ({ file, tempId }) => {
-        // Opt-in transcode (default off): shrink a large video before upload so
-        // it uses less data/time. The progress bar's first half tracks the
-        // transcode, the second half tracks the upload. Failure → upload the
-        // original (optimizeVideo returns null), so a buggy transcode never
-        // loses a video.
-        let effectiveFile = file;
-        let uploadBase = 0; // 0 = no optimize phase; 0.5 = optimize filled 0..0.5
-        if (opts?.optimize && shouldOptimize(file)) {
-          // Dynamic import keeps mp4box + mp4-muxer (~56KB gzip) out of the
-          // default bundle — only fetched when the opt-in toggle is actually
-          // used on a large video.
-          const { optimizeVideo } = await import("../lib/optimizeVideo");
-          const optimized = await optimizeVideo(file, (frac) => {
-            setMoments((prev) =>
-              prev.map((m) => (m.id === tempId ? { ...m, _progress: frac * 0.5 } : m))
-            );
-          });
-          if (optimized) {
-            effectiveFile = optimized;
-            uploadBase = 0.5;
-          }
-        }
+    const results = await mapSettledWithConcurrency(
+      pending,
+      MAX_FILE_UPLOADS,
+      async ({ file, tempId }) => {
+        const effectiveFile = file;
 
-        // Files past the native cap go through the resumable chunked path: the
-        // file is split into 8 MiB parts PUT straight to R2, so an interruption
-        // only costs one part and resumes from R2's ListParts on return. Small
-        // files keep the simple native multipart route. If this file already has
-        // an in-progress upload (paused earlier / re-picked after a reload),
-        // resume it instead of starting over.
-        let result;
-        if (effectiveFile.size > NATIVE_UPLOAD_MAX_BYTES) {
-          const resume = await findResumableUpload(slug, effectiveFile);
-          result = await resumableUploadMoment({
-            slug,
-            file: effectiveFile,
-            caption,
-            uploaderName: nickname,
-            resume: resume ?? undefined,
-            onProgress: (loaded, total) => {
-              const up = total > 0 ? loaded / total : 0;
-              setMoments((prev) =>
-                prev.map((m) =>
-                  m.id === tempId ? { ...m, _progress: uploadBase + up * (1 - uploadBase) } : m
-                )
-              );
-            },
-          });
-        } else {
-          const formData = new FormData();
-          formData.append("file", effectiveFile);
-          formData.append("uploader_name", nickname);
-          if (caption) formData.append("caption", caption);
-          result = await uploadMoment(slug, formData);
-        }
+        // Every moment uses the durable multipart queue. A small file is a valid
+        // one-part multipart upload, so photos now get the same resume, manager,
+        // retry, and cancellation behavior as large videos.
+        const resume = await findResumableUpload(slug, effectiveFile);
+        const progress = (loaded: number, total: number) => {
+          const up = total > 0 ? loaded / total : 0;
+          setMoments((prev) =>
+            prev.map((m) => (m.id === tempId ? { ...m, _progress: up } : m))
+          );
+        };
+        const useStream = resume?.backend === "stream" || (!resume && streamEnabled && effectiveFile.type.startsWith("video/"));
+        const result = useStream
+          ? await import("../lib/streamUpload").then(({ streamUploadMoment }) => streamUploadMoment({
+              slug,
+              file: effectiveFile,
+              caption,
+              uploaderName: nickname,
+              resume,
+              onProgress: progress,
+            }))
+          : await resumableUploadMoment({
+              slug,
+              file: effectiveFile,
+              caption,
+              uploaderName: nickname,
+              resume,
+              onProgress: progress,
+            });
         setMoments((prev) => prev.map((m) => (m.id === tempId ? result.moment : m)));
         return result.points_awarded;
-      })
+      }
     );
 
     let totalPoints = 0;
@@ -241,12 +366,12 @@ export default function EventPage() {
       if (result.status === "fulfilled") {
         totalPoints += result.value;
       } else {
-        failures += 1;
         const reason = result.reason;
-        if (reason instanceof UploadInterruptedError) {
-          // The R2 upload is left open — the guest can resume by re-selecting
-          // the file (findResumableUpload will rematch it). Keep the hint clear.
+        if (reason instanceof UploadInterruptedError || reason?.name === "StreamUploadInterruptedError") {
+          // The durable queue owns it now and will retry automatically.
           pausedNames.push(pending[i].file.name);
+        } else if (!(reason instanceof UploadAlreadyRunningError) && reason?.name !== "StreamUploadAlreadyRunningError") {
+          failures += 1;
         }
         setMoments((prev) => prev.filter((m) => m.id !== pending[i].tempId));
       }
@@ -273,13 +398,19 @@ export default function EventPage() {
       // rather than overwriting it with the per-upload failure count.
       setUploadError((prev) => (prev ? `${prev} · ${failMsg}` : failMsg));
     }
-    // A paused upload isn't a hard failure — tell the guest exactly how to
-    // resume (re-select the file; the chunked uploader skips parts R2 already has).
+    // A paused upload isn't a hard failure; it remains staged locally.
     if (pausedNames.length > 0) {
       const pausedMsg = t("uploadPaused", { name: pausedNames[0] });
       setUploadError((prev) => (prev ? `${prev} · ${pausedMsg}` : pausedMsg));
     }
     setUploading(false);
+  }
+
+  if (accessRequired && slug) {
+    return <EventAccessGate slug={slug} onUnlocked={() => {
+      setLoading(true);
+      setAccessVersion((value) => value + 1);
+    }} />;
   }
 
   if (loading) {
@@ -385,24 +516,50 @@ export default function EventPage() {
           >
             {t("leaderboardTab")}
           </button>
+          <button
+            onClick={() => setTab("highlights")}
+            className={`flex-1 rounded-full py-2 transition ${
+              tab === "highlights"
+                ? "bg-[var(--color-accent)] text-white"
+                : "text-[var(--color-text-muted)] hover:text-[var(--color-accent-dark)]"
+            }`}
+          >
+            {t("highlightsTab")}
+          </button>
+        </div>
+
+        <div className="mt-3 flex justify-end">
+          <Link
+            to={`/e/${encodeURIComponent(slug!)}/slideshow`}
+            data-spark
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-bg-alt)] px-4 py-2 font-mono text-xs text-[var(--color-text)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+          >
+            <span aria-hidden>▻</span>
+            {t("openSlideshow")}
+          </Link>
         </div>
 
         {tab === "leaderboard" ? (
           <div key="leaderboard" className="mt-6 animate-[fade-in_250ms_ease-out]">
             <Leaderboard slug={slug!} />
           </div>
+        ) : tab === "highlights" ? (
+          <div key="highlights" className="animate-[fade-in_250ms_ease-out]">
+            <Highlights slug={slug!} />
+          </div>
         ) : (
           <div key="feed" className="animate-[fade-in_250ms_ease-out]">
             {nickname && (
               <div className="mt-6">
                 <UploadDropzone onUpload={handleUpload} uploading={uploading} />
+                <UploadManager slug={slug!} />
                 {uploadError && <p className="mt-2 text-sm text-red-600">{uploadError}</p>}
               </div>
             )}
 
             <div ref={feedTopRef} className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {moments.map((moment, i) => (
-                <MomentCard key={moment.id} moment={moment} index={i} />
+                <MomentCard key={moment.id} moment={moment} index={i} slug={slug!} />
               ))}
             </div>
             {moments.length === 0 && (

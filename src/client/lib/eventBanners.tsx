@@ -17,7 +17,7 @@ export type BannerMotif = "bokeh" | "sparkle" | "confetti" | "scan" | "rings";
 
 export interface EventBannerPreset {
   /** Stable id, also used as the i18n key suffix (`banner${Capitalize(id)}`). */
-  id: "wedding" | "gala" | "birthday" | "corporate" | "other";
+  id: "wedding" | "gala" | "birthday" | "graduation" | "corporate" | "party" | "other";
   /** i18n key for the human-facing label. */
   labelKey: string;
   /** Diagonal gradient stops, top-left → bottom-right. Dark-native only. */
@@ -54,12 +54,26 @@ export const EVENT_BANNER_PRESETS: EventBannerPreset[] = [
     motif: "confetti",
   },
   {
+    id: "graduation",
+    labelKey: "bannerGraduation",
+    stops: ["#2b2417", "#1d1912", "#15130f"],
+    glow: "#d9a85a",
+    motif: "sparkle",
+  },
+  {
     id: "corporate",
     labelKey: "bannerCorporate",
     // Cool graphite + a cyan hairline — restrained, the only cool motif.
     stops: ["#222a2e", "#1a1f22", "#15191b"],
     glow: "#5fa8c4",
     motif: "scan",
+  },
+  {
+    id: "party",
+    labelKey: "bannerParty",
+    stops: ["#361d18", "#241512", "#17100f"],
+    glow: "#e58a67",
+    motif: "confetti",
   },
   {
     id: "other",

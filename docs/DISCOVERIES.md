@@ -303,7 +303,7 @@ Append-only. Newest at the bottom. Follow the global CLAUDE.md format.
 - **Prereq (infra, NOT code):** the `moments-media` bucket CORS MUST
   `ExposeHeaders: ["ETag"]` — the browser reads each part's ETag from the UploadPart
   PUT response to send to Complete; the old path never needed it (it `head()`-validated).
-  Apply via `wrangler r2 bucket cors put moments-media --file scripts/r2-cors.json`.
+  Apply via `wrangler r2 bucket cors set moments-media --file scripts/r2-cors.json`.
   R2 S3 creds already set (presign path). Without `ETag` exposed, completes fail with
   "R2 returned no ETag (check bucket CORS ExposeHeaders)".
 - **Reference:** commits pending (feat/interactive-landing-page). Verified by
@@ -344,3 +344,70 @@ Append-only. Newest at the bottom. Follow the global CLAUDE.md format.
   are unaffected.
 - **Reference:** commits pending (feat/interactive-landing-page). Verified by
   `tsc -b --noEmit`, `vitest` (59/59), `vite build`. Deploy pending Yassir's OK.
+
+## [2026-06-30] Context Update — durable automatic upload recovery
+- **Problem found:** multipart state persisted only metadata; the file itself lived in
+  memory, so a reload still required re-selection. Large files also multiplied the
+  three-part concurrency per selected file, stopped permanently after three retries,
+  and could loop if R2 completed but the final response was lost.
+- **What changed:** pending large-file bytes are staged in OPFS and removed after
+  confirmed completion; IndexedDB remains the metadata/ETag store. A root-scoped
+  service worker uses Background Sync where available. The page independently resumes
+  on startup, reconnect, visibility return, and a timed retry signal, covering browsers
+  without Background Sync. Web Locks serialize large files across tabs and the service
+  worker, while the page limits mixed-file batches to two active items. Part uploads now
+  use `fetch`, so the same multipart core runs in both page and service-worker contexts.
+- **Server hardening:** multipart status and completion are idempotent. A retry returns
+  the existing moment when registration already finished, and a lost R2 Complete
+  response is recovered by validating the exact assembled R2 object before registering
+  it. This closes the success-response-loss loop without duplicating points.
+- **Platform boundary:** iOS may suspend all web execution after lock/background. The
+  staged file and R2 parts survive that suspension and resume automatically as soon as
+  the page receives execution again; a native background transfer remains the only way
+  to guarantee continuous execution while iOS keeps an app suspended.
+- **Verification:** `tsc -b --noEmit`, `vitest` (59/59), and production `vite build`
+  pass. The build emits `/upload-service-worker.js` at the site root. The in-app browser
+  connector was unavailable; real-device airplane-mode/lock testing remains required.
+
+## [2026-06-30] Context Update — remove on-device video optimization from UI
+- The experimental WebCodecs optimization toggle and its EventPage wiring were removed
+  after poor runtime behavior on an iPhone 13 Pro. Guests now always upload the original
+  video through resumable multipart. Image compression remains enabled. The isolated
+  transcode source/tests are retained for reference but are unreachable from production.
+
+## [2026-06-30] Context Update — upload manager, observability, route splitting, Stream
+- **Upload manager:** added a persistent per-event queue UI with queued/uploading/retrying/
+  paused/completed states, progress, retry, cancel, dismiss, and clear-completed actions.
+  IndexedDB broadcasts changes across page/service-worker contexts; OPFS remains the byte
+  source. All guest moments now use a durable upload path, including small photos.
+- **Observability:** enabled Workers Logs with `head_sampling_rate: 0.1` and structured,
+  privacy-conscious upload lifecycle events. Filenames, captions, and uploader names are
+  excluded. Updated compatibility date to 2026-06-30.
+- **Route splitting:** Home/Admin/Event are loaded with React.lazy + Suspense. Startup JS fell
+  from 401.5 KB / 128.9 KB gzip to 264.1 KB / 86.2 KB gzip. Stream's tus client is a separate
+  63.7 KB / 17.2 KB gzip chunk loaded only for Stream video actions.
+- **Cloudflare Stream:** implemented a capability-gated direct creator tus path with opaque
+  same-origin sessions, persisted resume URLs, progress/cancel support, API verification,
+  idempotent moment registration, adaptive iframe playback, and thumbnails. Images remain
+  on R2; videos fall back to R2 until `STREAM_ACCOUNT_ID`, `STREAM_API_TOKEN`, and
+  `STREAM_CUSTOMER_CODE` are configured. No migration is needed: Stream sessions reuse the
+  existing `uploads` accounting table.
+- **Verification:** typecheck, production build, and 61 tests pass. Browser automation and
+  remote Wrangler inspection are unavailable because their execution surfaces are currently
+  not starting; Stream credentials are not configured locally, so a real Stream upload remains
+  an activation test rather than a completed runtime verification.
+
+## [2026-06-30] Context Update — event operations roadmap
+- Added moderation status with admin hide/restore/permanent delete and bulk selection. Public
+  feeds, points, leaderboards, highlights, and reactions only include approved moments.
+- Added event expiry/archive controls and a daily cleanup cron. Cleanup deletes R2/Stream
+  media, remaining event-prefix objects, moments, participants, and upload accounting before
+  marking the event archived. Local R2 uses the remote binding because multipart S3 writes
+  already target the real bucket.
+- Added selected/full album ZIP export using a dynamically loaded streaming `fflate` writer,
+  private events with PBKDF2 PIN hashes + invite tokens + HttpOnly access cookies, favorites
+  and reaction-ranked highlights, admin storage/activity analytics, and five reusable event
+  templates. Two generated dark-native WebP illustrations cover slideshow waiting and upload
+  completion states.
+- Migrations 0005–0008 apply the schema. `scripts/verify-roadmap.mjs` is the disposable live
+  route verifier; unit/schema/build checks cover the no-network path.
