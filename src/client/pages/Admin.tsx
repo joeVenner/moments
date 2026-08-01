@@ -22,7 +22,12 @@ const MAX_SELFIE_BYTES = 8 * 1024 * 1024; // mirrors src/worker/banner.ts MAX_SE
 
 export default function Admin() {
   const { t, eventTypeLabel } = useI18n();
-  const [authed, setAuthed] = useState(() => !!getAdminAuthHeader());
+  // "checking" means a stored credential exists but hasn't been verified
+  // against the server yet — the dashboard must not render until it resolves,
+  // otherwise a forged sessionStorage key would flash the admin UI shell.
+  const [authStatus, setAuthStatus] = useState<"checking" | "authed" | "unauthed">(() =>
+    getAdminAuthHeader() ? "checking" : "unauthed",
+  );
   const [events, setEvents] = useState<EventData[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -52,17 +57,20 @@ export default function Admin() {
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!authed) return;
+    if (authStatus !== "checking") return;
     listEvents()
-      .then((r) => setEvents(r.events))
+      .then((r) => {
+        setEvents(r.events);
+        setAuthStatus("authed");
+      })
       .catch((err) => {
         if (err instanceof UnauthorizedError) {
           clearAdminAuth();
-          setAuthed(false);
         }
+        setAuthStatus("unauthed");
       })
       .finally(() => setLoading(false));
-  }, [authed]);
+  }, [authStatus]);
 
   useEffect(() => {
     return () => {
@@ -85,7 +93,7 @@ export default function Admin() {
 
   function handleLogout() {
     clearAdminAuth();
-    setAuthed(false);
+    setAuthStatus("unauthed");
     setEvents([]);
   }
 
@@ -200,7 +208,7 @@ export default function Admin() {
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         clearAdminAuth();
-        setAuthed(false);
+        setAuthStatus("unauthed");
         return;
       }
       const message = err instanceof Error ? err.message : "";
@@ -264,7 +272,7 @@ export default function Admin() {
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         clearAdminAuth();
-        setAuthed(false);
+        setAuthStatus("unauthed");
         return;
       }
       setError(err instanceof Error ? err.message : t("failedToCreateEvent"));
@@ -273,8 +281,12 @@ export default function Admin() {
     }
   }
 
-  if (!authed) {
-    return <AdminLogin onSuccess={() => setAuthed(true)} />;
+  if (authStatus === "checking") {
+    return <div className="min-h-screen bg-[var(--color-bg)]" />;
+  }
+
+  if (authStatus === "unauthed") {
+    return <AdminLogin onSuccess={() => setAuthStatus("checking")} />;
   }
 
   return (

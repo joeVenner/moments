@@ -9,6 +9,7 @@ function environment(overrides: Partial<Env> = {}): Env {
     ASSETS: {} as Fetcher,
     ADMIN_USER: "admin",
     ADMIN_PASSWORD: "secret",
+    ADMIN_AUTH_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },
     ...overrides,
   };
 }

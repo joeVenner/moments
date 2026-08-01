@@ -1,9 +1,17 @@
+// Minimal local shape for the Rate Limiting binding — the stable
+// @cloudflare/workers-types export doesn't include it (only the
+// "experimental" subpath does), so we declare just what we call.
+export interface RateLimit {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
 export interface Env {
   DB: D1Database;
   BUCKET: R2Bucket;
   ASSETS: Fetcher;
   ADMIN_USER: string;
   ADMIN_PASSWORD: string;
+  ADMIN_AUTH_LIMITER: RateLimit;
   // Optional: AI banner generation is inert (returns 501) when unset.
   OPENAI_API_KEY?: string;
   // Optional: presigned large direct-to-R2 uploads are inert (returns 501)

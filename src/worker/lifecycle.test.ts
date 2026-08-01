@@ -44,6 +44,7 @@ describe("cleanupEvent", () => {
       ASSETS: {} as Fetcher,
       ADMIN_USER: "admin",
       ADMIN_PASSWORD: "secret",
+      ADMIN_AUTH_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },
     } satisfies Env;
 
     await cleanupEvent(env, { id: "event" });

@@ -41,5 +41,15 @@
       "bucket_name": "moments-media",
       "remote": true
     }
+  ],
+  "ratelimits": [
+    {
+      "name": "ADMIN_AUTH_LIMITER",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 10,
+        "period": 60
+      }
+    }
   ]
 }
