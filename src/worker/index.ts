@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { secureHeaders } from "hono/secure-headers";
 import type { Env, EventRow, MomentRow, ParticipantRow, LeaderboardEntry, UploadRow } from "./types";
 import { slugify, randomSuffix } from "./slugify";
 import { putMedia, pointsForContentType, sanitizeFilename, isAllowedContentType, MAX_UPLOAD_BYTES } from "./storage";
@@ -21,6 +22,12 @@ import { requireAdmin } from "./auth";
 import { generateAiBanner, BannerGenerationError } from "./banner";
 
 const app = new Hono<{ Bindings: Env }>();
+
+// The document (index.html, /admin, etc.) is served by the ASSETS binding and
+// never reaches this app — its security headers come from public/_headers.
+// This covers only what run_worker_first routes here: /api/* and /media/*.
+// CSP is left unset here (it's an HTML-document concern, handled by _headers).
+app.use(secureHeaders({ contentSecurityPolicy: undefined }));
 
 // Admin-only: listing all events and creating new ones. Guest-facing routes
 // (event by slug, moments, media, participants, leaderboard) stay public.
