@@ -68,6 +68,7 @@ export function NicknameGate({
           />
           <button
             type="submit"
+            data-spark
             disabled={!name.trim()}
             className="rounded-lg bg-[var(--color-accent)] px-4 py-2.5 font-mono text-sm font-medium text-white transition hover:bg-[var(--color-accent-dark)] disabled:opacity-50"
           >

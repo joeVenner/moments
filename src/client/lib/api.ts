@@ -1,11 +1,16 @@
 import type { EventData, MomentData } from "./types";
 import { getAdminAuthHeader } from "./adminAuth";
+import { getReactionId } from "./reactionId";
 
 export class UnauthorizedError extends Error {}
+export class AccessRequiredError extends Error {}
 
 async function asJson<T>(res: Response): Promise<T> {
-  if (res.status === 401) throw new UnauthorizedError("Unauthorized");
   const body = await res.json();
+  if (res.status === 401) {
+    if (body.access_required) throw new AccessRequiredError("Event access required");
+    throw new UnauthorizedError(body.error || "Unauthorized");
+  }
   if (!res.ok) throw new Error(body.error || "request failed");
   return body as T;
 }
@@ -27,6 +32,25 @@ export function createEvent(data: FormData) {
   );
 }
 
+export function updateEventLifecycle(
+  id: string,
+  input: { expires_at?: string | null; archive_now?: boolean }
+) {
+  return fetch(`/api/admin/events/${encodeURIComponent(id)}/lifecycle`, {
+    method: "PATCH",
+    headers: { ...adminHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((response) => asJson<{ event: EventData }>(response));
+}
+
+export function updateEventAccess(id: string, input: { mode: "public" | "private"; pin?: string }) {
+  return fetch(`/api/admin/events/${encodeURIComponent(id)}/access`, {
+    method: "PATCH",
+    headers: { ...adminHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((response) => asJson<{ event: EventData }>(response));
+}
+
 export function generateBanner(data: FormData) {
   return fetch("/api/admin/generate-banner", {
     method: "POST",
@@ -46,6 +70,14 @@ export function getEvent(slug: string) {
   return fetch(`/api/events/${slug}`).then((r) => asJson<{ event: EventData }>(r));
 }
 
+export function unlockEvent(slug: string, input: { pin?: string; invite_token?: string }) {
+  return fetch(`/api/events/${encodeURIComponent(slug)}/access`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((response) => asJson<{ unlocked: true }>(response));
+}
+
 export function listMoments(
   slug: string,
   opts?: { limit?: number; offset?: number; uploaderName?: string }
@@ -54,6 +86,7 @@ export function listMoments(
   if (opts?.limit != null) params.set("limit", String(opts.limit));
   if (opts?.offset != null) params.set("offset", String(opts.offset));
   if (opts?.uploaderName) params.set("uploader_name", opts.uploaderName);
+  params.set("reactor_id", getReactionId());
   const qs = params.toString();
   return fetch(`/api/events/${slug}/moments${qs ? `?${qs}` : ""}`).then((r) =>
     asJson<{
@@ -65,9 +98,71 @@ export function listMoments(
   );
 }
 
+export function listHighlights(slug: string) {
+  const params = new URLSearchParams({ reactor_id: getReactionId() });
+  return fetch(`/api/events/${encodeURIComponent(slug)}/highlights?${params}`).then((response) =>
+    asJson<{ moments: MomentData[] }>(response)
+  );
+}
+
+export function toggleMomentReaction(slug: string, momentId: string) {
+  return fetch(`/api/events/${encodeURIComponent(slug)}/moments/${encodeURIComponent(momentId)}/reactions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reactor_id: getReactionId() }),
+  }).then((response) => asJson<{ reacted: boolean; reaction_count: number }>(response));
+}
+
+export function listAdminMoments(slug: string) {
+  return fetch(`/api/admin/events/${encodeURIComponent(slug)}/moments`, {
+    headers: adminHeaders(),
+  }).then((response) => asJson<{ moments: MomentData[] }>(response));
+}
+
+export interface EventAnalyticsData {
+  summary: {
+    total_moments: number;
+    hidden_moments: number;
+    videos: number;
+    photos: number;
+    storage_bytes: number;
+    participants: number;
+    reactions: number;
+  };
+  activity: { day: string; count: number }[];
+  upload_states: { status: string; count: number }[];
+}
+
+export function getEventAnalytics(slug: string) {
+  return fetch(`/api/admin/events/${encodeURIComponent(slug)}/analytics`, {
+    headers: adminHeaders(),
+  }).then((response) => asJson<EventAnalyticsData>(response));
+}
+
+export function setMomentModeration(id: string, status: "approved" | "hidden") {
+  return fetch(`/api/admin/moments/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { ...adminHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  }).then((response) => asJson<{ moment: MomentData }>(response));
+}
+
+export function deleteAdminMoment(id: string) {
+  return fetch(`/api/admin/moments/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: adminHeaders(),
+  }).then((response) => asJson<{ deleted: true }>(response));
+}
+
 export function uploadMoment(slug: string, data: FormData) {
   return fetch(`/api/events/${slug}/moments`, { method: "POST", body: data }).then((r) =>
     asJson<{ moment: MomentData; points_awarded: number }>(r)
+  );
+}
+
+export function getUploadCapabilities() {
+  return fetch("/api/upload-capabilities").then((response) =>
+    asJson<{ stream_tus: boolean }>(response)
   );
 }
 
