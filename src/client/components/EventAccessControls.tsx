@@ -9,7 +9,10 @@ export function EventAccessControls({ event, onUpdate }: { event: EventData; onU
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const isPinLengthValid = pin === "" || (pin.length >= 6 && pin.length <= 20);
+
   const save = async () => {
+    if (!isPinLengthValid) return;
     setBusy(true);
     try {
       const result = await updateEventAccess(event.id, { mode, pin: pin || undefined });
@@ -31,9 +34,15 @@ export function EventAccessControls({ event, onUpdate }: { event: EventData; onU
           <option value="public">{t("publicEvent")}</option>
           <option value="private">{t("privateEvent")}</option>
         </select>
-        {mode === "private" && <input type="password" value={pin} onChange={(event) => setPin(event.target.value)} placeholder={event.access_mode === "private" ? t("newPinOptional") : t("eventPin")} className="min-w-40 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-alt)] px-3 py-2 text-sm" />}
-        <button type="button" disabled={busy} onClick={() => void save()} className="rounded-lg border border-[var(--color-border)] px-3 py-2 font-mono text-xs text-[var(--color-accent)] disabled:opacity-50">{t("savePrivacy")}</button>
+        {mode === "private" && <input type="password" minLength={6} maxLength={20} value={pin} onChange={(event) => setPin(event.target.value)} placeholder={event.access_mode === "private" ? t("newPinOptional") : t("eventPin")} className="min-w-40 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-alt)] px-3 py-2 text-sm" />}
+        <button type="button" disabled={busy || !isPinLengthValid} onClick={() => void save()} className="rounded-lg border border-[var(--color-border)] px-3 py-2 font-mono text-xs text-[var(--color-accent)] disabled:opacity-50">{t("savePrivacy")}</button>
       </div>
+      {mode === "private" && !isPinLengthValid && (
+        <p className="mt-2 text-xs text-[var(--color-text-muted)]">{t("pinLengthHint")}</p>
+      )}
+      {mode === "private" && event.access_mode === "private" && pin && (
+        <p className="mt-2 text-xs text-[var(--color-accent)]">{t("newPinRevokesAccess")}</p>
+      )}
       {mode === "private" && inviteUrl && <button type="button" onClick={() => void navigator.clipboard.writeText(inviteUrl)} className="mt-2 font-mono text-xs text-[var(--color-accent)]">{t("copyPrivateInvite")}</button>}
     </section>
   );
