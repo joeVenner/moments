@@ -22,8 +22,20 @@ import { requireAdmin } from "./auth";
 import { generateAiBanner, BannerGenerationError } from "./banner";
 import { isStreamConfigured, streamApiUrl, streamAuthHeaders, streamMediaUrl } from "./stream";
 import { deleteMomentMedia } from "./moderation";
-import { cleanupEvent, cleanupExpiredEvents } from "./lifecycle";
-import { grantEventAccess, hasEventAccess, hashEventPin, randomAccessToken } from "./eventAccess";
+import { cleanupEvent, cleanupExpiredEvents, pruneAccessFailures } from "./lifecycle";
+import {
+  MAX_PIN_LENGTH,
+  MIN_PIN_LENGTH,
+  PIN_FAILURE_WINDOW_MINUTES,
+  PIN_SLOWDOWN_MS,
+  decidePinAttempt,
+  grantEventAccess,
+  hashClientIp,
+  hashEventPin,
+  randomAccessToken,
+  timingSafeEqual,
+  verifyEventAccess,
+} from "./eventAccess";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -160,9 +172,10 @@ async function upsertParticipant(
 }
 
 app.use("/api/events/:slug/*", async (c, next) => {
-  if (c.req.path.endsWith("/access")) return next();
+  // Only the unlock endpoint itself is reachable without access.
+  if (c.req.method === "POST" && /^\/api\/events\/[^/]+\/access$/.test(c.req.path)) return next();
   const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
-  if (event?.access_mode === "private" && !hasEventAccess(c, event)) {
+  if (event?.access_mode === "private" && !(await verifyEventAccess(c, event))) {
     return c.json({ error: "access required", access_required: true }, 401);
   }
   return next();
@@ -231,10 +244,16 @@ app.post("/api/events", async (c) => {
 app.get("/api/events/:slug", async (c) => {
   const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
-  if (!hasEventAccess(c, event)) {
+  if (!(await verifyEventAccess(c, event))) {
     return c.json({ error: "access required", access_required: true }, 401);
   }
-  const { access_pin_hash: _hash, access_pin_salt: _salt, invite_token: _token, ...publicEvent } = event;
+  const {
+    access_pin_hash: _hash,
+    access_pin_salt: _salt,
+    invite_token: _token,
+    access_version: _version,
+    ...publicEvent
+  } = event;
   return c.json({ event: publicEvent });
 });
 
@@ -242,20 +261,78 @@ app.post("/api/events/:slug/access", async (c) => {
   const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
   if (event.access_mode !== "private") return c.json({ unlocked: true });
+
+  const secret = c.env.EVENT_ACCESS_SECRET;
+  if (!secret) {
+    // Fail closed: never fall back to issuing the raw invite token.
+    console.error(JSON.stringify({ msg: "event_access_secret_missing", route: "access" }));
+    return c.json({ error: "private events are temporarily unavailable" }, 503);
+  }
+
   const body = (await c.req.json().catch(() => null)) as {
     pin?: unknown;
     invite_token?: unknown;
   } | null;
   const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
   const inviteToken = typeof body?.invite_token === "string" ? body.invite_token : "";
-  let valid = Boolean(inviteToken && event.invite_token && inviteToken === event.invite_token);
-  if (!valid && pin && event.access_pin_hash && event.access_pin_salt) {
-    valid = (await hashEventPin(pin, event.access_pin_salt)) === event.access_pin_hash;
+
+  // The invite link is the host's escape hatch, so it is never throttled.
+  if (inviteToken && event.invite_token && timingSafeEqual(inviteToken, event.invite_token)) {
+    return c.json(await unlockResponse(c, secret, event));
   }
-  if (!valid) return c.json({ error: "invalid event access" }, 401);
-  grantEventAccess(c, event);
-  return c.json({ unlocked: true });
+  if (!pin || pin.length > MAX_PIN_LENGTH || !event.access_pin_hash || !event.access_pin_salt) {
+    return c.json({ error: "invalid event access" }, 401);
+  }
+
+  // Record the attempt *before* checking it, so concurrent guesses count
+  // each other; the row is removed again if the PIN turns out to be right.
+  const ipHash = await hashClientIp(secret, c.req.header("CF-Connecting-IP") ?? "unknown");
+  const attemptId = crypto.randomUUID();
+  await c.env.DB.prepare("INSERT INTO access_failures (id, event_id, ip_hash) VALUES (?, ?, ?)")
+    .bind(attemptId, event.id, ipHash).run();
+  const counts = await c.env.DB.prepare(
+    `SELECT COALESCE(SUM(ip_hash = ?), 0) AS client_failures, COUNT(*) AS event_failures
+       FROM access_failures
+      WHERE event_id = ? AND created_at > datetime('now', ?)`
+  ).bind(ipHash, event.id, `-${PIN_FAILURE_WINDOW_MINUTES} minutes`)
+    .first<{ client_failures: number; event_failures: number }>();
+  const decision = decidePinAttempt(
+    Math.max(0, (counts?.client_failures ?? 1) - 1),
+    Math.max(0, (counts?.event_failures ?? 1) - 1)
+  );
+  if (decision === "block") {
+    return c.json(
+      {
+        error: "too many attempts",
+        retry_after_seconds: PIN_FAILURE_WINDOW_MINUTES * 60,
+        hint: "ask the host for the invitation link",
+      },
+      429,
+      { "Retry-After": String(PIN_FAILURE_WINDOW_MINUTES * 60) }
+    );
+  }
+  if (decision === "slow") await new Promise((resolve) => setTimeout(resolve, PIN_SLOWDOWN_MS));
+
+  const isPinValid = timingSafeEqual(await hashEventPin(pin, event.access_pin_salt), event.access_pin_hash);
+  if (!isPinValid) return c.json({ error: "invalid event access" }, 401);
+
+  await c.env.DB.prepare("DELETE FROM access_failures WHERE id = ?").bind(attemptId).run();
+  return c.json(await unlockResponse(c, secret, event));
 });
+
+/** `{unlocked}` stays for the web client; native clients use access_token as X-Event-Access. */
+async function unlockResponse(
+  c: Context<{ Bindings: Env }>,
+  secret: string,
+  event: EventRow
+): Promise<{ unlocked: true; access_token: string; expires_at: string }> {
+  const grant = await grantEventAccess(c, secret, event);
+  return {
+    unlocked: true,
+    access_token: grant.accessToken,
+    expires_at: new Date(grant.expiresAt * 1000).toISOString(),
+  };
+}
 
 app.patch("/api/admin/events/:id/access", async (c) => {
   const event = await c.env.DB.prepare("SELECT * FROM events WHERE id = ?")
@@ -267,17 +344,29 @@ app.patch("/api/admin/events/:id/access", async (c) => {
 
   let salt = event.access_pin_salt;
   let hash = event.access_pin_hash;
+  let inviteToken = event.invite_token ?? randomAccessToken();
+  let accessVersion = event.access_version;
   const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
   if (pin) {
-    if (pin.length < 4 || pin.length > 20) return c.json({ error: "PIN must be 4 to 20 characters" }, 400);
+    if (pin.length < MIN_PIN_LENGTH || pin.length > MAX_PIN_LENGTH) {
+      return c.json({ error: `PIN must be ${MIN_PIN_LENGTH} to ${MAX_PIN_LENGTH} characters` }, 400);
+    }
     salt = randomAccessToken().slice(0, 32);
     hash = await hashEventPin(pin, salt);
+    // A new PIN means the old one may have leaked: revoke every issued grant
+    // and every shared invite link. The host copies the new link afterwards.
+    accessVersion += 1;
+    inviteToken = randomAccessToken();
+  } else if (mode === "private" && event.access_mode !== "private") {
+    // Re-privatising must not resurrect grants issued during an earlier private period.
+    accessVersion += 1;
   }
   if (mode === "private" && !hash) return c.json({ error: "a PIN is required for private events" }, 400);
-  const inviteToken = event.invite_token ?? randomAccessToken();
   await c.env.DB.prepare(
-    "UPDATE events SET access_mode = ?, access_pin_hash = ?, access_pin_salt = ?, invite_token = ? WHERE id = ?"
-  ).bind(mode, hash, salt, inviteToken, event.id).run();
+    `UPDATE events
+        SET access_mode = ?, access_pin_hash = ?, access_pin_salt = ?, invite_token = ?, access_version = ?
+      WHERE id = ?`
+  ).bind(mode, hash, salt, inviteToken, accessVersion, event.id).run();
   const updated = await c.env.DB.prepare(
     `SELECT id, slug, title, type, main_characters, description, cover_image_url,
             created_at, starts_at, expires_at, archived_at, access_mode, invite_token
@@ -1276,7 +1365,7 @@ app.get("/media/*", async (c) => {
     ? await c.env.DB.prepare("SELECT * FROM events WHERE id = ?").bind(eventId).first<EventRow>()
     : await c.env.DB.prepare("SELECT * FROM events WHERE cover_image_url = ? LIMIT 1")
         .bind(`/media/${key}`).first<EventRow>();
-  if (mediaEvent?.access_mode === "private" && !hasEventAccess(c, mediaEvent)) {
+  if (mediaEvent?.access_mode === "private" && !(await verifyEventAccess(c, mediaEvent))) {
     return c.json({ error: "access required" }, 401);
   }
   const mediaCacheControl = mediaEvent?.access_mode === "private"
@@ -1389,5 +1478,6 @@ export default {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) => app.fetch(request, env, ctx),
   scheduled: async (_controller: ScheduledController, env: Env, ctx: ExecutionContext) => {
     ctx.waitUntil(cleanupExpiredEvents(env));
+    ctx.waitUntil(pruneAccessFailures(env));
   },
 } satisfies ExportedHandler<Env>;
