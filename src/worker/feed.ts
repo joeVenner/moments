@@ -24,14 +24,22 @@ type RawMediaColumn =
   | "poster_key";
 
 /** Public feed item: raw media columns are folded into `media`. */
-export type FeedMoment = Omit<MomentRow, "moderation_status" | "seq" | "change_seq" | RawMediaColumn> & {
+export type FeedMoment = Omit<
+  MomentRow,
+  "moderation_status" | "seq" | "change_seq" | "reaction_count" | "reacted" | RawMediaColumn
+> & {
   seq: number;
   change_seq: number;
+  reaction_count: number;
+  /** Whether `reactor_id` has reacted to this moment. */
+  reacted: boolean;
   media: MomentMedia;
 };
 
 /** Raw row as selected; R2 keys are internal and replaced by `media` URLs. */
-type FeedRow = Omit<FeedMoment, "media"> & { [column in RawMediaColumn]: MomentRow[column] };
+type FeedRow = Omit<FeedMoment, "media" | "reacted"> & {
+  reacted: number;
+} & { [column in RawMediaColumn]: MomentRow[column] };
 
 function toFeedMoment(row: FeedRow): FeedMoment {
   const media = buildMomentMedia(row);
@@ -43,9 +51,10 @@ function toFeedMoment(row: FeedRow): FeedMoment {
     thumb_key: _thumb,
     display_key: _display,
     poster_key: _poster,
+    reacted,
     ...moment
   } = row;
-  return { ...moment, media };
+  return { ...moment, reacted: reacted === 1, media };
 }
 
 export interface FeedPage {
