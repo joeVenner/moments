@@ -31,6 +31,8 @@ export interface Env {
   // "true" makes a claimed nickname joinable only with its own guest token
   // (guestIdentity.ts). Off until the web and iOS clients all send tokens.
   GUEST_TOKENS_ENFORCED?: string;
+  /** Oldest iOS build number the v1 API accepts; older builds get 426. Unset = no minimum. */
+  MIN_IOS_BUILD?: string;
 }
 
 export interface EventRow {

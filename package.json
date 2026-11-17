@@ -16,6 +16,7 @@
     "db:migrate:remote": "wrangler d1 migrations apply moments-db --remote",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
+    "openapi:update": "UPDATE_OPENAPI=1 vitest run src/worker/v1/openapi.test.ts",
     "verify:roadmap": "node scripts/verify-roadmap.mjs",
     "verify:seo": "node scripts/verify-seo.mjs",
     "seo:indexnow": "node scripts/submit-indexnow.mjs"

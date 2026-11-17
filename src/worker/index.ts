@@ -20,6 +20,7 @@ import {
 } from "./multipartPresign";
 import { requireAdmin } from "./auth";
 import { getActiveEventBySlug, getEventBySlug, toPublicEvent } from "./events";
+import { v1 } from "./v1";
 import { generateAiBanner, BannerGenerationError } from "./banner";
 import { isStreamConfigured, streamApiUrl, streamAuthHeaders, streamMediaUrl } from "./stream";
 import { deleteMomentMedia } from "./moderation";
@@ -176,6 +177,9 @@ async function upsertParticipant(
     .bind(crypto.randomUUID(), eventId, nickname, avatarSeed ?? null)
     .run();
 }
+
+// Native app API (src/worker/v1). Has its own private-event gate.
+app.route("/api/v1", v1);
 
 app.use("/api/events/:slug/*", async (c, next) => {
   // Only the unlock endpoint itself is reachable without access.
