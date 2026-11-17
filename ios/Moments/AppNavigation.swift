@@ -20,15 +20,25 @@ final class AppNavigation {
     private(set) var openCount = 0
     @ObservationIgnored private var pendingInvite: (slug: EventSlug, token: InviteToken)?
     @ObservationIgnored private let router: AppRouter
+    @ObservationIgnored private let now: () -> ContinuousClock.Instant
+    @ObservationIgnored private var lastLink: (url: URL, at: ContinuousClock.Instant)?
 
-    init(router: AppRouter) {
+    /// The same link can arrive through both `onOpenURL` and the web user
+    /// activity; deliveries this close together count once.
+    static let duplicateWindow: Duration = .seconds(2)
+
+    init(router: AppRouter, now: @escaping () -> ContinuousClock.Instant = { .now }) {
         self.router = router
+        self.now = now
     }
 
     /// Unrecognised links are ignored (the current screen stays).
     @discardableResult
     func handle(_ url: URL) -> Bool {
         guard let route = router.route(for: url) else { return false }
+        let arrivedAt = now()
+        if let lastLink, lastLink.url == url, arrivedAt - lastLink.at < Self.duplicateWindow { return true }
+        lastLink = (url, arrivedAt)
         switch route {
         case let .event(slug, invite):
             pendingInvite = invite.map { (slug, $0) }

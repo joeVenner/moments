@@ -26,12 +26,28 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(navigation.takeInvite(for: party) == nil)
     }
 
+    @Test func duplicateDeliveryDoesNotReArmTheInvite() {
+        var clock = ContinuousClock.now
+        let navigation = AppNavigation(router: AppRouter(), now: { clock })
+        let link = URL(string: "https://moments-hq.com/e/party?invite=\(invite)")!
+        navigation.handle(link)
+        #expect(navigation.takeInvite(for: EventSlug("party")!) != nil)
+        navigation.handle(link)
+        #expect(navigation.takeInvite(for: EventSlug("party")!) == nil)
+        #expect(navigation.openCount == 1)
+        clock = clock.advanced(by: .seconds(5))
+        navigation.handle(link)
+        #expect(navigation.openCount == 2)
+    }
+
     @Test func foreignLinksAreIgnoredAndRepeatsStillCount() {
-        let navigation = AppNavigation(router: AppRouter())
+        var clock = ContinuousClock.now
+        let navigation = AppNavigation(router: AppRouter(), now: { clock })
         let link = URL(string: "https://moments-hq.com/e/party/slideshow")!
         navigation.handle(link)
         #expect(!navigation.handle(URL(string: "https://evil.test/e/x")!))
         #expect(navigation.destination == .slideshow(EventSlug("party")!))
+        clock = clock.advanced(by: .seconds(5))
         navigation.handle(link)
         #expect(navigation.openCount == 2)
     }
