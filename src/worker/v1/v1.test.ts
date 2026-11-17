@@ -1,10 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../index";
-import { accessCookieName, signAccessGrant } from "../eventAccess";
+import { accessCookieName, hashEventPin, MAX_PIN_FAILURES_PER_CLIENT, signAccessGrant } from "../eventAccess";
 import { createSqliteD1, type SqliteD1 } from "../testing/sqliteD1";
 import type { Env } from "../types";
 import { isBelowMinimumBuild, parseIosBuild } from "./index";
-import { ErrorSchema, EventSchema, FeedChangesSchema, FeedPageSchema, JoinResponseSchema } from "./schemas";
+import {
+  AccessResponseSchema,
+  ErrorSchema,
+  EventSchema,
+  FeedChangesSchema,
+  FeedPageSchema,
+  JoinResponseSchema,
+  TooManyAttemptsSchema,
+} from "./schemas";
 
 const SECRET = "test-access-secret-123";
 let sqlite: SqliteD1;
@@ -255,6 +263,133 @@ describe("error shapes", () => {
 
   it("checks the event before validating the query", async () => {
     expect(await (await call("/events/missing/feed/changes")).json()).toMatchObject({ code: "event_not_found" });
+  });
+});
+
+describe("POST /events/{slug}/access", () => {
+  const PIN = "482916";
+
+  beforeEach(async () => {
+    seedEvent("event-p", "secret", "private");
+    sqlite.raw
+      .prepare("UPDATE events SET access_pin_hash = ?, access_pin_salt = 'salt-1', invite_token = 'invite-abc' WHERE id = 'event-p'")
+      .run(await hashEventPin(PIN, "salt-1"));
+  });
+
+  function requestAccess(slug: string, body: unknown, headers: Record<string, string> = {}) {
+    return call(`/events/${slug}/access`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.7", ...headers },
+      body: JSON.stringify(body),
+    });
+  }
+
+  function failureCount() {
+    return (sqlite.raw.prepare("SELECT COUNT(*) AS n FROM access_failures").get() as { n: number }).n;
+  }
+
+  it("grants a usable, cookie-free grant for the right PIN", async () => {
+    const res = await requestAccess("secret", { pin: ` ${PIN} ` });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Set-Cookie")).toBeNull();
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    const body = exact(AccessResponseSchema, await res.json());
+    expect(body.expires_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    const feed = await call("/events/secret/feed", { headers: { "X-Event-Access": body.access_token ?? "" } });
+    expect(feed.status).toBe(200);
+    expect(failureCount()).toBe(0);
+  });
+
+  it("grants with the invite token", async () => {
+    const body = AccessResponseSchema.parse(await (await requestAccess("secret", { invite_token: "invite-abc" })).json());
+    expect(body.access_token).toBeTruthy();
+  });
+
+  it("needs no grant for a public event", async () => {
+    expect(exact(AccessResponseSchema, await (await requestAccess("party", { pin: "123456" })).json())).toEqual({
+      access_token: null,
+      expires_at: null,
+    });
+  });
+
+  it("rejects a wrong PIN or invite and records PIN failures", async () => {
+    const wrongPin = await requestAccess("secret", { pin: "000000" });
+    expect(wrongPin.status).toBe(401);
+    expect(ErrorSchema.parse(await wrongPin.json()).code).toBe("invalid_access");
+    expect(failureCount()).toBe(1);
+    const wrongInvite = await requestAccess("secret", { invite_token: "nope" });
+    expect(await wrongInvite.json()).toMatchObject({ code: "invalid_access" });
+  });
+
+  it("locks a client out after too many failures, even with the right PIN", async () => {
+    for (let i = 0; i < MAX_PIN_FAILURES_PER_CLIENT; i++) await requestAccess("secret", { pin: "000000" });
+    const res = await requestAccess("secret", { pin: PIN });
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("900");
+    expect(exact(TooManyAttemptsSchema, await res.json()).retry_after_seconds).toBe(900);
+    // Another client and the invite link still work.
+    expect((await requestAccess("secret", { pin: PIN }, { "CF-Connecting-IP": "198.51.100.9" })).status).toBe(200);
+    expect((await requestAccess("secret", { invite_token: "invite-abc" })).status).toBe(200);
+  });
+
+  it("shares the lockout with the web route", async () => {
+    for (let i = 0; i < MAX_PIN_FAILURES_PER_CLIENT; i++) await requestAccess("secret", { pin: "000000" });
+    const ctx = { waitUntil: vi.fn(), passThroughOnException: vi.fn() } as unknown as ExecutionContext;
+    const web = await worker.fetch(
+      new Request("https://moments.test/api/events/secret/access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.7" },
+        body: JSON.stringify({ pin: PIN }),
+      }),
+      env(),
+      ctx
+    );
+    expect(web.status).toBe(429);
+  });
+
+  it.each([{}, { pin: "   " }, { pin: "1".repeat(21) }, { invite_token: "x".repeat(201) }, { pin: 123456 }])(
+    "rejects invalid body %j without recording a failure",
+    async (body) => {
+      const res = await requestAccess("secret", body);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "invalid request", code: "invalid_request" });
+      expect(failureCount()).toBe(0);
+    }
+  );
+
+  it("fails closed with 503 when the signing secret is missing", async () => {
+    extraEnv = { EVENT_ACCESS_SECRET: undefined };
+    const res = await requestAccess("secret", { invite_token: "invite-abc" });
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ code: "access_unavailable" });
+  });
+
+  it("returns 404 for unknown events and keeps other methods on the path gated", async () => {
+    expect((await requestAccess("nope", { pin: PIN })).status).toBe(404);
+    expect((await call("/events/secret/access")).status).toBe(401);
+  });
+
+  it("exempts only the exact access path from the gate", async () => {
+    for (const path of ["/events/secret/feed/access", "/events/secret/x/events/y/access", "/events/secret/access/"]) {
+      const res = await call(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      expect(res.status, path).toBe(401);
+      expect(await res.json()).toMatchObject({ code: "access_required" });
+    }
+  });
+
+  it("marks gate errors as no-store", async () => {
+    expect((await call("/events/secret/feed")).headers.get("Cache-Control")).toBe("no-store");
+    expect((await requestAccess("nope", { pin: PIN })).headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  it("accepts a padded PIN like the web route", async () => {
+    expect((await requestAccess("secret", { pin: `   ${PIN}       ` })).status).toBe(200);
+  });
+
+  it("does not accept an invite token plus a wrong PIN as a PIN success", async () => {
+    const res = await requestAccess("secret", { invite_token: "wrong", pin: "000000" });
+    expect(res.status).toBe(401);
+    expect(failureCount()).toBe(1);
   });
 });
 

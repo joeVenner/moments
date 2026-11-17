@@ -78,6 +78,12 @@ struct NonJSONErrorMiddleware: ClientMiddleware {
         let (response, responseBody) = try await next(request, body, baseURL)
         let contentType = response.headerFields[.contentType]?.lowercased() ?? ""
         if response.status.kind != .successful, !contentType.hasPrefix("application/json") {
+            // A proxy's 401 on the unlock call still means "not unlocked".
+            if operationID == "requestAccess", response.status.code == 401 { throw MomentsAPIError.invalidAccess }
+            if operationID == "requestAccess", response.status.code == 429 {
+                let seconds = response.headerFields[.retryAfter].flatMap { Int($0) } ?? MomentsClient.defaultRetryAfterSeconds
+                throw MomentsAPIError.tooManyAttempts(retryAfterSeconds: max(1, seconds))
+            }
             throw MomentsClient.error(response.status.code, nil)
         }
         return (response, responseBody)

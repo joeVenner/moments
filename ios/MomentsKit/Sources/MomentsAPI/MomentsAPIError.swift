@@ -7,6 +7,12 @@ import Foundation
 public enum MomentsAPIError: Error, Sendable, Equatable {
     /// Private event: get a grant from the access endpoint (PIN or invite).
     case accessRequired
+    /// Wrong PIN or invite token.
+    case invalidAccess
+    /// Too many wrong PINs from this network: wait, or use the invite link.
+    case tooManyAttempts(retryAfterSeconds: Int)
+    /// The server can't grant private access right now (misconfiguration).
+    case accessUnavailable
     /// No live event with this slug (unknown, expired or archived).
     case eventNotFound
     /// This build is below the server minimum: show the update screen.

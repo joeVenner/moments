@@ -152,6 +152,67 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
         #expect(try #require(stub.requests.first).request.path == "/events/party/feed/changes?since=5")
     }
 
+    @Test func requestsAccessWithAPIN() async throws {
+        let stub = StubTransport(json: #"{"access_token":"grant-1","expires_at":"2026-11-24 18:30:00"}"#)
+        let grant = try await client(stub).access(slug: "secret", credential: .pin("  482916 "))
+        #expect(grant == AccessGrant(token: "grant-1", expiresAt: ServerDate.parse("2026-11-24 18:30:00")!))
+        let request = try #require(stub.requests.first)
+        #expect(request.request.method == .post && request.request.path == "/events/secret/access")
+        let body = try JSONSerialization.jsonObject(with: Data(try #require(request.body).utf8)) as? [String: String]
+        #expect(body == ["pin": "482916"])
+    }
+
+    @Test func publicEventsNeedNoGrant() async throws {
+        let stub = StubTransport(json: #"{"access_token":null,"expires_at":null}"#)
+        #expect(try await client(stub).access(slug: "party", credential: .invite("x")) == nil)
+        let body = try JSONSerialization.jsonObject(with: Data(try #require(stub.requests.first?.body).utf8)) as? [String: String]
+        #expect(body == ["invite_token": "x"])
+    }
+
+    @Test func grantWithoutExpiryIsUnexpected() async throws {
+        let stub = StubTransport(json: #"{"access_token":"grant-1","expires_at":null}"#)
+        await #expect(throws: MomentsAPIError.unexpectedResponse) { _ = try await client(stub).access(slug: "s", credential: .pin("1")) }
+    }
+
+    @Test(arguments: [
+        (401, #"{"error":"x","code":"invalid_access"}"#, MomentsAPIError.invalidAccess),
+        (429, #"{"error":"x","code":"too_many_attempts","retry_after_seconds":900}"#, .tooManyAttempts(retryAfterSeconds: 900)),
+        (503, #"{"error":"x","code":"access_unavailable"}"#, .accessUnavailable),
+        (404, #"{"error":"x","code":"event_not_found"}"#, .eventNotFound),
+        (401, #"{"error":"x","code":"something_else"}"#, .invalidAccess),
+        (400, #"{"error":"x","code":"invalid_request"}"#, .invalidRequest),
+        (426, #"{"error":"x","code":"client_upgrade_required"}"#, .upgradeRequired),
+    ])
+    func mapsAccessErrors(_ status: Int, _ json: String, _ expected: MomentsAPIError) async throws {
+        await #expect(throws: expected) {
+            _ = try await client(StubTransport(status: status, json: json)).access(slug: "s", credential: .pin("1"))
+        }
+    }
+
+    @Test func lockoutWaitFallsBackToHeaderThenDefault() async throws {
+        let headerOnly = StubTransport(status: 429, json: "Slow down", contentType: "text/plain", headers: ["Retry-After": "120"])
+        await #expect(throws: MomentsAPIError.tooManyAttempts(retryAfterSeconds: 120)) {
+            _ = try await client(headerOnly).access(slug: "s", credential: .pin("1"))
+        }
+        await #expect(throws: MomentsAPIError.tooManyAttempts(retryAfterSeconds: MomentsClient.defaultRetryAfterSeconds)) {
+            _ = try await client(StubTransport(status: 429, json: "Slow down", contentType: "text/plain")).access(slug: "s", credential: .pin("1"))
+        }
+    }
+
+    @Test func proxyHTML401OnUnlockIsInvalidAccess() async throws {
+        let stub = StubTransport(status: 401, json: "<html>", contentType: "text/html")
+        await #expect(throws: MomentsAPIError.invalidAccess) {
+            _ = try await client(stub).access(slug: "s", credential: .pin("1"))
+        }
+    }
+
+    @Test func emptyCredentialsFailLocally() async throws {
+        let stub = StubTransport(json: "{}")
+        await #expect(throws: MomentsAPIError.invalidRequest) { _ = try await client(stub).access(slug: "s", credential: .pin("   ")) }
+        await #expect(throws: MomentsAPIError.invalidRequest) { _ = try await client(stub).access(slug: "s", credential: .invite("")) }
+        #expect(stub.requests.isEmpty)
+    }
+
     @Test func refusesRedirects() async throws {
         let session = URLSession(configuration: .ephemeral)
         let task = session.dataTask(with: URL(string: "https://moments.test")!)

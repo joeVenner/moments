@@ -174,12 +174,8 @@ export async function verifyEventAccess<E extends { Bindings: Env }>(
   );
 }
 
-/**
- * Sets the access cookie and returns the grant so native clients can send it
- * as `X-Event-Access`.
- */
-export async function grantEventAccess(
-  c: Context<{ Bindings: Env }>,
+/** Signs a grant for the event's current access_version (no cookie). */
+export async function issueAccessGrant(
   secret: string,
   event: Pick<EventRow, "id" | "access_version">,
   nowSeconds: number = Math.floor(Date.now() / 1000)
@@ -190,6 +186,20 @@ export async function grantEventAccess(
     accessVersion: event.access_version,
     expiresAt,
   });
+  return { accessToken, expiresAt };
+}
+
+/**
+ * Sets the access cookie and returns the grant so native clients can send it
+ * as `X-Event-Access`.
+ */
+export async function grantEventAccess(
+  c: Context<{ Bindings: Env }>,
+  secret: string,
+  event: Pick<EventRow, "id" | "access_version">,
+  nowSeconds: number = Math.floor(Date.now() / 1000)
+): Promise<IssuedAccessGrant> {
+  const { accessToken, expiresAt } = await issueAccessGrant(secret, event, nowSeconds);
   setCookie(c, accessCookieName(event.id), accessToken, {
     httpOnly: true,
     sameSite: "Lax",

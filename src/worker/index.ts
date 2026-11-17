@@ -39,6 +39,7 @@ import {
 import { deleteMomentMedia } from "./moderation";
 import { cleanupEvent, cleanupExpiredEvents, pruneAccessFailures } from "./lifecycle";
 import { abortOrphanUploads } from "./orphanUploads";
+import { attemptEventAccess } from "./accessAttempt";
 import {
   CHANGES_MAX_LIMIT,
   FEED_DEFAULT_LIMIT,
@@ -59,14 +60,9 @@ import {
 import {
   MAX_PIN_LENGTH,
   MIN_PIN_LENGTH,
-  PIN_FAILURE_WINDOW_MINUTES,
-  PIN_SLOWDOWN_MS,
-  decidePinAttempt,
   grantEventAccess,
-  hashClientIp,
   hashEventPin,
   randomAccessToken,
-  timingSafeEqual,
   verifyEventAccess,
 } from "./eventAccess";
 
@@ -294,50 +290,23 @@ app.post("/api/events/:slug/access", async (c) => {
     pin?: unknown;
     invite_token?: unknown;
   } | null;
-  const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
-  const inviteToken = typeof body?.invite_token === "string" ? body.invite_token : "";
-
-  // The invite link is the host's escape hatch, so it is never throttled.
-  if (inviteToken && event.invite_token && timingSafeEqual(inviteToken, event.invite_token)) {
-    return c.json(await unlockResponse(c, secret, event));
-  }
-  if (!pin || pin.length > MAX_PIN_LENGTH || !event.access_pin_hash || !event.access_pin_salt) {
-    return c.json({ error: "invalid event access" }, 401);
-  }
-
-  // Record the attempt *before* checking it, so concurrent guesses count
-  // each other; the row is removed again if the PIN turns out to be right.
-  const ipHash = await hashClientIp(secret, c.req.header("CF-Connecting-IP") ?? "unknown");
-  const attemptId = crypto.randomUUID();
-  await c.env.DB.prepare("INSERT INTO access_failures (id, event_id, ip_hash) VALUES (?, ?, ?)")
-    .bind(attemptId, event.id, ipHash).run();
-  const counts = await c.env.DB.prepare(
-    `SELECT COALESCE(SUM(ip_hash = ?), 0) AS client_failures, COUNT(*) AS event_failures
-       FROM access_failures
-      WHERE event_id = ? AND created_at > datetime('now', ?)`
-  ).bind(ipHash, event.id, `-${PIN_FAILURE_WINDOW_MINUTES} minutes`)
-    .first<{ client_failures: number; event_failures: number }>();
-  const decision = decidePinAttempt(
-    Math.max(0, (counts?.client_failures ?? 1) - 1),
-    Math.max(0, (counts?.event_failures ?? 1) - 1)
-  );
-  if (decision === "block") {
+  const result = await attemptEventAccess(c.env.DB, secret, event, {
+    pin: typeof body?.pin === "string" ? body.pin : "",
+    inviteToken: typeof body?.invite_token === "string" ? body.invite_token : "",
+    clientIp: c.req.header("CF-Connecting-IP") ?? "unknown",
+  });
+  if (result.kind === "blocked") {
     return c.json(
       {
         error: "too many attempts",
-        retry_after_seconds: PIN_FAILURE_WINDOW_MINUTES * 60,
+        retry_after_seconds: result.retryAfterSeconds,
         hint: "ask the host for the invitation link",
       },
       429,
-      { "Retry-After": String(PIN_FAILURE_WINDOW_MINUTES * 60) }
+      { "Retry-After": String(result.retryAfterSeconds) }
     );
   }
-  if (decision === "slow") await new Promise((resolve) => setTimeout(resolve, PIN_SLOWDOWN_MS));
-
-  const isPinValid = timingSafeEqual(await hashEventPin(pin, event.access_pin_salt), event.access_pin_hash);
-  if (!isPinValid) return c.json({ error: "invalid event access" }, 401);
-
-  await c.env.DB.prepare("DELETE FROM access_failures WHERE id = ?").bind(attemptId).run();
+  if (result.kind === "invalid") return c.json({ error: "invalid event access" }, 401);
   return c.json(await unlockResponse(c, secret, event));
 });
 
