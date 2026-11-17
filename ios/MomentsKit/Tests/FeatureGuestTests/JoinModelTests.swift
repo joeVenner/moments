@@ -5,62 +5,6 @@ import MomentsDomain
 import Testing
 @testable import FeatureGuest
 
-/// Scripted MomentsService: each call pops its next result and records the
-/// credentials it was given.
-final class FakeService: MomentsService, @unchecked Sendable {
-    private let lock = NSLock()
-    var accessResults: [Result<AccessGrant?, Error>] = []
-    var eventResults: [Result<Event, Error>] = []
-    var joinResults: [Result<JoinResult, Error>] = []
-    private(set) var accessCalls: [AccessCredential] = []
-    private(set) var eventCalls: [EventCredentials] = []
-    private(set) var joinCalls: [(nickname: String, credentials: EventCredentials)] = []
-
-    func access(slug: String, credential: AccessCredential) async throws -> AccessGrant? {
-        try lock.withLock { accessCalls.append(credential); return try accessResults.removeFirst().get() }
-    }
-    func event(slug: String, credentials: EventCredentials) async throws -> Event {
-        try lock.withLock { eventCalls.append(credentials); return try eventResults.removeFirst().get() }
-    }
-    func join(slug: String, nickname: String, avatarSeed: String?, credentials: EventCredentials) async throws -> JoinResult {
-        try lock.withLock { joinCalls.append((nickname, credentials)); return try joinResults.removeFirst().get() }
-    }
-    func feedPage(slug: String, before: Int?, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> FeedPage {
-        throw MomentsAPIError.unexpectedResponse
-    }
-    func feedChanges(slug: String, since: Int, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> FeedChanges {
-        throw MomentsAPIError.unexpectedResponse
-    }
-}
-
-/// In-memory store whose writes can be made to fail (keychain locked, etc.).
-final class FlakyStore: EventCredentialStore, @unchecked Sendable {
-    private let inner = InMemoryEventCredentialStore()
-    var failWrites = false
-    var failReads = false
-    struct StoreFailed: Error {}
-
-    func credentials(for slug: EventSlug) throws -> StoredEventCredentials? {
-        if failReads { throw StoreFailed() }
-        return inner.credentials(for: slug)
-    }
-    func save(_ credentials: StoredEventCredentials, for slug: EventSlug) throws {
-        if failWrites { throw StoreFailed() }
-        inner.save(credentials, for: slug)
-    }
-    /// Like the real store, an update that changes nothing writes nothing.
-    func update(for slug: EventSlug, _ change: (inout StoredEventCredentials) -> Void) throws {
-        let original = inner.credentials(for: slug) ?? StoredEventCredentials()
-        var value = original
-        change(&value)
-        guard value != original else { return }
-        if failWrites { throw StoreFailed() }
-        inner.update(for: slug, change)
-    }
-    func removeCredentials(for slug: EventSlug) throws { inner.removeCredentials(for: slug) }
-    func removeAll() throws { inner.removeAll() }
-}
-
 private let slug = EventSlug("party")!
 private let invite = InviteToken(String(repeating: "ab12", count: 16))!
 private let future = Date(timeIntervalSince1970: 4_000_000_000)
