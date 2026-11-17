@@ -1,0 +1,156 @@
+import Foundation
+
+/// Domain models used by the app's screens. The generated API client
+/// (MomentsAPI, next phase) maps its wire types into these: timestamps via
+/// `ServerDate`, relative `/media/...` paths resolved against the API origin.
+/// An unknown enum value from a newer server is the mapper's call (skip the
+/// row), never a reason to drop a whole page.
+
+public struct Event: Sendable, Hashable, Identifiable {
+    public enum AccessMode: String, Sendable, Hashable {
+        case `public`, `private`
+    }
+
+    public let id: String
+    public let slug: String
+    public let title: String
+    public let type: String
+    public let mainCharacters: String?
+    public let description: String?
+    public let coverImageURL: String?
+    public let createdAt: Date
+    public let startsAt: Date?
+    /// Legacy single end date; the two below fall back to it when nil.
+    public let expiresAt: Date?
+    public let uploadsCloseAt: Date?
+    public let purgeAfter: Date?
+    public let archivedAt: Date?
+    public let accessMode: AccessMode
+    /// Server-computed at response time; prefer it over comparing dates locally.
+    public let areUploadsOpen: Bool
+
+    /// When new uploads stop, after applying the server's expires_at fallback.
+    public var effectiveUploadsCloseAt: Date? { uploadsCloseAt ?? expiresAt }
+    /// When the event and its media are deleted, after the same fallback.
+    public var effectivePurgeAfter: Date? { purgeAfter ?? expiresAt }
+
+    public init(
+        id: String, slug: String, title: String, type: String,
+        mainCharacters: String? = nil, description: String? = nil, coverImageURL: String? = nil,
+        createdAt: Date, startsAt: Date? = nil, expiresAt: Date? = nil, uploadsCloseAt: Date? = nil,
+        purgeAfter: Date? = nil, archivedAt: Date? = nil, accessMode: AccessMode = .public, areUploadsOpen: Bool = true
+    ) {
+        self.id = id
+        self.slug = slug
+        self.title = title
+        self.type = type
+        self.mainCharacters = mainCharacters
+        self.description = description
+        self.coverImageURL = coverImageURL
+        self.createdAt = createdAt
+        self.startsAt = startsAt
+        self.expiresAt = expiresAt
+        self.uploadsCloseAt = uploadsCloseAt
+        self.purgeAfter = purgeAfter
+        self.archivedAt = archivedAt
+        self.accessMode = accessMode
+        self.areUploadsOpen = areUploadsOpen
+    }
+}
+
+public struct Participant: Sendable, Hashable, Identifiable {
+    public let id: String
+    public let eventID: String
+    public let nickname: String
+    public let avatarSeed: String?
+    public let joinedAt: Date
+
+    public init(id: String, eventID: String, nickname: String, avatarSeed: String? = nil, joinedAt: Date) {
+        self.id = id
+        self.eventID = eventID
+        self.nickname = nickname
+        self.avatarSeed = avatarSeed
+        self.joinedAt = joinedAt
+    }
+}
+
+public struct Media: Sendable, Hashable {
+    public enum Kind: String, Sendable, Hashable {
+        case image, video
+    }
+
+    public let kind: Kind
+    /// Original. `/media/...` paths are relative to the API origin.
+    public let url: String
+    public let thumbURL: String?
+    public let displayURL: String?
+    public let posterURL: String?
+    public let hlsURL: String?
+    public let width: Int?
+    public let height: Int?
+    public let durationMilliseconds: Int?
+    public let blurhash: String?
+
+    public init(
+        kind: Kind, url: String, thumbURL: String? = nil, displayURL: String? = nil, posterURL: String? = nil,
+        hlsURL: String? = nil, width: Int? = nil, height: Int? = nil, durationMilliseconds: Int? = nil, blurhash: String? = nil
+    ) {
+        self.kind = kind
+        self.url = url
+        self.thumbURL = thumbURL
+        self.displayURL = displayURL
+        self.posterURL = posterURL
+        self.hlsURL = hlsURL
+        self.width = width
+        self.height = height
+        self.durationMilliseconds = durationMilliseconds
+        self.blurhash = blurhash
+    }
+
+    /// Width / height when both are known and positive; layouts fall back to square.
+    public var aspectRatio: Double? {
+        guard let width, let height, width > 0, height > 0 else { return nil }
+        return Double(width) / Double(height)
+    }
+
+    /// Best image for a grid cell: thumbnail, then poster (videos), then the original image.
+    public var gridImageURL: String? {
+        thumbURL ?? posterURL ?? (kind == .image ? url : nil)
+    }
+}
+
+/// Omits the wire's `media_url` (same as `media.url`), `size_bytes` and
+/// `mime_type` (`media.kind` covers what screens need).
+public struct Moment: Sendable, Hashable, Identifiable {
+    public let id: String
+    public let eventID: String
+    public let uploaderName: String
+    public let caption: String?
+    public let pointsAwarded: Int
+    public let createdAt: Date
+    /// Feed order; newest has the highest.
+    public let seq: Int
+    /// Bumps on every change (reaction, hide); drives incremental sync.
+    public let changeSeq: Int
+    public internal(set) var reactionCount: Int
+    /// Whether this device's guest has reacted. Mutated only through `FeedState`.
+    public internal(set) var hasReacted: Bool
+    public let media: Media
+
+    public init(
+        id: String, eventID: String, uploaderName: String, caption: String? = nil, pointsAwarded: Int,
+        createdAt: Date, seq: Int, changeSeq: Int, reactionCount: Int = 0, hasReacted: Bool = false, media: Media
+    ) {
+        self.id = id
+        self.eventID = eventID
+        self.uploaderName = uploaderName
+        self.caption = caption
+        self.pointsAwarded = pointsAwarded
+        self.createdAt = createdAt
+        self.seq = seq
+        self.changeSeq = changeSeq
+        self.reactionCount = reactionCount
+        self.hasReacted = hasReacted
+        self.media = media
+    }
+}
