@@ -48,6 +48,15 @@ class SqliteStatement {
     return { success: true, meta: this.execute() };
   }
 
+  /** One batch entry: rows for queries, change counts for writes (like D1). */
+  executeForBatch(): { success: true; results: Record<string, unknown>[]; meta: { changes: number; last_row_id: number } } {
+    if (/^\s*(SELECT|WITH)\b/i.test(this.sql) || /\bRETURNING\b/i.test(this.sql)) {
+      const rows = this.db.prepare(this.sql).all(...this.args) as Record<string, unknown>[];
+      return { success: true, results: rows.map((row) => ({ ...row })), meta: { changes: 0, last_row_id: 0 } };
+    }
+    return { success: true, results: [], meta: this.execute() };
+  }
+
   execute(): { changes: number; last_row_id: number } {
     const result = this.db.prepare(this.sql).run(...this.args);
     return { changes: Number(result.changes), last_row_id: Number(result.lastInsertRowid) };
@@ -57,20 +66,31 @@ class SqliteStatement {
 export interface SqliteD1 {
   db: D1Database;
   raw: DatabaseSync;
+  /** Applies the migrations held back by `stopBefore` (for backfill tests). */
+  applyRemainingMigrations: () => void;
 }
 
-export function createSqliteD1(): SqliteD1 {
+export interface SqliteD1Options {
+  /** Hold back this migration (e.g. "0011") and every later one. */
+  stopBefore?: string;
+}
+
+export function createSqliteD1(options: SqliteD1Options = {}): SqliteD1 {
   const raw = new DatabaseSync(":memory:");
   raw.exec("PRAGMA foreign_keys = ON;");
   const files = readdirSync(MIGRATIONS_DIR).filter((file) => file.endsWith(".sql")).sort();
-  for (const file of files) raw.exec(readFileSync(join(MIGRATIONS_DIR, file), "utf8"));
+  const cut = options.stopBefore ? files.findIndex((file) => file >= options.stopBefore!) : -1;
+  const now = cut === -1 ? files : files.slice(0, cut);
+  const later = cut === -1 ? [] : files.slice(cut);
+  const apply = (file: string) => raw.exec(readFileSync(join(MIGRATIONS_DIR, file), "utf8"));
+  now.forEach(apply);
 
   const db = {
     prepare: (sql: string) => new SqliteStatement(raw, sql),
     batch: async (statements: SqliteStatement[]) => {
       raw.exec("BEGIN");
       try {
-        const results = statements.map((statement) => ({ success: true, meta: statement.execute() }));
+        const results = statements.map((statement) => statement.executeForBatch());
         raw.exec("COMMIT");
         return results;
       } catch (error) {
@@ -79,5 +99,5 @@ export function createSqliteD1(): SqliteD1 {
       }
     },
   };
-  return { db: db as unknown as D1Database, raw };
+  return { db: db as unknown as D1Database, raw, applyRemainingMigrations: () => later.splice(0).forEach(apply) };
 }
