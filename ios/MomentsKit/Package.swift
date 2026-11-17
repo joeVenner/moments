@@ -10,9 +10,12 @@ let package = Package(
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
         .library(name: "MomentsDomain", targets: ["MomentsDomain"]),
+        .library(name: "DesignSystem", targets: ["DesignSystem"]),
     ],
     targets: [
         .target(name: "MomentsDomain"),
         .testTarget(name: "MomentsDomainTests", dependencies: ["MomentsDomain"]),
+        .target(name: "DesignSystem"),
+        .testTarget(name: "DesignSystemTests", dependencies: ["DesignSystem"]),
     ]
 )
