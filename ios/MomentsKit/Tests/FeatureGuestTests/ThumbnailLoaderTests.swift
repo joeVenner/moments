@@ -105,6 +105,18 @@ private final class Counter: @unchecked Sendable {
     }
 }
 
+extension ThumbnailLoaderTests {
+    @Test func aResignedURLReusesTheCachedImage() async throws {
+        let counter = Counter()
+        let loader = ThumbnailLoader { _ in counter.increment(); return png(width: 10, height: 10) }
+        _ = try await loader.image(at: URL(string: "https://moments-hq.com/media/a.jpg?at=1.x")!, maxPixelSize: 10)
+        _ = try await loader.image(at: URL(string: "https://moments-hq.com/media/a.jpg?at=2.y")!, maxPixelSize: 10)
+        #expect(counter.count == 1)
+        #expect(ThumbnailLoader.cacheKey(URL(string: "https://moments-hq.com/media/b.jpg?at=1")!, maxPixelSize: 5)
+            != ThumbnailLoader.cacheKey(URL(string: "https://moments-hq.com/media/a.jpg?at=1")!, maxPixelSize: 5))
+    }
+}
+
 private actor Peak {
     private(set) var value = 0
     func record(_ current: Int) { value = max(value, current) }

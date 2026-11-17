@@ -58,8 +58,7 @@ public actor ThumbnailLoader {
 
     /// The image at `url`, downsampled so its longest side is `maxPixelSize`.
     public func image(at url: URL, maxPixelSize: Int) async throws -> CGImage {
-        // Memory-only key; never logged or stored.
-        let key = "\(maxPixelSize)|\(url.absoluteString)"
+        let key = Self.cacheKey(url, maxPixelSize: maxPixelSize)
         if let cached = cache.object(forKey: key as NSString) { return cached.image }
         let task = inFlight[key]?.task ?? start(key: key, url: url, maxPixelSize: maxPixelSize)
         inFlight[key]?.waiters += 1
@@ -111,6 +110,15 @@ public actor ThumbnailLoader {
         } else {
             inFlight[key] = entry
         }
+    }
+
+    /// Keyed by path: a private event's `?at=` signature changes every few
+    /// hours for the same object. Memory-only; never logged or stored.
+    nonisolated static func cacheKey(_ url: URL, maxPixelSize: Int) -> String {
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.query = nil
+        components?.fragment = nil
+        return "\(maxPixelSize)|\(components?.string ?? url.absoluteString)"
     }
 
     /// Decodes at the target size (never the full bitmap), applying EXIF
