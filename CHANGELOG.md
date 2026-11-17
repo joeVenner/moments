@@ -7,10 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- Abandoned multipart uploads are now cancelled in R2, so their parts stop costing storage. A daily job sweeps sessions still open after 7 days, or 30 minutes after an event's uploads close (up to 40 per run). Deleting an event (the daily purge or "archive now") now cancels its unfinished uploads before removing their records, which used to leave billed parts behind.
-
 ### Added
+- iOS groundwork: `ios/MomentsKit`, a local Swift package (Swift 6, iOS 17+). Its `MomentsDomain` module holds the app's pure logic with Swift Testing coverage: strict parsing of the API's UTC timestamps, points and milestones matching the web, domain models for events, guests, moments and media, and a feed state that merges pages and incremental changes without resurrecting hidden moments or skipping updates.
 - Events can close uploads before they are deleted: `uploads_close_at` and `purge_after` (migration 0015) both default to `expires_at`, so existing events behave as before. Once uploads close the event stays viewable and joinable; new uploads get `403 uploads_closed`, and uploads already in progress have 30 minutes to finish. Event responses (web and `/api/v1`) carry an `uploads_open` flag, and the admin lifecycle endpoint accepts the two dates.
 - `/api/v1` for the native app: `getEvent`, `getFeed`, `getFeedChanges` and `joinEvent` (JSON), validated with Zod. The OpenAPI 3.1 description is served at `/api/v1/openapi.json` and committed as `openapi/v1.json` (`npm run openapi:update` regenerates it). iOS builds below `MIN_IOS_BUILD` get `426`.
 - Feed items carry a `media` object (kind, url, thumb/display/poster URLs, Stream `hls_url`, width, height, duration, blurhash). Migration `0013` adds the backing columns; filling them in counts as a change for `/feed/changes`.
@@ -28,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Participant responses no longer use `SELECT *`; they return only public fields.
 - New event PINs must be 6 to 20 characters. Existing shorter PINs keep working.
 - Setting a new PIN, or making a public event private again, revokes all previously issued access and rotates the invitation link.
+
+### Fixed
+- Abandoned multipart uploads are now cancelled in R2, so their parts stop costing storage. A daily job sweeps sessions still open after 7 days, or 30 minutes after an event's uploads close (up to 40 per run). Deleting an event (the daily purge or "archive now") now cancels its unfinished uploads before removing their records, which used to leave billed parts behind.
 
 ### Security
 - Hidden moments are no longer served by direct `/media` links: originals and their thumbnail, display and poster versions return 404. Public media is cached for 5 minutes and then revalidated (it was cached for a year), so a hide takes effect quickly. Admin moment responses carry short-lived signed view links (`?mv=`), so moderators can still see hidden and private-event media. Stream videos in public events are not covered by this check.
