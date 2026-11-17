@@ -14,5 +14,7 @@
     "noUnusedParameters": true,
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["src/worker"]
+  "include": ["src/worker"],
+  // Tests use Node APIs (node:sqlite); keep Node types out of production code.
+  "exclude": ["src/worker/**/*.test.ts", "src/worker/testing/**"]
 }
