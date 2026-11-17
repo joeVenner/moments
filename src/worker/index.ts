@@ -19,6 +19,7 @@ import {
   MULTIPART_PART_BYTES,
 } from "./multipartPresign";
 import { requireAdmin } from "./auth";
+import { getActiveEventBySlug, getEventBySlug, toPublicEvent } from "./events";
 import { generateAiBanner, BannerGenerationError } from "./banner";
 import { isStreamConfigured, streamApiUrl, streamAuthHeaders, streamMediaUrl } from "./stream";
 import { deleteMomentMedia } from "./moderation";
@@ -132,18 +133,6 @@ async function uniqueSlug(db: D1Database, title: string): Promise<string> {
     if (!existing) return candidate;
   }
   return `${base}-${crypto.randomUUID().slice(0, 8)}`;
-}
-
-async function getEventBySlug(db: D1Database, slug: string): Promise<{ id: string } | null> {
-  return db.prepare(
-    "SELECT id FROM events WHERE slug = ? AND archived_at IS NULL AND (expires_at IS NULL OR expires_at > datetime('now'))"
-  ).bind(slug).first<{ id: string }>();
-}
-
-async function getActiveEventBySlug(db: D1Database, slug: string): Promise<EventRow | null> {
-  return db.prepare(
-    "SELECT * FROM events WHERE slug = ? AND archived_at IS NULL AND (expires_at IS NULL OR expires_at > datetime('now'))"
-  ).bind(slug).first<EventRow>();
 }
 
 function normalizeDate(value: unknown): string | null | undefined {
@@ -264,14 +253,7 @@ app.get("/api/events/:slug", async (c) => {
   if (!(await verifyEventAccess(c, event))) {
     return c.json({ error: "access required", access_required: true }, 401);
   }
-  const {
-    access_pin_hash: _hash,
-    access_pin_salt: _salt,
-    invite_token: _token,
-    access_version: _version,
-    ...publicEvent
-  } = event;
-  return c.json({ event: publicEvent });
+  return c.json({ event: toPublicEvent(event) });
 });
 
 app.post("/api/events/:slug/access", async (c) => {
