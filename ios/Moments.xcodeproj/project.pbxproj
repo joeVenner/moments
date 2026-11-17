@@ -10,6 +10,10 @@
 		D0885E05C7E3D2937E9924EF /* MomentsDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 23F47EB25CD897107984C822 /* MomentsDomain */; };
 		894EDC74B96DD6AAF2CB504C /* MomentsDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 0122416D65AF3DAC4C083DBF /* MomentsDomain */; };
 		C2FBCFA6CA5703472D203BEE /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 8F57B567318C731ACDB06C83 /* DesignSystem */; };
+		5EA60B84A910AB8A34E81BF0 /* AppRouting in Frameworks */ = {isa = PBXBuildFile; productRef = 75145B2E14727A1C65C3E271 /* AppRouting */; };
+		8DBC006D750F45B40D9D6734 /* CredentialStore in Frameworks */ = {isa = PBXBuildFile; productRef = 771321923501E50EA15BC6E1 /* CredentialStore */; };
+		346EFBD0F25D0B713B876CC8 /* CredentialStore in Frameworks */ = {isa = PBXBuildFile; productRef = 60B03C2EE5B4FA5FA5827BED /* CredentialStore */; };
+		E9FDAC3499B371D410E2B1C8 /* AppRouting in Frameworks */ = {isa = PBXBuildFile; productRef = 11F742D66A422DB2C6DE4F46 /* AppRouting */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -48,6 +52,8 @@
 			files = (
 				D0885E05C7E3D2937E9924EF /* MomentsDomain in Frameworks */,
 				C2FBCFA6CA5703472D203BEE /* DesignSystem in Frameworks */,
+				5EA60B84A910AB8A34E81BF0 /* AppRouting in Frameworks */,
+				8DBC006D750F45B40D9D6734 /* CredentialStore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -56,6 +62,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				894EDC74B96DD6AAF2CB504C /* MomentsDomain in Frameworks */,
+				346EFBD0F25D0B713B876CC8 /* CredentialStore in Frameworks */,
+				E9FDAC3499B371D410E2B1C8 /* AppRouting in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -111,6 +119,8 @@
 			packageProductDependencies = (
 				23F47EB25CD897107984C822 /* MomentsDomain */,
 				8F57B567318C731ACDB06C83 /* DesignSystem */,
+				75145B2E14727A1C65C3E271 /* AppRouting */,
+				771321923501E50EA15BC6E1 /* CredentialStore */,
 			);
 			productName = Moments;
 			productReference = B79AD8397EB9294C45D7A230 /* Moments.app */;
@@ -135,6 +145,8 @@
 			name = MomentsTests;
 			packageProductDependencies = (
 				0122416D65AF3DAC4C083DBF /* MomentsDomain */,
+				60B03C2EE5B4FA5FA5827BED /* CredentialStore */,
+				11F742D66A422DB2C6DE4F46 /* AppRouting */,
 			);
 			productName = MomentsTests;
 			productReference = 53DFC14767CE2A791C09F61E /* MomentsTests.xctest */;
@@ -360,6 +372,22 @@
 		8F57B567318C731ACDB06C83 /* DesignSystem */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DesignSystem;
+		};
+		75145B2E14727A1C65C3E271 /* AppRouting */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AppRouting;
+		};
+		771321923501E50EA15BC6E1 /* CredentialStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CredentialStore;
+		};
+		60B03C2EE5B4FA5FA5827BED /* CredentialStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CredentialStore;
+		};
+		11F742D66A422DB2C6DE4F46 /* AppRouting */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AppRouting;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
