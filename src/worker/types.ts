@@ -63,6 +63,10 @@ export interface MomentRow {
   size_bytes: number | null;
   mime_type: string | null;
   moderation_status: "approved" | "hidden";
+  /** Global upload order (migration 0011, trigger-assigned). */
+  seq?: number | null;
+  /** Bumped on insert, hide/unhide and caption edits. */
+  change_seq?: number | null;
   reaction_count?: number;
   reacted?: number;
 }
