@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Abandoned multipart uploads are now cancelled in R2, so their parts stop costing storage. A daily job sweeps sessions still open after 7 days, or 30 minutes after an event's uploads close (up to 40 per run). Deleting an event (the daily purge or "archive now") now cancels its unfinished uploads before removing their records, which used to leave billed parts behind.
+
 ### Added
 - Events can close uploads before they are deleted: `uploads_close_at` and `purge_after` (migration 0015) both default to `expires_at`, so existing events behave as before. Once uploads close the event stays viewable and joinable; new uploads get `403 uploads_closed`, and uploads already in progress have 30 minutes to finish. Event responses (web and `/api/v1`) carry an `uploads_open` flag, and the admin lifecycle endpoint accepts the two dates.
 - `/api/v1` for the native app: `getEvent`, `getFeed`, `getFeedChanges` and `joinEvent` (JSON), validated with Zod. The OpenAPI 3.1 description is served at `/api/v1/openapi.json` and committed as `openapi/v1.json` (`npm run openapi:update` regenerates it). iOS builds below `MIN_IOS_BUILD` get `426`.
