@@ -132,6 +132,46 @@ describe("getFeedPage", () => {
     expect(second.next_before).toBeNull();
   });
 
+  it("attaches a media object and hides internal R2 keys", async () => {
+    addMoment("m1");
+    run("UPDATE moments SET width = 800, height = 600, thumb_key = 'events/event-1/thumbs/m1.jpg' WHERE id = 'm1'");
+    const [moment] = (await page()).moments;
+    expect(moment.media).toMatchObject({
+      kind: "image",
+      url: "/media/m1.jpg",
+      thumb_url: "/media/events/event-1/thumbs/m1.jpg",
+      width: 800,
+      height: 600,
+    });
+    for (const raw of ["width", "height", "duration_ms", "blurhash", "thumb_key", "display_key", "poster_key"]) {
+      expect(moment).not.toHaveProperty(raw);
+    }
+    const [upserted] = (await changes(0)).upserts;
+    expect(upserted.media.thumb_url).toBe("/media/events/event-1/thumbs/m1.jpg");
+    expect(upserted).not.toHaveProperty("thumb_key");
+  });
+
+  it("derives Stream playback URLs in the feed", async () => {
+    const uid = "0123456789abcdef0123456789abcdef";
+    sqlite.raw
+      .prepare("INSERT INTO moments (id, event_id, uploader_name, media_url, mime_type) VALUES ('v1', 'event-1', 'Sara', ?, 'video/mp4')")
+      .run(`https://customer-abc.cloudflarestream.com/${uid}/iframe`);
+    const [video] = (await page()).moments;
+    expect(video.media).toMatchObject({
+      kind: "video",
+      hls_url: `https://customer-abc.cloudflarestream.com/${uid}/manifest/video.m3u8`,
+    });
+  });
+
+  it("re-sends a synced moment when its thumbnail arrives", async () => {
+    addMoment("m1");
+    const { cursor } = await page();
+    run("UPDATE moments SET thumb_key = 'events/event-1/thumbs/m1.jpg', width = 10, height = 10 WHERE id = 'm1'");
+    const result = await changes(cursor);
+    expect(result.upserts.map((m) => m.media.thumb_url)).toEqual(["/media/events/event-1/thumbs/m1.jpg"]);
+    expect(await changes(result.cursor)).toMatchObject({ upserts: [], removed: [] });
+  });
+
   it("treats before=0 as empty and a huge before as the newest page", async () => {
     addMoment("m1");
     expect((await page(0)).moments).toEqual([]);
@@ -254,6 +294,26 @@ describe("cursor parsing", () => {
     expect(clampLimit("0", 30, 100)).toBe(1);
     expect(clampLimit("5000", 30, 100)).toBe(100);
     expect(clampLimit("nope", 30, 100)).toBe(30);
+  });
+});
+
+describe("web moment endpoints", () => {
+  it("do not expose internal media columns", async () => {
+    addMoment("m1");
+    run("UPDATE moments SET thumb_key = 'events/event-1/thumbs/m1.jpg', blurhash = 'x' WHERE id = 'm1'");
+    const ctx = { waitUntil: vi.fn(), passThroughOnException: vi.fn() } as unknown as ExecutionContext;
+    const env = {
+      DB: sqlite.db,
+      ADMIN_AUTH_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },
+    } as unknown as Env;
+    for (const path of ["/api/events/party/moments", "/api/events/party/highlights"]) {
+      const res = await worker.fetch(new Request(`https://moments.test${path}`), env, ctx);
+      const body = JSON.stringify(await res.json());
+      expect(res.status).toBe(200);
+      expect(body).toContain('"id":"m1"');
+      expect(body).not.toContain("thumb_key");
+      expect(body).not.toContain("blurhash");
+    }
   });
 });
 

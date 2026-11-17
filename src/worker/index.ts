@@ -414,6 +414,11 @@ app.patch("/api/admin/events/:id/lifecycle", async (c) => {
   return c.json({ event: updated });
 });
 
+// The web feed's moment shape. Explicit so new internal columns (R2 keys,
+// media metadata) never leak to guests by default.
+const WEB_MOMENT_COLUMNS = `m.id, m.event_id, m.uploader_name, m.media_url, m.caption, m.points_awarded,
+  m.created_at, m.size_bytes, m.mime_type, m.moderation_status`;
+
 app.get("/api/events/:slug/moments", async (c) => {
   const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
@@ -428,7 +433,7 @@ app.get("/api/events/:slug/moments", async (c) => {
   const reactorId = (c.req.query("reactor_id") ?? "").slice(0, 100);
 
   const { results } = await c.env.DB.prepare(
-    `SELECT m.*,
+    `SELECT ${WEB_MOMENT_COLUMNS},
             (SELECT COUNT(*) FROM moment_reactions r WHERE r.moment_id = m.id) AS reaction_count,
             EXISTS(SELECT 1 FROM moment_reactions r WHERE r.moment_id = m.id AND r.reactor_id = ?) AS reacted
        FROM moments m
@@ -553,7 +558,7 @@ app.get("/api/events/:slug/highlights", async (c) => {
   if (!event) return c.json({ error: "event not found" }, 404);
   const reactorId = (c.req.query("reactor_id") ?? "").slice(0, 100);
   const { results } = await c.env.DB.prepare(
-    `SELECT m.*,
+    `SELECT ${WEB_MOMENT_COLUMNS},
             COUNT(r.id) AS reaction_count,
             EXISTS(SELECT 1 FROM moment_reactions mine WHERE mine.moment_id = m.id AND mine.reactor_id = ?) AS reacted
        FROM moments m

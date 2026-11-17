@@ -1,3 +1,4 @@
+import { buildMomentMedia, type MomentMedia } from "./media";
 import type { MomentRow } from "./types";
 
 /**
@@ -13,7 +14,39 @@ export const FEED_DEFAULT_LIMIT = 30;
 export const FEED_MAX_LIMIT = 100;
 export const CHANGES_MAX_LIMIT = 200;
 
-export type FeedMoment = Omit<MomentRow, "moderation_status"> & { seq: number; change_seq: number };
+type RawMediaColumn =
+  | "width"
+  | "height"
+  | "duration_ms"
+  | "blurhash"
+  | "thumb_key"
+  | "display_key"
+  | "poster_key";
+
+/** Public feed item: raw media columns are folded into `media`. */
+export type FeedMoment = Omit<MomentRow, "moderation_status" | "seq" | "change_seq" | RawMediaColumn> & {
+  seq: number;
+  change_seq: number;
+  media: MomentMedia;
+};
+
+/** Raw row as selected; R2 keys are internal and replaced by `media` URLs. */
+type FeedRow = Omit<FeedMoment, "media"> & { [column in RawMediaColumn]: MomentRow[column] };
+
+function toFeedMoment(row: FeedRow): FeedMoment {
+  const media = buildMomentMedia(row);
+  const {
+    width: _width,
+    height: _height,
+    duration_ms: _duration,
+    blurhash: _blurhash,
+    thumb_key: _thumb,
+    display_key: _display,
+    poster_key: _poster,
+    ...moment
+  } = row;
+  return { ...moment, media };
+}
 
 export interface FeedPage {
   moments: FeedMoment[];
@@ -46,6 +79,7 @@ export function clampLimit(raw: string | undefined, fallback: number, max: numbe
 
 const MOMENT_COLUMNS = `m.id, m.event_id, m.uploader_name, m.media_url, m.caption, m.points_awarded,
   m.created_at, m.size_bytes, m.mime_type, m.seq, m.change_seq,
+  m.width, m.height, m.duration_ms, m.blurhash, m.thumb_key, m.display_key, m.poster_key,
   (SELECT COUNT(*) FROM moment_reactions r WHERE r.moment_id = m.id) AS reaction_count,
   EXISTS(SELECT 1 FROM moment_reactions r WHERE r.moment_id = m.id AND r.reactor_id = ?) AS reacted`;
 
@@ -73,7 +107,7 @@ export async function getFeedPage(
       )
       .bind(input.reactorId, input.eventId, input.before ?? NO_UPPER_BOUND, input.limit + 1),
   ]);
-  const moments = (rows.results as FeedMoment[]).slice(0, input.limit);
+  const moments = (rows.results as FeedRow[]).slice(0, input.limit).map(toFeedMoment);
   const hasOlder = rows.results.length > input.limit;
   return {
     moments,
@@ -109,10 +143,10 @@ export async function getFeedChanges(
   // Merge both streams by change_seq and keep the first `limit` changes, so
   // the returned cursor never skips a change that did not fit in this page.
   type Change =
-    | { changeSeq: number; kind: "moment"; row: FeedMoment & { moderation_status: string } }
+    | { changeSeq: number; kind: "moment"; row: FeedRow & { moderation_status: string } }
     | { changeSeq: number; kind: "tombstone"; momentId: string };
   const merged: Change[] = [
-    ...(rows.results as (FeedMoment & { moderation_status: string })[]).map(
+    ...(rows.results as (FeedRow & { moderation_status: string })[]).map(
       (row): Change => ({ changeSeq: row.change_seq, kind: "moment", row })
     ),
     ...(tombstones.results as { moment_id: string; change_seq: number }[]).map(
@@ -128,8 +162,8 @@ export async function getFeedChanges(
     if (change.kind === "tombstone") {
       removed.push(change.momentId);
     } else if (change.row.moderation_status === "approved") {
-      const { moderation_status: _status, ...moment } = change.row;
-      upserts.push(moment);
+      const { moderation_status: _status, ...row } = change.row;
+      upserts.push(toFeedMoment(row));
     } else {
       removed.push(change.row.id);
     }
