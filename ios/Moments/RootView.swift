@@ -1,12 +1,46 @@
 import AppRouting
 import DesignSystem
+import FeatureGuest
+import MomentsDomain
 import SwiftUI
 
-/// Placeholder until the join flow lands: shows which event a link opened.
+/// Shows the screen for the last opened link: the join flow for an event,
+/// a placeholder otherwise.
 struct RootView: View {
     let navigation: AppNavigation
+    let environment: AppEnvironment
+    @State private var joinModel: JoinModel?
 
     var body: some View {
+        Group {
+            if let joinModel {
+                JoinView(model: joinModel)
+                    // A new model per open restarts the flow cleanly.
+                    .id(joinModel.id)
+            } else {
+                placeholder
+            }
+        }
+        // Universal links arrive here; App Clip invocations arrive as a
+        // browsing-web user activity.
+        .onOpenURL { navigation.handle($0) }
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            if let url = activity.webpageURL { navigation.handle(url) }
+        }
+        // `initial`: a link handled before this view appeared (cold launch).
+        .onChange(of: navigation.openCount, initial: true) { showDestination() }
+        #if DEBUG
+        // Simulator testing without universal links: launch with
+        // MOMENTS_OPEN_URL=<event link> in the scheme or SIMCTL_CHILD_ env.
+        .task {
+            if let link = ProcessInfo.processInfo.environment["MOMENTS_OPEN_URL"], let url = URL(string: link) {
+                navigation.handle(url)
+            }
+        }
+        #endif
+    }
+
+    private var placeholder: some View {
         VStack(spacing: Spacing.sm) {
             Text("Moments")
                 .font(MomentsFont.display())
@@ -19,22 +53,22 @@ struct RootView: View {
         .padding(Spacing.lg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(MomentsColor.background)
-        // Universal links arrive here; App Clip invocations arrive as a
-        // browsing-web user activity.
-        .onOpenURL { navigation.handle($0) }
-        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
-            if let url = activity.webpageURL { navigation.handle(url) }
-        }
     }
 
     private var subtitle: String {
         switch navigation.destination {
-        case nil: String(localized: "Scan an event QR code to join.")
-        case let .event(slug), let .slideshow(slug): String(localized: "Opening \(slug.value)…")
+        case .slideshow: String(localized: "The slideshow is coming soon.")
+        case nil, .event: String(localized: "Scan an event QR code to join.")
         }
     }
-}
 
-#Preview {
-    RootView(navigation: AppNavigation(router: AppRouter()))
+    private func showDestination() {
+        // Last chance to keep a one-time guest token the keychain refused.
+        if let joinModel, joinModel.hasUnsavedIdentity { joinModel.retrySaving() }
+        guard case let .event(slug) = navigation.destination else { return joinModel = nil }
+        joinModel = JoinModel(
+            slug: slug, invite: navigation.takeInvite(for: slug),
+            service: environment.service, store: environment.credentials
+        )
+    }
 }

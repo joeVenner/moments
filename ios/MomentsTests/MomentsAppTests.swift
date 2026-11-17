@@ -9,7 +9,7 @@ private let invite = String(repeating: "ab12", count: 16)
 /// Smoke tests for the app target plus the navigation model.
 @Suite @MainActor struct MomentsAppTests {
     @Test func rootViewBuilds() {
-        _ = RootView(navigation: AppNavigation(router: AppRouter())).body
+        _ = RootView(navigation: AppNavigation(router: AppRouter()), environment: .inMemory()).body
     }
 
     @Test func linksMomentsDomain() {

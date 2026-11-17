@@ -21,7 +21,8 @@ final class AppNavigation {
     @ObservationIgnored private var pendingInvite: (slug: EventSlug, token: InviteToken)?
     @ObservationIgnored private let router: AppRouter
     @ObservationIgnored private let now: () -> ContinuousClock.Instant
-    @ObservationIgnored private var lastLink: (url: URL, at: ContinuousClock.Instant)?
+    /// A per-process hash of the last link, not the link: it carries the invite.
+    @ObservationIgnored private var lastLink: (hash: Int, at: ContinuousClock.Instant)?
 
     /// The same link can arrive through both `onOpenURL` and the web user
     /// activity; deliveries this close together count once.
@@ -37,8 +38,9 @@ final class AppNavigation {
     func handle(_ url: URL) -> Bool {
         guard let route = router.route(for: url) else { return false }
         let arrivedAt = now()
-        if let lastLink, lastLink.url == url, arrivedAt - lastLink.at < Self.duplicateWindow { return true }
-        lastLink = (url, arrivedAt)
+        let hash = url.absoluteString.hashValue
+        if let lastLink, lastLink.hash == hash, arrivedAt - lastLink.at < Self.duplicateWindow { return true }
+        lastLink = (hash, arrivedAt)
         switch route {
         case let .event(slug, invite):
             pendingInvite = invite.map { (slug, $0) }
