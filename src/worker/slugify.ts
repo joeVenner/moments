@@ -6,7 +6,10 @@ export function slugify(input: string): string {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
+    .slice(0, 60)
+    // The cut can land on a separator; a trailing dash would make
+    // "<slug>-<suffix>" contain "--".
+    .replace(/-+$/, "");
 }
 
 export function randomSuffix(length = 4): string {

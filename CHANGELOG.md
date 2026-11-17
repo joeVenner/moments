@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS link handling (`AppRouting` in MomentsKit): event links, App Clip launches and scanned QR codes open `/e/{slug}` (with its invite) or the slideshow. Only https links on moments-hq.com are accepted; other sites, ports, paths, encoded paths and links with two invites are ignored, and the invite never appears in logs. The app shows which event a link opened (screens come next).
+- iOS credential storage (`CredentialStore` in MomentsKit): per-event access grant, guest token and participant kept in the keychain, on this device only, never synced, readable after first unlock so background uploads work. Entries are tied to the event's ID so a reused slug can't pick up another event's credentials, updates are atomic, unreadable entries are never wiped, and a fresh install starts clean.
 - Private-event access for the native app: `POST /api/v1/events/{slug}/access` exchanges a PIN or the invite token for a signed grant (no cookie), sharing the web route's lockout and slowdown; `MomentsClient.access(slug:credential:)` returns it with typed errors (wrong PIN or invite, too many attempts with the wait, unavailable).
 - iOS API client (`MomentsAPI` in MomentsKit): generated from the v1 OpenAPI document with Apple's swift-openapi-generator (exact-pinned), wrapped in `MomentsClient` with the `X-Client` version header, typed errors that never carry credentials, no redirects or cookies, and mapping into the domain models. Media links are accepted only from the site itself or Cloudflare Stream; a moment this build can't read is skipped instead of failing the feed. `npm run openapi:update` now also refreshes the iOS copy of the spec.
 - iOS design system (`DesignSystem` in MomentsKit): the web's dark colour tokens (a test fails if they drift from `src/client/index.css`, others enforce WCAG AA), system-font text styles that follow Dynamic Type, spacing and radii, Reduce Motion-aware animation, and named haptics. The app's placeholder screen uses it.
@@ -32,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Setting a new PIN, or making a public event private again, revokes all previously issued access and rotates the invitation link.
 
 ### Fixed
+- Event slugs no longer end in a dash (or contain `--` with a suffix) when a long title is cut at a separator.
 - Abandoned multipart uploads are now cancelled in R2, so their parts stop costing storage. A daily job sweeps sessions still open after 7 days, or 30 minutes after an event's uploads close (up to 40 per run). Deleting an event (the daily purge or "archive now") now cancels its unfinished uploads before removing their records, which used to leave billed parts behind.
 
 ### Security
