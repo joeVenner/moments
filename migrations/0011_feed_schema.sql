@@ -1,9 +1,9 @@
--- Cursor-based feed for native clients (iOS plan, Phase 0), step 1 of 3: schema.
+-- Cursor-based feed for native clients (iOS plan, Phase 0), step 1 of 2: schema.
 -- Each event has its own monotonic counter. It stamps every moment insert
 -- (seq + change_seq) and every visibility/caption change (change_seq), so the
 -- cursors leak nothing about other events. Clients page backwards with
 -- ?before=<seq> and poll ?since=<change_seq>.
--- Split into three files so a failed step can be retried on its own.
+-- Schema is separate because ADD COLUMN cannot be retried; step 2 is idempotent.
 CREATE TABLE IF NOT EXISTS event_feed_counters (
   event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
   value INTEGER NOT NULL

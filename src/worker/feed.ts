@@ -3,7 +3,7 @@ import type { MomentRow } from "./types";
 /**
  * Cursor-based moment feed for native clients. Ordering and change tracking
  * come from the per-event `seq` / `change_seq` columns that triggers maintain
- * (migrations 0011-0013), so every write path is covered without touching it.
+ * (migrations 0011-0012), so every write path is covered without touching it.
  *
  * Contract: `change_seq` tracks visibility and caption only. Reaction counts in
  * `upserts` can be stale; clients refresh them separately.

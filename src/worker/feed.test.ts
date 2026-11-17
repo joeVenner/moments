@@ -69,7 +69,7 @@ describe("seq triggers", () => {
   });
 });
 
-describe("migrations 0011-0013 backfill", () => {
+describe("migrations 0011-0012 backfill", () => {
   it("numbers existing moments per event in upload order and continues each counter", () => {
     sqlite = createSqliteD1({ stopBefore: "0011" });
     seedEvent("event-1", "party");
@@ -90,6 +90,32 @@ describe("migrations 0011-0013 backfill", () => {
       { id: "late", seq: 3, change_seq: 3 },
       { id: "new", seq: 4, change_seq: 4 },
       { id: "other", seq: 1, change_seq: 1 },
+    ]);
+  });
+});
+
+describe("migration safety", () => {
+  it("numbers uploads that land between the schema and backfill migrations", () => {
+    sqlite = createSqliteD1({ stopBefore: "0012" });
+    seedEvent("event-1", "party");
+    addMoment("during-deploy");
+    sqlite.applyRemainingMigrations();
+    addMoment("after");
+    expect(sqlite.raw.prepare("SELECT id, seq FROM moments ORDER BY seq").all()).toEqual([
+      { id: "during-deploy", seq: 1 },
+      { id: "after", seq: 2 },
+    ]);
+  });
+
+  it("still deletes and moderates when an event's counter row is missing", () => {
+    addMoment("m1");
+    addMoment("m2");
+    run("DELETE FROM event_feed_counters");
+    run("UPDATE moments SET moderation_status = 'hidden' WHERE id = 'm1'");
+    run("DELETE FROM moments WHERE id = 'm2'");
+    expect(sqlite.raw.prepare("SELECT change_seq FROM moments WHERE id = 'm1'").get()).toEqual({ change_seq: 1 });
+    expect(sqlite.raw.prepare("SELECT moment_id, change_seq FROM moment_tombstones").all()).toEqual([
+      { moment_id: "m2", change_seq: 2 },
     ]);
   });
 });
