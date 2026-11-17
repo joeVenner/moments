@@ -12,9 +12,11 @@ import {
   getFeedChanges,
   getFeedPage,
   parseCursor,
+  type FeedMoment,
 } from "../feed";
 import { GUEST_TOKEN_HEADER, joinEventAsGuest, toPublicParticipant } from "../guestIdentity";
 import { signMomentsForEvent, STREAM_SIGNING_UNAVAILABLE, StreamSigningError } from "../streamSigning";
+import { withGuestMediaGrant, withGuestMediaGrants } from "../mediaAccess";
 import type { Env, EventRow } from "../types";
 import {
   AccessRequestSchema,
@@ -191,6 +193,11 @@ const eventGate: MiddlewareHandler<V1Env> = async (c, next) => {
   return next();
 };
 
+/** Stream playback tokens, then `?at=` on R2 URLs, for a private event. */
+async function signFeedMedia<T extends FeedMoment>(env: Env, event: EventRow, moments: readonly T[]): Promise<T[]> {
+  return withGuestMediaGrants(env.EVENT_ACCESS_SECRET, event, await signMomentsForEvent(env, event, moments));
+}
+
 export const v1 = new OpenAPIHono<V1Env>({
   // Zod's issue list is not part of the contract; clients get a stable shape.
   defaultHook: (result, c) => {
@@ -216,9 +223,12 @@ v1.use("*", clientVersionGate);
 // the event route and everything below it (registering both runs it twice).
 v1.use("/events/:slug/*", eventGate);
 
-v1.openapi(getEventRoute, (c) => {
+v1.openapi(getEventRoute, async (c) => {
   c.header("Cache-Control", "no-store");
-  return c.json({ event: toPublicEvent(c.get("event")) }, 200);
+  const event = c.get("event");
+  const publicEvent = toPublicEvent(event);
+  const cover = await withGuestMediaGrant(c.env.EVENT_ACCESS_SECRET, event, publicEvent.cover_image_url);
+  return c.json({ event: { ...publicEvent, cover_image_url: cover } }, 200);
 });
 
 v1.openapi(getFeedRoute, async (c) => {
@@ -230,7 +240,7 @@ v1.openapi(getFeedRoute, async (c) => {
     reactorId: query.reactor_id ?? "",
   });
   c.header("Cache-Control", "no-store");
-  return c.json({ ...page, moments: await signMomentsForEvent(c.env, c.get("event"), page.moments) }, 200);
+  return c.json({ ...page, moments: await signFeedMedia(c.env, c.get("event"), page.moments) }, 200);
 });
 
 v1.openapi(getFeedChangesRoute, async (c) => {
@@ -242,7 +252,7 @@ v1.openapi(getFeedChangesRoute, async (c) => {
     reactorId: query.reactor_id ?? "",
   });
   c.header("Cache-Control", "no-store");
-  return c.json({ ...changes, upserts: await signMomentsForEvent(c.env, c.get("event"), changes.upserts) }, 200);
+  return c.json({ ...changes, upserts: await signFeedMedia(c.env, c.get("event"), changes.upserts) }, 200);
 });
 
 v1.openapi(joinEventRoute, async (c) => {

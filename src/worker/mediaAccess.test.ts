@@ -1,7 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "./index";
 import { signAccessGrant } from "./eventAccess";
-import { mediaViewExpiry, signMediaView, verifyMediaView, withAdminViewUrls } from "./mediaAccess";
+import {
+  mediaGrantExpiry,
+  mediaViewExpiry,
+  signMediaGrant,
+  signMediaView,
+  verifyMediaGrant,
+  verifyMediaView,
+  withAdminViewUrls,
+  withGuestMediaGrant,
+  withGuestMediaGrants,
+} from "./mediaAccess";
 import { createSqliteD1, type SqliteD1 } from "./testing/sqliteD1";
 import type { Env } from "./types";
 
@@ -36,6 +46,87 @@ describe("media view tokens", () => {
     expect(await withAdminViewUrls(undefined, [{ media_url: "/media/a.jpg" }])).toEqual([{ media_url: "/media/a.jpg" }]);
     const [already] = await withAdminViewUrls(SECRET, [{ media_url: "/media/a.jpg?mv=x" }], NOW);
     expect(already.media_url).toBe("/media/a.jpg?mv=x");
+  });
+});
+
+describe("guest media grants", () => {
+  const key = "events/e1/moments/a.jpg";
+
+  it("verify only for the same key, access version, secret and a live expiry", async () => {
+    const token = await signMediaGrant(SECRET, key, 3, NOW);
+    expect(await verifyMediaGrant(SECRET, key, 3, token, NOW)).toBe(true);
+    expect(await verifyMediaGrant(SECRET, "events/e1/moments/b.jpg", 3, token, NOW)).toBe(false);
+    expect(await verifyMediaGrant(SECRET, key, 4, token, NOW)).toBe(false);
+    expect(await verifyMediaGrant("other-secret-456", key, 3, token, NOW)).toBe(false);
+    expect(await verifyMediaGrant(SECRET, key, 3, token, mediaGrantExpiry(NOW))).toBe(false);
+    expect(await verifyMediaGrant(SECRET, key, 3, undefined, NOW)).toBe(false);
+    expect(await verifyMediaGrant(SECRET, key, 3, `${token}x`, NOW)).toBe(false);
+  });
+
+  it("is not interchangeable with an admin view", async () => {
+    const view = await signMediaView(SECRET, key, NOW);
+    expect(await verifyMediaGrant(SECRET, key, 1, view, NOW)).toBe(false);
+    const grant = await signMediaGrant(SECRET, key, 1, NOW);
+    expect(await verifyMediaView(SECRET, key, grant, NOW)).toBe(false);
+  });
+
+  it("lasts 6-12 hours and rejects expiries further out", async () => {
+    const exp = mediaGrantExpiry(NOW);
+    expect(exp - NOW).toBeGreaterThan(6 * 3600);
+    expect(exp - NOW).toBeLessThanOrEqual(12 * 3600);
+    const far = await signMediaGrant(SECRET, key, 1, NOW + 13 * 3600);
+    expect(await verifyMediaGrant(SECRET, key, 1, far, NOW)).toBe(false);
+  });
+
+  it("signs R2 URLs of private events only", async () => {
+    const moment = {
+      media_url: "/media/events/e1/moments/a.jpg",
+      media: {
+        kind: "image" as const,
+        url: "/media/events/e1/moments/a.jpg",
+        thumb_url: "/media/events/e1/thumbs/a.jpg",
+        display_url: null,
+        poster_url: "https://customer-x.cloudflarestream.com/u/thumbnails/thumbnail.jpg",
+        hls_url: null,
+        width: null,
+        height: null,
+        duration_ms: null,
+        blurhash: null,
+      },
+    };
+    const [signed] = await withGuestMediaGrants(SECRET, { access_mode: "private", access_version: 2 }, [moment], NOW);
+    expect(signed.media_url).toMatch(/\?at=\d{10}\.[\w-]{43}$/);
+    expect(signed.media.url).toBe(signed.media_url);
+    expect(await verifyMediaGrant(SECRET, "events/e1/thumbs/a.jpg", 2, signed.media.thumb_url?.split("?at=")[1], NOW)).toBe(true);
+    expect(signed.media.display_url).toBeNull();
+    expect(signed.media.poster_url).toBe(moment.media.poster_url);
+    const [open] = await withGuestMediaGrants(SECRET, { access_mode: "public", access_version: 1 }, [moment], NOW);
+    expect(open).toEqual(moment);
+    const [noSecret] = await withGuestMediaGrants(undefined, { access_mode: "private", access_version: 1 }, [moment], NOW);
+    expect(noSecret).toEqual(moment);
+  });
+});
+
+describe("guest media grant edge cases", () => {
+  const privateEvent = { access_mode: "private", access_version: 1 };
+
+  it("leaves query-bearing and absolute URLs alone, and handles moments without media", async () => {
+    const [query, absolute] = await withGuestMediaGrants(
+      SECRET,
+      privateEvent,
+      [{ media_url: "/media/events/e1/a.jpg?x=1" }, { media_url: "https://customer-x.cloudflarestream.com/u/iframe" }],
+      NOW
+    );
+    expect(query.media_url).toBe("/media/events/e1/a.jpg?x=1");
+    expect(absolute.media_url).toBe("https://customer-x.cloudflarestream.com/u/iframe");
+    const [plain] = await withGuestMediaGrants(SECRET, privateEvent, [{ media_url: "/media/events/e1/a.jpg" }], NOW);
+    expect(plain.media_url).toMatch(/\?at=/);
+  });
+
+  it("signs a single URL such as the cover", async () => {
+    expect(await withGuestMediaGrant(SECRET, privateEvent, "/media/events/e1/cover", NOW)).toMatch(/^\/media\/events\/e1\/cover\?at=/);
+    expect(await withGuestMediaGrant(SECRET, privateEvent, null, NOW)).toBeNull();
+    expect(await withGuestMediaGrant(SECRET, { access_mode: "public", access_version: 1 }, "/media/c", NOW)).toBe("/media/c");
   });
 });
 
@@ -130,6 +221,46 @@ describe("/media", () => {
     const other = addMoment("m2", "ev1");
     const token = await signMediaView(SECRET, other, Math.floor(Date.now() / 1000));
     expect((await get(`/media/${hidden}?mv=${token}`)).status).toBe(404);
+  });
+
+  it("lets a native guest load one private key with ?at=, until the PIN changes", async () => {
+    const key = addMoment("m2", "ev2");
+    const other = addMoment("m4", "ev2");
+    const now = Math.floor(Date.now() / 1000);
+    const token = await signMediaGrant(SECRET, key, 1, now);
+    const res = await get(`/media/${key}?at=${token}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("private, max-age=300");
+    expect((await get(`/media/${other}?at=${token}`)).status).toBe(401);
+    expect((await get(`/media/${key}?at=${token}`, { Range: "bytes=0-1" })).status).toBe(206);
+    sqlite.raw.prepare("UPDATE events SET access_version = 2 WHERE id = 'ev2'").run();
+    expect((await get(`/media/${key}?at=${token}`)).status).toBe(401);
+  });
+
+  it("falls back to the header when ?at= is malformed or for another key", async () => {
+    const key = addMoment("m2", "ev2");
+    const grant = await signAccessGrant(SECRET, { eventId: "ev2", accessVersion: 1, expiresAt: Math.floor(Date.now() / 1000) + 600 });
+    expect((await get(`/media/${key}?at=garbage`, { "X-Event-Access": grant })).status).toBe(200);
+  });
+
+  it("serves a private cover through ?at=", async () => {
+    objects.set("events/ev2/cover", "cover");
+    const token = await signMediaGrant(SECRET, "events/ev2/cover", 1, Math.floor(Date.now() / 1000));
+    expect((await get("/media/events/ev2/cover")).status).toBe(401);
+    expect((await get(`/media/events/ev2/cover?at=${token}`)).status).toBe(200);
+  });
+
+  it("never serves a hidden moment through ?at=", async () => {
+    const hidden = addMoment("m3", "ev2", "hidden");
+    const token = await signMediaGrant(SECRET, hidden, 1, Math.floor(Date.now() / 1000));
+    expect((await get(`/media/${hidden}?at=${token}`)).status).toBe(404);
+  });
+
+  it("ignores ?at= without a secret", async () => {
+    const key = addMoment("m2", "ev2");
+    const token = await signMediaGrant(SECRET, key, 1, Math.floor(Date.now() / 1000));
+    secret = undefined;
+    expect((await get(`/media/${key}?at=${token}`)).status).toBe(401);
   });
 
   it("keeps the private gate, and hides hidden moments even with a grant", async () => {

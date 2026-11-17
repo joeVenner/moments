@@ -157,6 +157,62 @@ describe("private events", () => {
     expect(web.status).toBe(200);
   });
 
+  it("signs R2 media URLs with ?at= on private feeds only", async () => {
+    addMoment("m1", "event-p");
+    addMoment("m2", "event-1");
+    sqlite.raw.prepare("UPDATE moments SET thumb_key = 'events/event-p/thumbs/m1.jpg' WHERE id = 'm1'").run();
+    const grant = await signAccessGrant(SECRET, {
+      eventId: "event-p",
+      accessVersion: 1,
+      expiresAt: Math.floor(Date.now() / 1000) + 600,
+    });
+    const headers = { "X-Event-Access": grant };
+    const at = /\?at=\d{10}\.[\w-]{43}$/;
+    const page = (await (await call("/events/secret/feed", { headers })).json()) as {
+      moments: { media_url: string; media: { url: string; thumb_url: string | null; display_url: string | null } }[];
+    };
+    const [moment] = page.moments;
+    expect(moment.media_url).toMatch(at);
+    expect(moment.media.url).toMatch(at);
+    expect(moment.media.thumb_url).toMatch(/^\/media\/events\/event-p\/thumbs\/m1\.jpg\?at=/);
+    expect(moment.media.display_url).toBeNull();
+    const changes = (await (await call("/events/secret/feed/changes?since=0", { headers })).json()) as {
+      upserts: { media: { url: string } }[];
+    };
+    expect(changes.upserts[0].media.url).toMatch(at);
+    const open = (await (await call("/events/party/feed")).json()) as { moments: { media: { url: string } }[] };
+    expect(open.moments[0].media.url).toBe("/media/events/event-1/moments/m2.jpg");
+  });
+
+  it("signs a private event's cover; the web event response is unchanged", async () => {
+    addMoment("m1", "event-p");
+    sqlite.raw.prepare("UPDATE events SET cover_image_url = '/media/events/event-p/cover' WHERE id = 'event-p'").run();
+    const grant = await signAccessGrant(SECRET, {
+      eventId: "event-p",
+      accessVersion: 1,
+      expiresAt: Math.floor(Date.now() / 1000) + 600,
+    });
+    const native = (await (await call("/events/secret", { headers: { "X-Event-Access": grant } })).json()) as {
+      event: { cover_image_url: string };
+    };
+    expect(native.event.cover_image_url).toMatch(/^\/media\/events\/event-p\/cover\?at=\d{10}\.[\w-]{43}$/);
+    const ctx = { waitUntil: vi.fn(), passThroughOnException: vi.fn() } as unknown as ExecutionContext;
+    const webEvent = await worker.fetch(
+      new Request("https://moments.test/api/events/secret", { headers: { "X-Event-Access": grant } }),
+      env(),
+      ctx
+    );
+    expect(JSON.stringify(await webEvent.json())).not.toContain("?at=");
+    const ctx2 = { waitUntil: vi.fn(), passThroughOnException: vi.fn() } as unknown as ExecutionContext;
+    const webFeed = await worker.fetch(
+      new Request("https://moments.test/api/events/secret/moments", { headers: { "X-Event-Access": grant } }),
+      env(),
+      ctx2
+    );
+    expect(webFeed.status).toBe(200);
+    expect(JSON.stringify(await webFeed.json())).not.toContain("?at=");
+  });
+
   it("rejects a grant for another event", async () => {
     seedEvent("event-q", "other-secret", "private");
     const grant = await signAccessGrant(SECRET, {

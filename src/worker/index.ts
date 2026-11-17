@@ -20,7 +20,14 @@ import {
 } from "./multipartPresign";
 import { requireAdmin } from "./auth";
 import { canFinishUploads, getActiveEventBySlug, getEventBySlug, toPublicEvent, UPLOADS_CLOSED } from "./events";
-import { isHiddenMomentMedia, MEDIA_VIEW_PARAM, verifyMediaView, withAdminViewUrls } from "./mediaAccess";
+import {
+  isHiddenMomentMedia,
+  MEDIA_GRANT_PARAM,
+  MEDIA_VIEW_PARAM,
+  verifyMediaGrant,
+  verifyMediaView,
+  withAdminViewUrls,
+} from "./mediaAccess";
 import { v1 } from "./v1";
 import { generateAiBanner, BannerGenerationError } from "./banner";
 import { isStreamConfigured, streamApiUrl, streamAuthHeaders, streamMediaUrl } from "./stream";
@@ -1487,6 +1494,7 @@ app.get("/media/*", async (c) => {
   // Only what the access check needs; the three lookups are independent.
   const eventColumns = "id, access_mode, invite_token, access_version";
   const secret = c.env.EVENT_ACCESS_SECRET;
+  const nowSeconds = Math.floor(Date.now() / 1000);
   const [mediaEvent, isHidden, isAdminView] = await Promise.all([
     eventId
       ? c.env.DB.prepare(`SELECT ${eventColumns} FROM events WHERE id = ?`).bind(eventId).first<MediaEvent>()
@@ -1495,11 +1503,17 @@ app.get("/media/*", async (c) => {
     isHiddenMomentMedia(c.env.DB, key),
     // Admin dashboard loads (hidden or private media) carry a signed ?mv= view.
     secret
-      ? verifyMediaView(secret, key, c.req.query(MEDIA_VIEW_PARAM), Math.floor(Date.now() / 1000))
+      ? verifyMediaView(secret, key, c.req.query(MEDIA_VIEW_PARAM), nowSeconds)
       : Promise.resolve(false),
   ]);
   if (!isAdminView) {
-    if (mediaEvent?.access_mode === "private" && !(await verifyEventAccess(c, mediaEvent))) {
+    const isPrivate = mediaEvent?.access_mode === "private";
+    // Native guests' ?at= is checked first; it covers this one key only.
+    const hasGuestGrant =
+      isPrivate && secret
+        ? await verifyMediaGrant(secret, key, mediaEvent.access_version, c.req.query(MEDIA_GRANT_PARAM), nowSeconds)
+        : false;
+    if (isPrivate && !hasGuestGrant && !(await verifyEventAccess(c, mediaEvent))) {
       return c.json({ error: "access required" }, 401);
     }
     // Hidden moments disappear from the feed and from direct links alike.

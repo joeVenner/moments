@@ -67,7 +67,10 @@ export const MediaSchema = z
     duration_ms: z.number().int().nullable(),
     blurhash: z.string().nullable(),
   })
-  .openapi("Media");
+  .openapi("Media", {
+    description:
+      "For private events each `/media/...` URL carries an `at` query parameter: a signature for that one object, valid 6-12 hours and revoked when the host changes access. Use the URL as given (cache by path); refresh the feed for new signatures.",
+  });
 
 export const MomentSchema = z
   .object({
