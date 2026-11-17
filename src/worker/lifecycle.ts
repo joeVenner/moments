@@ -1,8 +1,25 @@
 import type { Env, EventRow, MomentRow } from "./types";
 import { PURGE_AT_SQL } from "./events";
 import { deleteMomentMedia } from "./moderation";
+import { abortEventUploads, type AbortFn } from "./orphanUploads";
 
-export async function cleanupEvent(env: Env, event: Pick<EventRow, "id">): Promise<void> {
+export async function cleanupEvent(env: Env, event: Pick<EventRow, "id">, abort?: AbortFn): Promise<void> {
+  // Unfinished multipart parts are invisible to BUCKET.list below; abort them
+  // while the upload rows still say where they are.
+  // Never let this block the purge itself (subrequest limits, R2 outages).
+  try {
+    await abortEventUploads(env, event.id, abort);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        scope: "upload",
+        event: "event_upload_abort_failed",
+        eventId: event.id,
+        error: error instanceof Error ? error.name : "unknown",
+      })
+    );
+  }
+
   const { results: moments } = await env.DB.prepare(
     "SELECT * FROM moments WHERE event_id = ?"
   ).bind(event.id).all<MomentRow>();
@@ -32,8 +49,23 @@ export async function cleanupExpiredEvents(env: Env): Promise<number> {
   const { results } = await env.DB.prepare(
     `SELECT * FROM events WHERE archived_at IS NULL AND ${PURGE_AT_SQL} IS NOT NULL AND ${PURGE_AT_SQL} <= datetime('now')`
   ).all<EventRow>();
-  for (const event of results) await cleanupEvent(env, event);
-  return results.length;
+  let purged = 0;
+  for (const event of results) {
+    // One failing event must not stop the others; it is retried tomorrow.
+    try {
+      await cleanupEvent(env, event);
+      purged += 1;
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: "event_purge_failed",
+          eventId: event.id,
+          error: error instanceof Error ? error.name : "unknown",
+        })
+      );
+    }
+  }
+  return purged;
 }
 
 /** Failed-PIN rows only matter inside the throttling window; keep a day for auditing. */

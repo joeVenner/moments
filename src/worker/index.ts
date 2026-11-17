@@ -38,6 +38,7 @@ import {
 } from "./streamSigning";
 import { deleteMomentMedia } from "./moderation";
 import { cleanupEvent, cleanupExpiredEvents, pruneAccessFailures } from "./lifecycle";
+import { abortOrphanUploads } from "./orphanUploads";
 import {
   CHANGES_MAX_LIMIT,
   FEED_DEFAULT_LIMIT,
@@ -1648,7 +1649,8 @@ app.onError((err, c) => {
 export default {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) => app.fetch(request, env, ctx),
   scheduled: async (_controller: ScheduledController, env: Env, ctx: ExecutionContext) => {
-    ctx.waitUntil(cleanupExpiredEvents(env));
+    // Sequential: both spend the invocation's subrequest budget on R2 calls.
+    ctx.waitUntil(cleanupExpiredEvents(env).then(() => abortOrphanUploads(env)));
     ctx.waitUntil(pruneAccessFailures(env));
   },
 } satisfies ExportedHandler<Env>;
