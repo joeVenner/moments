@@ -121,7 +121,7 @@ export async function joinEventAsGuest(db: D1Database, input: JoinInput): Promis
   }
 
   const token = generateGuestToken();
-  const [claim] = await db.batch([
+  const [claim, session] = await db.batch([
     // Inserts a new claimed participant, or claims a legacy one. changes() is 1
     // exactly when this request won the nickname.
     db
@@ -142,6 +142,11 @@ export async function joinEventAsGuest(db: D1Database, input: JoinInput): Promis
       .bind(crypto.randomUUID(), await hashGuestToken(token), input.eventId, input.nickname),
   ]);
   const wonNickname = claim.meta.changes === 1;
+  // Guard the changes() coupling: a won claim without its session would strand
+  // the claimant once enforcement is on, so fail loudly instead.
+  if (wonNickname !== (session.meta.changes === 1)) {
+    throw new Error("guest claim and session insert diverged");
+  }
 
   if (!wonNickname && input.enforceClaims) return { ok: false, error: "nickname_taken" };
 
