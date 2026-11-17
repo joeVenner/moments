@@ -67,6 +67,14 @@ export interface MomentRow {
   seq?: number | null;
   /** Bumped on insert, hide/unhide and caption edits. */
   change_seq?: number | null;
+  /** Media metadata (migration 0013); null until known. */
+  width?: number | null;
+  height?: number | null;
+  duration_ms?: number | null;
+  blurhash?: string | null;
+  thumb_key?: string | null;
+  display_key?: string | null;
+  poster_key?: string | null;
   reaction_count?: number;
   reacted?: number;
 }
