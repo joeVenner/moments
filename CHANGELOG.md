@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Cursor-based feed for native clients: `GET /api/events/:slug/feed?before=<seq>` pages newest-first, and `GET /api/events/:slug/feed/changes?since=<cursor>` returns new or edited moments plus the ids of hidden or deleted ones. Cursors are per event. The web feed is unchanged.
 - Joining an event returns a per-device `guest_token` (send it back as `X-Guest-Token`). The first device to join under a nickname claims it; only the token's SHA-256 hash is stored. Tokens are accepted but not yet required (`GUEST_TOKENS_ENFORCED`).
 - The web app stores its guest token per event and sends it when re-joining.
 - Route tests can run against the real D1 migrations through a Node SQLite adapter (requires Node 22.13+).
