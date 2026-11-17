@@ -143,13 +143,17 @@ export async function verifyAccessGrant(
  * invite token that older web sessions hold in their cookie. Bumping
  * access_version revokes both. Always await this; a bare Promise is truthy.
  */
-export async function verifyEventAccess(
-  c: Context<{ Bindings: Env }>,
+export async function verifyEventAccess<E extends { Bindings: Env }>(
+  c: Context<E>,
   event: AccessEvent,
-  nowSeconds: number = Math.floor(Date.now() / 1000)
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+  options: { signedGrantOnly?: boolean } = {}
 ): Promise<boolean> {
   if (event.access_mode !== "private") return true;
-  const supplied = c.req.header("X-Event-Access") ?? getCookie(c, accessCookieName(event.id));
+  // signedGrantOnly (native API): header only, no cookie, no raw invite token.
+  const supplied = options.signedGrantOnly
+    ? c.req.header("X-Event-Access")
+    : c.req.header("X-Event-Access") ?? getCookie(c, accessCookieName(event.id));
   if (!supplied) return false;
 
   const secret = c.env.EVENT_ACCESS_SECRET;
@@ -157,6 +161,8 @@ export async function verifyEventAccess(
     const claims = await verifyAccessGrant(secret, supplied, nowSeconds);
     if (claims) return claims.eventId === event.id && claims.accessVersion === event.access_version;
   }
+
+  if (options.signedGrantOnly) return false;
 
   // Transition path for guests who unlocked before signed grants existed.
   // Any access_version bump (PIN change, going private again) revokes it.
