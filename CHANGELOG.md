@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Feed items carry a `media` object (kind, url, thumb/display/poster URLs, Stream `hls_url`, width, height, duration, blurhash). Migration `0013` adds the backing columns; filling them in counts as a change for `/feed/changes`.
 - Cursor-based feed for native clients: `GET /api/events/:slug/feed?before=<seq>` pages newest-first, and `GET /api/events/:slug/feed/changes?since=<cursor>` returns new or edited moments plus the ids of hidden or deleted ones. Cursors are per event. The web feed is unchanged.
 - Joining an event returns a per-device `guest_token` (send it back as `X-Guest-Token`). The first device to join under a nickname claims it; only the token's SHA-256 hash is stored. Tokens are accepted but not yet required (`GUEST_TOKENS_ENFORCED`).
 - The web app stores its guest token per event and sends it when re-joining.
@@ -16,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Admin privacy controls warn that saving a new PIN signs every guest out and replaces the invitation link.
 
 ### Changed
+- The web moment list and highlights return an explicit set of columns, so internal storage columns are never exposed to guests.
 - Nicknames longer than 60 characters are rejected when joining.
 - Participant responses no longer use `SELECT *`; they return only public fields.
 - New event PINs must be 6 to 20 characters. Existing shorter PINs keep working.
