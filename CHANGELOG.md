@@ -8,10 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Joining an event returns a per-device `guest_token` (send it back as `X-Guest-Token`). The first device to join under a nickname claims it; only the token's SHA-256 hash is stored. Tokens are accepted but not yet required (`GUEST_TOKENS_ENFORCED`).
+- The web app stores its guest token per event and sends it when re-joining.
+- Route tests can run against the real D1 migrations through a Node SQLite adapter (requires Node 22.13+).
 - Private-event unlock now returns a signed access token (`access_token`, `expires_at`) that native clients can send as the `X-Event-Access` header.
 - Admin privacy controls warn that saving a new PIN signs every guest out and replaces the invitation link.
 
 ### Changed
+- Nicknames longer than 60 characters are rejected when joining.
+- Participant responses no longer use `SELECT *`; they return only public fields.
 - New event PINs must be 6 to 20 characters. Existing shorter PINs keep working.
 - Setting a new PIN, or making a public event private again, revokes all previously issued access and rotates the invitation link.
 

@@ -17,6 +17,7 @@ export async function cleanupEvent(env: Env, event: Pick<EventRow, "id">): Promi
 
   await env.DB.batch([
     env.DB.prepare("DELETE FROM moments WHERE event_id = ?").bind(event.id),
+    env.DB.prepare("DELETE FROM guest_sessions WHERE event_id = ?").bind(event.id),
     env.DB.prepare("DELETE FROM participants WHERE event_id = ?").bind(event.id),
     env.DB.prepare("DELETE FROM uploads WHERE event_id = ?").bind(event.id),
     env.DB.prepare("DELETE FROM access_failures WHERE event_id = ?").bind(event.id),

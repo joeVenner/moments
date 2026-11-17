@@ -1,6 +1,7 @@
 import type { EventData, MomentData } from "./types";
 import { getAdminAuthHeader } from "./adminAuth";
 import { getReactionId } from "./reactionId";
+import { getGuestToken, setGuestToken } from "./nickname";
 
 export class UnauthorizedError extends Error {}
 export class AccessRequiredError extends Error {}
@@ -187,10 +188,18 @@ export const DIRECT_UPLOAD_MAX_BYTES = 512 * 1024 * 1024;
 // parts, resume from R2 ListParts). The old `directUploadMoment` / `putToR2`
 // helpers and the worker `/presign` + `/register` routes were removed with it.
 
-export function joinEvent(slug: string, nickname: string, avatarSeed: string) {
+export function joinEvent(slug: string, nickname: string, avatarSeed: string): Promise<void> {
   const data = new URLSearchParams({ nickname, avatar_seed: avatarSeed });
-  return fetch(`/api/events/${slug}/participants`, { method: "POST", body: data }).catch(() => {
-    // Joining the participant roster is a nice-to-have for the leaderboard/avatar
-    // strip — never block the guest from reaching the feed if this fails.
-  });
+  const token = getGuestToken(slug);
+  const headers: Record<string, string> = token ? { "X-Guest-Token": token } : {};
+  return fetch(`/api/events/${slug}/participants`, { method: "POST", body: data, headers })
+    .then(async (res) => {
+      if (!res.ok) return;
+      const body = (await res.json()) as { guest_token?: unknown };
+      if (typeof body.guest_token === "string") setGuestToken(slug, body.guest_token);
+    })
+    .catch(() => {
+      // Joining the participant roster is a nice-to-have for the leaderboard/avatar
+      // strip — never block the guest from reaching the feed if this fails.
+    });
 }
