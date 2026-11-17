@@ -241,3 +241,22 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
         #expect(ClientIdentity.normalizedVersion("1..2") == "0")
     }
 }
+
+@Suite struct CredentialRedactionTests {
+    @Test func secretsNeverAppearInDescriptions() {
+        let values: [Any] = [
+            AccessGrant(token: "grant-secret", expiresAt: .distantFuture),
+            AccessCredential.pin("pin-secret"),
+            AccessCredential.invite("invite-secret"),
+            EventCredentials(accessGrant: "grant-secret", guestToken: "token-secret"),
+            JoinResult(participant: Participant(id: "p1", eventID: "e1", nickname: "Lea", joinedAt: .distantPast), guestToken: "token-secret"),
+        ]
+        for value in values {
+            var dumped = ""
+            dump(value, to: &dumped)
+            for text in [String(describing: value), String(reflecting: value), dumped] {
+                #expect(!text.contains("secret"), "\(text)")
+            }
+        }
+    }
+}
