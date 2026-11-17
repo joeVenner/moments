@@ -143,6 +143,7 @@ describe("getFeedPage", () => {
       width: 800,
       height: 600,
     });
+    expect(moment).toMatchObject({ reacted: false, reaction_count: 0 });
     for (const raw of ["width", "height", "duration_ms", "blurhash", "thumb_key", "display_key", "poster_key"]) {
       expect(moment).not.toHaveProperty(raw);
     }
