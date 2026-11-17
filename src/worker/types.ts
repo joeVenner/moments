@@ -26,8 +26,11 @@ export interface Env {
   STREAM_API_TOKEN?: string;
   STREAM_CUSTOMER_CODE?: string;
   // HMAC key for signed private-event access grants (eventAccess.ts). When
-  // unset, private events fall back to the legacy raw invite-token cookie.
+  // unset, unlocking a private event fails closed with 503.
   EVENT_ACCESS_SECRET?: string;
+  // "true" makes a claimed nickname joinable only with its own guest token
+  // (guestIdentity.ts). Off until the web and iOS clients all send tokens.
+  GUEST_TOKENS_ENFORCED?: string;
 }
 
 export interface EventRow {
@@ -70,6 +73,7 @@ export interface ParticipantRow {
   nickname: string;
   avatar_seed: string | null;
   joined_at: string;
+  claimed_at: string | null;
 }
 
 export interface LeaderboardEntry {

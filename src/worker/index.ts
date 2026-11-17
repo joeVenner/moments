@@ -1,6 +1,6 @@
 import { Hono, type Context } from "hono";
 import { secureHeaders } from "hono/secure-headers";
-import type { Env, EventRow, MomentRow, ParticipantRow, LeaderboardEntry, UploadRow } from "./types";
+import type { Env, EventRow, MomentRow, LeaderboardEntry, UploadRow } from "./types";
 import { slugify, randomSuffix } from "./slugify";
 import { putMedia, pointsForContentType, sanitizeFilename, isAllowedContentType, MAX_UPLOAD_BYTES } from "./storage";
 import {
@@ -23,6 +23,14 @@ import { generateAiBanner, BannerGenerationError } from "./banner";
 import { isStreamConfigured, streamApiUrl, streamAuthHeaders, streamMediaUrl } from "./stream";
 import { deleteMomentMedia } from "./moderation";
 import { cleanupEvent, cleanupExpiredEvents, pruneAccessFailures } from "./lifecycle";
+import {
+  GUEST_TOKEN_HEADER,
+  MAX_NICKNAME_LENGTH,
+  PUBLIC_PARTICIPANT_COLUMNS,
+  joinEventAsGuest,
+  toPublicParticipant,
+  type PublicParticipant,
+} from "./guestIdentity";
 import {
   MAX_PIN_LENGTH,
   MIN_PIN_LENGTH,
@@ -1284,10 +1292,10 @@ app.get("/api/events/:slug/participants", async (c) => {
   if (!event) return c.json({ error: "event not found" }, 404);
 
   const { results } = await c.env.DB.prepare(
-    "SELECT * FROM participants WHERE event_id = ? ORDER BY joined_at ASC"
+    `SELECT ${PUBLIC_PARTICIPANT_COLUMNS} FROM participants WHERE event_id = ? ORDER BY joined_at ASC`
   )
     .bind(event.id)
-    .all<ParticipantRow>();
+    .all<PublicParticipant>();
 
   return c.json({ participants: results });
 });
@@ -1298,21 +1306,32 @@ app.post("/api/events/:slug/participants", async (c) => {
 
   const body = await c.req.parseBody();
   const nickname = typeof body.nickname === "string" ? body.nickname.trim() : "";
-  const avatarSeed = typeof body.avatar_seed === "string" ? body.avatar_seed.trim() : null;
+  const avatarSeed = typeof body.avatar_seed === "string" ? body.avatar_seed.trim() || null : null;
 
   if (!nickname) {
     return c.json({ error: "nickname is required" }, 400);
   }
+  if (nickname.length > MAX_NICKNAME_LENGTH) {
+    return c.json({ error: `nickname must be at most ${MAX_NICKNAME_LENGTH} characters` }, 400);
+  }
 
-  await upsertParticipant(c.env.DB, event.id, nickname, avatarSeed);
+  const result = await joinEventAsGuest(c.env.DB, {
+    eventId: event.id,
+    nickname,
+    avatarSeed: avatarSeed?.slice(0, 100) ?? null,
+    presentedToken: c.req.header(GUEST_TOKEN_HEADER) ?? null,
+    enforceClaims: c.env.GUEST_TOKENS_ENFORCED === "true",
+  });
+  if (!result.ok) {
+    return c.json({ error: "This nickname is already taken in this event.", code: result.error }, 409);
+  }
 
-  const participant = await c.env.DB.prepare(
-    "SELECT * FROM participants WHERE event_id = ? AND nickname = ?"
-  )
-    .bind(event.id, nickname)
-    .first<ParticipantRow>();
-
-  return c.json({ participant }, 200);
+  // guest_token is present only when this request won the nickname; a client
+  // re-joining with its current token keeps using that token.
+  return c.json(
+    { participant: toPublicParticipant(result.participant), ...(result.guestToken ? { guest_token: result.guestToken } : {}) },
+    200
+  );
 });
 
 app.get("/api/events/:slug/leaderboard", async (c) => {
