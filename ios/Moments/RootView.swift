@@ -14,9 +14,12 @@ struct RootView: View {
     var body: some View {
         Group {
             if let joinModel {
-                JoinView(model: joinModel)
-                    // A new model per open restarts the flow cleanly.
-                    .id(joinModel.id)
+                GuestEventView(join: joinModel, dependencies: environment.guest) {
+                    // Access changed under the feed: start over with the PIN.
+                    self.joinModel = makeJoinModel(slug: joinModel.slug, invite: nil)
+                }
+                // A new model per open restarts the flow cleanly.
+                .id(joinModel.id)
             } else {
                 placeholder
             }
@@ -66,9 +69,10 @@ struct RootView: View {
         // Last chance to keep a one-time guest token the keychain refused.
         if let joinModel, joinModel.hasUnsavedIdentity { joinModel.retrySaving() }
         guard case let .event(slug) = navigation.destination else { return joinModel = nil }
-        joinModel = JoinModel(
-            slug: slug, invite: navigation.takeInvite(for: slug),
-            service: environment.service, store: environment.credentials
-        )
+        joinModel = makeJoinModel(slug: slug, invite: navigation.takeInvite(for: slug))
+    }
+
+    private func makeJoinModel(slug: EventSlug, invite: InviteToken?) -> JoinModel {
+        JoinModel(slug: slug, invite: invite, service: environment.service, store: environment.credentials)
     }
 }
