@@ -41,7 +41,8 @@ export const UPLOADS_CLOSED = {
   code: "uploads_closed",
 } as const;
 
-const sqlTimestamp = (date: Date) => date.toISOString().slice(0, 19).replace("T", " ");
+/** `YYYY-MM-DD HH:MM:SS` in UTC, the format D1 stores and the API returns. */
+export const sqlTimestamp = (date: Date) => date.toISOString().slice(0, 19).replace("T", " ");
 
 /** Whether an upload session opened before the close may still finish at `now`. */
 export function canFinishUploads(

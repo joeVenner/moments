@@ -140,7 +140,8 @@ export const JoinResponseSchema = z
 
 export const AccessRequestSchema = z
   .object({
-    pin: z.string().max(MAX_PIN_LENGTH).optional(),
+    // Trimmed before the length check, like the web route.
+    pin: z.string().trim().max(MAX_PIN_LENGTH).optional(),
     invite_token: z.string().max(200).optional().openapi({ description: "The `invite` value from the event link" }),
   })
   .refine((body) => Boolean(body.pin?.trim() || body.invite_token), { message: "pin or invite_token is required" })

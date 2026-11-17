@@ -368,6 +368,29 @@ describe("POST /events/{slug}/access", () => {
     expect((await requestAccess("nope", { pin: PIN })).status).toBe(404);
     expect((await call("/events/secret/access")).status).toBe(401);
   });
+
+  it("exempts only the exact access path from the gate", async () => {
+    for (const path of ["/events/secret/feed/access", "/events/secret/x/events/y/access", "/events/secret/access/"]) {
+      const res = await call(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      expect(res.status, path).toBe(401);
+      expect(await res.json()).toMatchObject({ code: "access_required" });
+    }
+  });
+
+  it("marks gate errors as no-store", async () => {
+    expect((await call("/events/secret/feed")).headers.get("Cache-Control")).toBe("no-store");
+    expect((await requestAccess("nope", { pin: PIN })).headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  it("accepts a padded PIN like the web route", async () => {
+    expect((await requestAccess("secret", { pin: `   ${PIN}       ` })).status).toBe(200);
+  });
+
+  it("does not accept an invite token plus a wrong PIN as a PIN success", async () => {
+    const res = await requestAccess("secret", { invite_token: "wrong", pin: "000000" });
+    expect(res.status).toBe(401);
+    expect(failureCount()).toBe(1);
+  });
 });
 
 describe("client version gate", () => {

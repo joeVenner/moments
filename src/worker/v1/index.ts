@@ -1,7 +1,7 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import type { MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { getActiveEventBySlug, toPublicEvent } from "../events";
+import { getActiveEventBySlug, sqlTimestamp, toPublicEvent } from "../events";
 import { attemptEventAccess } from "../accessAttempt";
 import { issueAccessGrant, verifyEventAccess } from "../eventAccess";
 import {
@@ -156,11 +156,6 @@ const accessRoute = createRoute({
   },
 });
 
-/** Formats unix seconds like every other v1 timestamp. */
-function toServerDate(unixSeconds: number): string {
-  return new Date(unixSeconds * 1000).toISOString().slice(0, 19).replace("T", " ");
-}
-
 /** Rejects iOS builds below MIN_IOS_BUILD with 426 so the app can force an update. */
 const clientVersionGate: MiddlewareHandler<V1Env> = async (c, next) => {
   if (isBelowMinimumBuild(parseIosBuild(c.req.header(CLIENT_HEADER)), c.env.MIN_IOS_BUILD)) {
@@ -174,7 +169,13 @@ const clientVersionGate: MiddlewareHandler<V1Env> = async (c, next) => {
  * The web gate in index.ts is registered on /api/events/* and does not cover
  * these paths, so every /events/{slug} route here must sit behind this.
  */
+/** The one route the event gate lets through without a grant. Anchored: a
+ * future route that merely ends in /access must not inherit the exemption. */
+const ACCESS_PATH = /^\/api\/v1\/events\/[^/]+\/access$/;
+
 const eventGate: MiddlewareHandler<V1Env> = async (c, next) => {
+  // Every event response is per-guest; covers the gate's own 401/404 too.
+  c.header("Cache-Control", "no-store");
   const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug") ?? "");
   if (!event) return c.json({ error: "event not found", code: "event_not_found" }, 404);
   // The unlock endpoint is the one way in, so it can't require access itself.
@@ -189,8 +190,6 @@ const eventGate: MiddlewareHandler<V1Env> = async (c, next) => {
   c.set("event", event);
   return next();
 };
-
-const ACCESS_PATH = /\/events\/[^/]+\/access$/;
 
 export const v1 = new OpenAPIHono<V1Env>({
   // Zod's issue list is not part of the contract; clients get a stable shape.
@@ -287,7 +286,7 @@ v1.openapi(accessRoute, async (c) => {
   }
   if (result.kind === "invalid") return c.json({ error: "Wrong PIN or invitation.", code: "invalid_access" }, 401);
   const grant = await issueAccessGrant(secret, event);
-  return c.json({ access_token: grant.accessToken, expires_at: toServerDate(grant.expiresAt) }, 200);
+  return c.json({ access_token: grant.accessToken, expires_at: sqlTimestamp(new Date(grant.expiresAt * 1000)) }, 200);
 });
 
 export const OPENAPI_CONFIG = {
