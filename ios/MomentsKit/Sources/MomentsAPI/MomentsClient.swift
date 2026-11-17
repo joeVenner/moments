@@ -139,12 +139,14 @@ public struct MomentsClient: MomentsService {
 
     /// No cookies (v1 only honours headers), no HTTP cache (responses are
     /// no-store) and no redirects (they would carry our headers elsewhere).
-    private static func makeSession() -> URLSession {
+    static func makeSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpShouldSetCookies = false
         configuration.httpCookieAcceptPolicy = .never
         configuration.urlCache = nil
         configuration.timeoutIntervalForRequest = 30
+        // Bounds a slow-drip body too (the request timeout is per idle gap).
+        configuration.timeoutIntervalForResource = 120
         return URLSession(configuration: configuration, delegate: RedirectRefusal(), delegateQueue: nil)
     }
 
