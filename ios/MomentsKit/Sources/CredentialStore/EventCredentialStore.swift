@@ -15,12 +15,13 @@ public struct StoredEventCredentials: Sendable, Hashable, Codable, CustomStringC
     public var accessGrant: String?
     public var accessGrantExpiresAt: Date?
     public var guestToken: String?
-    /// Not a secret; kept with the token it belongs to.
+    /// Not secrets; kept with the token they belong to.
     public var participantID: String?
+    public var nickname: String?
 
     public init(
         eventID: String? = nil, accessGrant: String? = nil, accessGrantExpiresAt: Date? = nil,
-        guestToken: String? = nil, participantID: String? = nil
+        guestToken: String? = nil, participantID: String? = nil, nickname: String? = nil
     ) {
         schemaVersion = Self.currentSchemaVersion
         self.eventID = eventID
@@ -28,6 +29,7 @@ public struct StoredEventCredentials: Sendable, Hashable, Codable, CustomStringC
         self.accessGrantExpiresAt = accessGrantExpiresAt
         self.guestToken = guestToken
         self.participantID = participantID
+        self.nickname = nickname
     }
 
     /// The grant if it is still valid at `now` (with a minute's margin for clock skew).
@@ -38,7 +40,7 @@ public struct StoredEventCredentials: Sendable, Hashable, Codable, CustomStringC
 
     /// Nothing worth keeping (an event ID alone is not).
     public var isEmpty: Bool {
-        accessGrant == nil && accessGrantExpiresAt == nil && guestToken == nil && participantID == nil
+        accessGrant == nil && accessGrantExpiresAt == nil && guestToken == nil && participantID == nil && nickname == nil
     }
 
     // Redacted so secrets never reach logs or crash reports.

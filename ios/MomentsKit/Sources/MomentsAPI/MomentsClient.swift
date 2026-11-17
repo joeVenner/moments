@@ -41,7 +41,7 @@ public struct FeedChanges: Sendable, Hashable {
 }
 
 /// Result of joining an event.
-public struct JoinResult: Sendable, Hashable {
+public struct JoinResult: Sendable, Hashable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public let participant: Participant
     /// Present only when this request claimed the nickname: store it in the
     /// keychain and send it on later requests as the guest token.
@@ -54,7 +54,7 @@ public struct JoinResult: Sendable, Hashable {
 }
 
 /// A private-event grant: send `token` as the access grant until `expiresAt`.
-public struct AccessGrant: Sendable, Hashable {
+public struct AccessGrant: Sendable, Hashable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public let token: String
     public let expiresAt: Date
 
@@ -65,7 +65,7 @@ public struct AccessGrant: Sendable, Hashable {
 }
 
 /// What the guest offers to unlock a private event.
-public enum AccessCredential: Sendable, Hashable {
+public enum AccessCredential: Sendable, Hashable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     /// Typed by the guest; surrounding spaces are ignored.
     case pin(String)
     /// The `invite` value from the event link (never throttled by the server).
@@ -73,7 +73,7 @@ public enum AccessCredential: Sendable, Hashable {
 }
 
 /// Per-event secrets for the requests that need them.
-public struct EventCredentials: Sendable, Hashable {
+public struct EventCredentials: Sendable, Hashable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     /// Signed grant from the access endpoint (private events only).
     public var accessGrant: String?
     /// Guest token from a previous join.
@@ -317,4 +317,36 @@ final class RedirectRefusal: NSObject, URLSessionTaskDelegate, Sendable {
     ) async -> URLRequest? {
         nil
     }
+}
+
+// Redacted so tokens and PINs never reach logs, crash reports or test output.
+public extension AccessGrant {
+    var description: String { "AccessGrant(redacted, expiresAt: \(expiresAt))" }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+public extension AccessCredential {
+    var description: String {
+        switch self {
+        case .pin: "AccessCredential.pin(redacted)"
+        case .invite: "AccessCredential.invite(redacted)"
+        }
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+public extension EventCredentials {
+    var description: String {
+        "EventCredentials(grant: \(accessGrant == nil ? "none" : "set"), guestToken: \(guestToken == nil ? "none" : "set"))"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+public extension JoinResult {
+    var description: String { "JoinResult(participant: \(participant.id), guestToken: \(guestToken == nil ? "none" : "set"))" }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
 }

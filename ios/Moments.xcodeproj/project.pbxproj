@@ -14,6 +14,8 @@
 		8DBC006D750F45B40D9D6734 /* CredentialStore in Frameworks */ = {isa = PBXBuildFile; productRef = 771321923501E50EA15BC6E1 /* CredentialStore */; };
 		346EFBD0F25D0B713B876CC8 /* CredentialStore in Frameworks */ = {isa = PBXBuildFile; productRef = 60B03C2EE5B4FA5FA5827BED /* CredentialStore */; };
 		E9FDAC3499B371D410E2B1C8 /* AppRouting in Frameworks */ = {isa = PBXBuildFile; productRef = 11F742D66A422DB2C6DE4F46 /* AppRouting */; };
+		43462B9A4D01C014FBD4A3A9 /* FeatureGuest in Frameworks */ = {isa = PBXBuildFile; productRef = 372DE7E05122E178FD89FE58 /* FeatureGuest */; };
+		B4074831FB2CF022FBE7789B /* MomentsAPI in Frameworks */ = {isa = PBXBuildFile; productRef = C96976A483AF8B7DB302374B /* MomentsAPI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,6 +56,8 @@
 				C2FBCFA6CA5703472D203BEE /* DesignSystem in Frameworks */,
 				5EA60B84A910AB8A34E81BF0 /* AppRouting in Frameworks */,
 				8DBC006D750F45B40D9D6734 /* CredentialStore in Frameworks */,
+				43462B9A4D01C014FBD4A3A9 /* FeatureGuest in Frameworks */,
+				B4074831FB2CF022FBE7789B /* MomentsAPI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -121,6 +125,8 @@
 				8F57B567318C731ACDB06C83 /* DesignSystem */,
 				75145B2E14727A1C65C3E271 /* AppRouting */,
 				771321923501E50EA15BC6E1 /* CredentialStore */,
+				372DE7E05122E178FD89FE58 /* FeatureGuest */,
+				C96976A483AF8B7DB302374B /* MomentsAPI */,
 			);
 			productName = Moments;
 			productReference = B79AD8397EB9294C45D7A230 /* Moments.app */;
@@ -388,6 +394,14 @@
 		11F742D66A422DB2C6DE4F46 /* AppRouting */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = AppRouting;
+		};
+		372DE7E05122E178FD89FE58 /* FeatureGuest */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FeatureGuest;
+		};
+		C96976A483AF8B7DB302374B /* MomentsAPI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MomentsAPI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
