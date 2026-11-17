@@ -3,7 +3,7 @@
   "info": {
     "title": "Moments API",
     "version": "1.0.0",
-    "description": "API for the Moments native apps. Send `X-Client: ios/<version>(<build>)` on every request (set it once in a client middleware); builds below the server minimum get 426. Private-event access is still granted by the web endpoint `POST /api/events/{slug}/access` (body `{pin}` or `{invite_token}`, returns `access_token`) until it moves into v1."
+    "description": "API for the Moments native apps. Send `X-Client: ios/<version>(<build>)` on every request (set it once in a client middleware); builds below the server minimum get 426. For a private event, get a grant from `POST /events/{slug}/access` and send it as `X-Event-Access`."
   },
   "servers": [
     {
@@ -139,7 +139,7 @@
           },
           "code": {
             "type": "string",
-            "description": "Stable machine-readable reason: invalid_request, event_not_found, access_required, nickname_taken, client_upgrade_required, not_found, internal"
+            "description": "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, client_upgrade_required, not_found, internal"
           }
         },
         "required": [
@@ -420,6 +420,64 @@
         "required": [
           "nickname"
         ]
+      },
+      "AccessResponse": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Send as X-Event-Access on every request for this event. Null for public events (nothing to send)."
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the grant stops working; ask again after this",
+            "example": "2026-11-17 18:30:00"
+          }
+        },
+        "required": [
+          "access_token",
+          "expires_at"
+        ]
+      },
+      "TooManyAttempts": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "description": "`too_many_attempts`"
+          },
+          "retry_after_seconds": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "error",
+          "code",
+          "retry_after_seconds"
+        ]
+      },
+      "AccessRequest": {
+        "type": "object",
+        "properties": {
+          "pin": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "invite_token": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "The `invite` value from the event link"
+          }
+        }
       }
     },
     "parameters": {}
@@ -861,6 +919,127 @@
           },
           "default": {
             "description": "Any other error (415, 5xx, ...)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{slug}/access": {
+      "post": {
+        "operationId": "requestAccess",
+        "tags": [
+          "Guest"
+        ],
+        "summary": "Exchange a PIN or invite token for an access grant",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "slug",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access granted (or not needed: public event)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_access`: wrong PIN or invite token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live event with this slug",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many wrong PINs; wait or use the invite link",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": false
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttempts"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`access_unavailable`: private events are temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
             "content": {
               "application/json": {
                 "schema": {

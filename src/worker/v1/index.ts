@@ -2,7 +2,8 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import type { MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { getActiveEventBySlug, toPublicEvent } from "../events";
-import { verifyEventAccess } from "../eventAccess";
+import { attemptEventAccess } from "../accessAttempt";
+import { issueAccessGrant, verifyEventAccess } from "../eventAccess";
 import {
   CHANGES_MAX_LIMIT,
   clampLimit,
@@ -16,6 +17,8 @@ import { GUEST_TOKEN_HEADER, joinEventAsGuest, toPublicParticipant } from "../gu
 import { signMomentsForEvent, STREAM_SIGNING_UNAVAILABLE, StreamSigningError } from "../streamSigning";
 import type { Env, EventRow } from "../types";
 import {
+  AccessRequestSchema,
+  AccessResponseSchema,
   ChangesQuerySchema,
   ErrorSchema,
   EventHeadersSchema,
@@ -27,6 +30,7 @@ import {
   JoinRequestSchema,
   JoinResponseSchema,
   SlugParamSchema,
+  TooManyAttemptsSchema,
 } from "./schemas";
 
 /**
@@ -126,6 +130,37 @@ const joinEventRoute = createRoute({
   },
 });
 
+const accessRoute = createRoute({
+  method: "post",
+  path: "/events/{slug}/access",
+  operationId: "requestAccess",
+  tags: ["Guest"],
+  summary: "Exchange a PIN or invite token for an access grant",
+  request: {
+    params: SlugParamSchema,
+    body: { content: { "application/json": { schema: AccessRequestSchema } }, required: true },
+  },
+  responses: {
+    200: json(AccessResponseSchema, "Access granted (or not needed: public event)"),
+    400: json(ErrorSchema, "Invalid body"),
+    401: json(ErrorSchema, "`invalid_access`: wrong PIN or invite token"),
+    404: json(ErrorSchema, "No live event with this slug"),
+    426: json(ErrorSchema, "This app build is too old; show the update screen"),
+    429: {
+      ...json(TooManyAttemptsSchema, "Too many wrong PINs; wait or use the invite link"),
+      // Always sent; optional in the contract so a proxy stripping it can't break decoding.
+      headers: z.object({ "Retry-After": z.string().optional() }),
+    },
+    503: json(ErrorSchema, "`access_unavailable`: private events are temporarily unavailable"),
+    default: json(ErrorSchema, "Any other error"),
+  },
+});
+
+/** Formats unix seconds like every other v1 timestamp. */
+function toServerDate(unixSeconds: number): string {
+  return new Date(unixSeconds * 1000).toISOString().slice(0, 19).replace("T", " ");
+}
+
 /** Rejects iOS builds below MIN_IOS_BUILD with 426 so the app can force an update. */
 const clientVersionGate: MiddlewareHandler<V1Env> = async (c, next) => {
   if (isBelowMinimumBuild(parseIosBuild(c.req.header(CLIENT_HEADER)), c.env.MIN_IOS_BUILD)) {
@@ -142,6 +177,11 @@ const clientVersionGate: MiddlewareHandler<V1Env> = async (c, next) => {
 const eventGate: MiddlewareHandler<V1Env> = async (c, next) => {
   const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug") ?? "");
   if (!event) return c.json({ error: "event not found", code: "event_not_found" }, 404);
+  // The unlock endpoint is the one way in, so it can't require access itself.
+  if (c.req.method === "POST" && ACCESS_PATH.test(c.req.path)) {
+    c.set("event", event);
+    return next();
+  }
   // v1 has no legacy clients: only a signed grant in X-Event-Access counts.
   if (!(await verifyEventAccess(c, event, undefined, { signedGrantOnly: true }))) {
     return c.json({ error: "access required", code: "access_required" }, 401);
@@ -149,6 +189,8 @@ const eventGate: MiddlewareHandler<V1Env> = async (c, next) => {
   c.set("event", event);
   return next();
 };
+
+const ACCESS_PATH = /\/events\/[^/]+\/access$/;
 
 export const v1 = new OpenAPIHono<V1Env>({
   // Zod's issue list is not part of the contract; clients get a stable shape.
@@ -220,13 +262,41 @@ v1.openapi(joinEventRoute, async (c) => {
   return c.json(result.guestToken ? { participant, guest_token: result.guestToken } : { participant }, 200);
 });
 
+// No cookie here: native clients keep the grant themselves (keychain).
+v1.openapi(accessRoute, async (c) => {
+  c.header("Cache-Control", "no-store");
+  const event = c.get("event");
+  if (event.access_mode !== "private") return c.json({ access_token: null, expires_at: null }, 200);
+  const secret = c.env.EVENT_ACCESS_SECRET;
+  if (!secret) {
+    console.error(JSON.stringify({ msg: "event_access_secret_missing", route: "v1_access" }));
+    return c.json({ error: "Private events are temporarily unavailable.", code: "access_unavailable" }, 503);
+  }
+  const body = c.req.valid("json");
+  const result = await attemptEventAccess(c.env.DB, secret, event, {
+    pin: body.pin ?? "",
+    inviteToken: body.invite_token ?? "",
+    clientIp: c.req.header("CF-Connecting-IP") ?? "unknown",
+  });
+  if (result.kind === "blocked") {
+    return c.json(
+      { error: "Too many attempts. Ask the host for the invitation link.", code: "too_many_attempts", retry_after_seconds: result.retryAfterSeconds },
+      429,
+      { "Retry-After": String(result.retryAfterSeconds) }
+    );
+  }
+  if (result.kind === "invalid") return c.json({ error: "Wrong PIN or invitation.", code: "invalid_access" }, 401);
+  const grant = await issueAccessGrant(secret, event);
+  return c.json({ access_token: grant.accessToken, expires_at: toServerDate(grant.expiresAt) }, 200);
+});
+
 export const OPENAPI_CONFIG = {
   openapi: "3.1.0",
   info: {
     title: "Moments API",
     version: "1.0.0",
     description:
-      "API for the Moments native apps. Send `X-Client: ios/<version>(<build>)` on every request (set it once in a client middleware); builds below the server minimum get 426. Private-event access is still granted by the web endpoint `POST /api/events/{slug}/access` (body `{pin}` or `{invite_token}`, returns `access_token`) until it moves into v1.",
+      "API for the Moments native apps. Send `X-Client: ios/<version>(<build>)` on every request (set it once in a client middleware); builds below the server minimum get 426. For a private event, get a grant from `POST /events/{slug}/access` and send it as `X-Event-Access`.",
   },
   servers: [{ url: "/api/v1" }],
 };

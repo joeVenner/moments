@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { MAX_PIN_LENGTH } from "../eventAccess";
 import { MAX_NICKNAME_LENGTH } from "../guestIdentity";
 
 /**
@@ -18,7 +19,7 @@ export const ErrorSchema = z
     error: z.string(),
     code: z.string().openapi({
       description:
-        "Stable machine-readable reason: invalid_request, event_not_found, access_required, nickname_taken, client_upgrade_required, not_found, internal",
+        "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, client_upgrade_required, not_found, internal",
     }),
   })
   .openapi("Error");
@@ -136,6 +137,31 @@ export const JoinResponseSchema = z
       .openapi({ description: "Present only when this request claimed the nickname. Store it and send it as X-Guest-Token." }),
   })
   .openapi("JoinResponse");
+
+export const AccessRequestSchema = z
+  .object({
+    pin: z.string().max(MAX_PIN_LENGTH).optional(),
+    invite_token: z.string().max(200).optional().openapi({ description: "The `invite` value from the event link" }),
+  })
+  .refine((body) => Boolean(body.pin?.trim() || body.invite_token), { message: "pin or invite_token is required" })
+  .openapi("AccessRequest");
+
+export const AccessResponseSchema = z
+  .object({
+    access_token: z.string().nullable().openapi({
+      description: "Send as X-Event-Access on every request for this event. Null for public events (nothing to send).",
+    }),
+    expires_at: timestamp.nullable().openapi({ description: "When the grant stops working; ask again after this" }),
+  })
+  .openapi("AccessResponse");
+
+export const TooManyAttemptsSchema = z
+  .object({
+    error: z.string(),
+    code: z.string().openapi({ description: "`too_many_attempts`" }),
+    retry_after_seconds: z.number().int(),
+  })
+  .openapi("TooManyAttempts");
 
 // Lowercase keys: Hono's header validator sees lowercased names, and HTTP
 // header names are case-insensitive anyway.
