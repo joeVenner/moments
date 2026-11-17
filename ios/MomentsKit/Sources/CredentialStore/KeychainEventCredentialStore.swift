@@ -43,8 +43,12 @@ public final class KeychainEventCredentialStore: EventCredentialStore, @unchecke
 
     public func update(for slug: EventSlug, _ change: (inout StoredEventCredentials) -> Void) throws {
         try lock.withLock {
-            var value = try read(slug) ?? StoredEventCredentials()
+            let original = try read(slug) ?? StoredEventCredentials()
+            var value = original
             change(&value)
+            // Unchanged (including an unreadable item read as empty): no write,
+            // so a lookup can never delete what it couldn't read.
+            guard value != original else { return }
             try write(value, slug)
         }
     }

@@ -98,6 +98,12 @@ let isKeychainAvailable: Bool = {
         ]
         #expect(SecItemAdd(add as CFDictionary, nil) == errSecSuccess)
         #expect(try store.credentials(for: party) == nil)
+        // A lookup by event ID must not delete what it couldn't read.
+        #expect(try store.credentials(for: party, eventID: "e1") == nil)
+        try store.update(for: party) { _ in }
+        var query = add
+        query.removeValue(forKey: kSecValueData as String)
+        #expect(SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess)
         try store.save(sampleCredentials, for: party)
         #expect(try store.credentials(for: party) == sampleCredentials)
     }

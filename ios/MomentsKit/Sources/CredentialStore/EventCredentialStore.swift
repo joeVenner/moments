@@ -73,7 +73,8 @@ public protocol EventCredentialStore: Sendable {
     func credentials(for slug: EventSlug) throws -> StoredEventCredentials?
     /// Saving an empty value removes the entry.
     func save(_ credentials: StoredEventCredentials, for slug: EventSlug) throws
-    /// Atomic read-modify-write for one event.
+    /// Atomic read-modify-write for one event; writes nothing when the value
+    /// is unchanged.
     func update(for slug: EventSlug, _ change: (inout StoredEventCredentials) -> Void) throws
     func removeCredentials(for slug: EventSlug) throws
     /// "Forget me on this device" for every event.
@@ -118,8 +119,10 @@ public final class InMemoryEventCredentialStore: EventCredentialStore, @unchecke
 
     public func update(for slug: EventSlug, _ change: (inout StoredEventCredentials) -> Void) {
         lock.withLock {
-            var value = entries[slug] ?? StoredEventCredentials()
+            let original = entries[slug] ?? StoredEventCredentials()
+            var value = original
             change(&value)
+            guard value != original else { return }
             entries[slug] = value.isEmpty ? nil : value
         }
     }
