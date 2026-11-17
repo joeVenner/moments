@@ -25,6 +25,9 @@ export interface Env {
   STREAM_ACCOUNT_ID?: string;
   STREAM_API_TOKEN?: string;
   STREAM_CUSTOMER_CODE?: string;
+  /** Stream signing key id + base64 `jwk` from POST /stream/keys. Both set = private-event videos use signed URLs. */
+  STREAM_SIGNING_KEY_ID?: string;
+  STREAM_SIGNING_JWK?: string;
   // HMAC key for signed private-event access grants (eventAccess.ts). When
   // unset, unlocking a private event fails closed with 503.
   EVENT_ACCESS_SECRET?: string;

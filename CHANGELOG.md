@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Setting a new PIN, or making a public event private again, revokes all previously issued access and rotates the invitation link.
 
 ### Security
+- Private-event Stream videos can require signed playback URLs. Set `STREAM_SIGNING_KEY_ID` and `STREAM_SIGNING_JWK` to turn it on. New uploads to private events are then locked, every Stream URL returned for a private event carries a 1–2 hour token, and saving an event's access settings locks or unlocks its existing videos. Upload metadata forwarded to Stream is now restricted to an allowlist. Tokens are bearer URLs shared by everyone viewing in the same hour; the only way to revoke them early is deleting the signing key.
 - Private-event access uses HMAC-signed, version-bound grants instead of the raw, never-rotated invite token. Requires the `EVENT_ACCESS_SECRET` Worker secret; without it, unlocking fails closed with 503.
 - PIN attempts are throttled per event and client (IPv6 grouped by /64, IPs stored only as keyed hashes), with an event-wide slowdown and then block. The invitation link is never throttled.
 - Invite-token and PIN-hash comparisons are constant-time.

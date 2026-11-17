@@ -23,6 +23,18 @@ import { getActiveEventBySlug, getEventBySlug, toPublicEvent } from "./events";
 import { v1 } from "./v1";
 import { generateAiBanner, BannerGenerationError } from "./banner";
 import { isStreamConfigured, streamApiUrl, streamAuthHeaders, streamMediaUrl } from "./stream";
+import {
+  isStreamSigningConfigured,
+  setRequireSignedUrls,
+  shouldSignStream,
+  signMomentsForEvent,
+  signStreamToken,
+  STREAM_SIGNING_UNAVAILABLE,
+  StreamSigningError,
+  tokenExpiry,
+  streamUploadMetadata,
+  syncStreamSigning,
+} from "./streamSigning";
 import { deleteMomentMedia } from "./moderation";
 import { cleanupEvent, cleanupExpiredEvents, pruneAccessFailures } from "./lifecycle";
 import {
@@ -375,6 +387,11 @@ app.patch("/api/admin/events/:id/access", async (c) => {
             created_at, starts_at, expires_at, archived_at, access_mode, invite_token
        FROM events WHERE id = ?`
   ).bind(event.id).first<EventRow>();
+  // Re-apply requireSignedURLs to the event's existing Stream videos: on every
+  // private save (backfills older uploads) and when going public.
+  if (isStreamConfigured(c.env) && isStreamSigningConfigured(c.env) && (mode === "private" || event.access_mode !== mode)) {
+    c.executionCtx.waitUntil(syncStreamSigning(c.env, event.id, mode === "private"));
+  }
   return c.json({ event: updated });
 });
 
@@ -406,7 +423,7 @@ const WEB_MOMENT_COLUMNS = `m.id, m.event_id, m.uploader_name, m.media_url, m.ca
   m.created_at, m.size_bytes, m.mime_type, m.moderation_status`;
 
 app.get("/api/events/:slug/moments", async (c) => {
-  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
 
   // Offset pagination (not cursor): created_at is a `datetime('now')` text
@@ -458,7 +475,7 @@ app.get("/api/events/:slug/moments", async (c) => {
   }
 
   return c.json({
-    moments: results,
+    moments: await signMomentsForEvent(c.env, event, results),
     hasMore: results.length === limit,
     total,
     your_points,
@@ -467,7 +484,7 @@ app.get("/api/events/:slug/moments", async (c) => {
 
 // Cursor feed for native clients (feed.ts). The web keeps the offset list above.
 app.get("/api/events/:slug/feed", async (c) => {
-  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
   const page = await getFeedPage(c.env.DB, {
     eventId: event.id,
@@ -476,11 +493,11 @@ app.get("/api/events/:slug/feed", async (c) => {
     reactorId: (c.req.query("reactor_id") ?? "").slice(0, 100),
   });
   c.header("Cache-Control", "no-store");
-  return c.json(page);
+  return c.json({ ...page, moments: await signMomentsForEvent(c.env, event, page.moments) });
 });
 
 app.get("/api/events/:slug/feed/changes", async (c) => {
-  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
   const since = parseCursor(c.req.query("since"));
   if (since === null) return c.json({ error: "since must be a non-negative integer cursor" }, 400);
@@ -491,7 +508,7 @@ app.get("/api/events/:slug/feed/changes", async (c) => {
     reactorId: (c.req.query("reactor_id") ?? "").slice(0, 100),
   });
   c.header("Cache-Control", "no-store");
-  return c.json(changes);
+  return c.json({ ...changes, upserts: await signMomentsForEvent(c.env, event, changes.upserts) });
 });
 
 app.post("/api/events/:slug/moments", async (c) => {
@@ -540,7 +557,7 @@ app.post("/api/events/:slug/moments", async (c) => {
 });
 
 app.get("/api/events/:slug/highlights", async (c) => {
-  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
   const reactorId = (c.req.query("reactor_id") ?? "").slice(0, 100);
   const { results } = await c.env.DB.prepare(
@@ -554,7 +571,7 @@ app.get("/api/events/:slug/highlights", async (c) => {
       ORDER BY reaction_count DESC, m.created_at DESC
       LIMIT 50`
   ).bind(reactorId, event.id).all<MomentRow>();
-  return c.json({ moments: results });
+  return c.json({ moments: await signMomentsForEvent(c.env, event, results) });
 });
 
 app.post("/api/events/:slug/moments/:id/reactions", async (c) => {
@@ -587,12 +604,12 @@ app.post("/api/events/:slug/moments/:id/reactions", async (c) => {
 });
 
 app.get("/api/admin/events/:slug/moments", async (c) => {
-  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
   const { results } = await c.env.DB.prepare(
     "SELECT * FROM moments WHERE event_id = ? ORDER BY created_at DESC LIMIT 500"
   ).bind(event.id).all<MomentRow>();
-  return c.json({ moments: results });
+  return c.json({ moments: await signMomentsForEvent(c.env, event, results) });
 });
 
 app.get("/api/admin/events/:slug/analytics", async (c) => {
@@ -643,7 +660,11 @@ app.patch("/api/admin/moments/:id", async (c) => {
   if (!result.meta.changes) return c.json({ error: "moment not found" }, 404);
   const moment = await c.env.DB.prepare("SELECT * FROM moments WHERE id = ?")
     .bind(c.req.param("id")).first<MomentRow>();
-  return c.json({ moment });
+  if (!moment) return c.json({ error: "moment not found" }, 404);
+  const event = await c.env.DB.prepare("SELECT access_mode FROM events WHERE id = ?")
+    .bind(moment.event_id).first<{ access_mode: string }>();
+  const [signed] = event ? await signMomentsForEvent(c.env, event, [moment]) : [moment];
+  return c.json({ moment: signed });
 });
 
 app.delete("/api/admin/moments/:id", async (c) => {
@@ -785,9 +806,10 @@ app.post("/api/events/:slug/moments/stream/session", async (c) => {
 });
 
 app.post("/api/events/:slug/moments/stream/tus", async (c) => {
-  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
   if (!isStreamConfigured(c.env)) return c.json({ error: "Stream uploads are not configured" }, 501);
+  const shouldRequireSigned = event.access_mode === "private" && isStreamSigningConfigured(c.env);
 
   const tusVersion = c.req.header("Tus-Resumable") ?? "";
   const uploadLength = Number(c.req.header("Upload-Length") ?? NaN);
@@ -811,7 +833,8 @@ app.post("/api/events/:slug/moments/stream/tus", async (c) => {
         ...streamAuthHeaders(c.env),
         "Tus-Resumable": tusVersion,
         "Upload-Length": String(uploadLength),
-        "Upload-Metadata": uploadMetadata,
+        // Private events' videos only play through signed URLs (when configured).
+        "Upload-Metadata": streamUploadMetadata(uploadMetadata, shouldRequireSigned),
         "Upload-Creator": event.id,
       },
     });
@@ -871,7 +894,7 @@ app.post("/api/events/:slug/moments/stream/tus", async (c) => {
 });
 
 app.post("/api/events/:slug/moments/stream/complete", async (c) => {
-  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
   if (!isStreamConfigured(c.env)) return c.json({ error: "Stream uploads are not configured" }, 501);
 
@@ -891,7 +914,10 @@ app.post("/api/events/:slug/moments/stream/complete", async (c) => {
   const existingMoment = await c.env.DB.prepare("SELECT * FROM moments WHERE event_id = ? AND media_url = ?")
     .bind(event.id, mediaUrl)
     .first<MomentRow>();
-  if (existingMoment) return c.json({ moment: existingMoment, points_awarded: existingMoment.points_awarded });
+  if (existingMoment) {
+    const [signedExisting] = await signMomentsForEvent(c.env, event, [existingMoment]);
+    return c.json({ moment: signedExisting, points_awarded: existingMoment.points_awarded });
+  }
   if (upload.status !== "open") return c.json({ error: "upload is not open" }, 409);
 
   const detailsResponse = await fetch(streamApiUrl(c.env, `/${streamUid}`), {
@@ -899,7 +925,7 @@ app.post("/api/events/:slug/moments/stream/complete", async (c) => {
   });
   const details = (await detailsResponse.json().catch(() => null)) as {
     success?: boolean;
-    result?: { uid?: string; size?: number; status?: { state?: string } };
+    result?: { uid?: string; size?: number; status?: { state?: string }; requireSignedURLs?: boolean };
   } | null;
   if (!detailsResponse.ok || !details?.success || details.result?.uid !== streamUid) {
     return c.json({ error: "Unable to verify Stream upload" }, 502);
@@ -907,6 +933,35 @@ app.post("/api/events/:slug/moments/stream/complete", async (c) => {
   if (details.result.status?.state === "error") return c.json({ error: "Stream could not process this video" }, 422);
   if (typeof details.result.size === "number" && details.result.size !== upload.size_bytes) {
     return c.json({ error: "Stream upload size mismatch" }, 400);
+  }
+
+  if (event.access_mode !== "private" && details.result.requireSignedURLs === true) {
+    // Started while the event was private, finishing after it went public:
+    // unlock it, or the unsigned public URL would never play. Best effort.
+    await setRequireSignedUrls(c.env, streamUid, false).catch((error: unknown) =>
+      logUpload("error", "stream_unlock_failed", {
+        eventId: event.id,
+        uploadRecordId: upload.id,
+        error: error instanceof Error ? error.message : "Stream request failed",
+      })
+    );
+  }
+  if (shouldSignStream(c.env, event)) {
+    // Before anything is committed: prove the key signs (else 503, retryable),
+    // and lock this video even if its upload began while the event was public.
+    await signStreamToken(c.env, streamUid, tokenExpiry(Math.floor(Date.now() / 1000)));
+    if (details.result.requireSignedURLs !== true) {
+      try {
+        await setRequireSignedUrls(c.env, streamUid, true);
+      } catch (error) {
+        logUpload("error", "stream_require_signed_failed", {
+          eventId: event.id,
+          uploadRecordId: upload.id,
+          error: error instanceof Error ? error.message : "Stream request failed",
+        });
+        return c.json({ error: "Unable to secure the Stream upload" }, 502);
+      }
+    }
   }
 
   const points = pointsForContentType(upload.content_type ?? "video/mp4");
@@ -928,7 +983,9 @@ app.post("/api/events/:slug/moments/stream/complete", async (c) => {
     momentId,
     sizeBytes: upload.size_bytes,
   });
-  return c.json({ moment, points_awarded: points }, 201);
+  if (!moment) return c.json({ error: "moment not found" }, 500);
+  const [signedMoment] = await signMomentsForEvent(c.env, event, [moment]);
+  return c.json({ moment: signedMoment, points_awarded: points }, 201);
 });
 
 app.post("/api/events/:slug/moments/stream/abort", async (c) => {
@@ -1518,6 +1575,8 @@ app.get("/admin/*", serveNoIndexSpa);
 app.get("/e/*", serveNoIndexSpa);
 
 app.onError((err, c) => {
+  // Fail closed: without a working key we cannot hand out private video URLs.
+  if (err instanceof StreamSigningError) return c.json(STREAM_SIGNING_UNAVAILABLE, 503);
   console.error(err);
   return c.json({ error: "Internal server error" }, 500);
 });
