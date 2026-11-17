@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Events can close uploads before they are deleted: `uploads_close_at` and `purge_after` (migration 0015) both default to `expires_at`, so existing events behave as before. Once uploads close the event stays viewable and joinable; new uploads get `403 uploads_closed`, and uploads already in progress have 30 minutes to finish. Event responses (web and `/api/v1`) carry an `uploads_open` flag, and the admin lifecycle endpoint accepts the two dates.
 - `/api/v1` for the native app: `getEvent`, `getFeed`, `getFeedChanges` and `joinEvent` (JSON), validated with Zod. The OpenAPI 3.1 description is served at `/api/v1/openapi.json` and committed as `openapi/v1.json` (`npm run openapi:update` regenerates it). iOS builds below `MIN_IOS_BUILD` get `426`.
 - Feed items carry a `media` object (kind, url, thumb/display/poster URLs, Stream `hls_url`, width, height, duration, blurhash). Migration `0013` adds the backing columns; filling them in counts as a change for `/feed/changes`.
 - Cursor-based feed for native clients: `GET /api/events/:slug/feed?before=<seq>` pages newest-first, and `GET /api/events/:slug/feed/changes?since=<cursor>` returns new or edited moments plus the ids of hidden or deleted ones. Cursors are per event. The web feed is unchanged.
