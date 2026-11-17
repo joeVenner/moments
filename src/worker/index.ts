@@ -24,6 +24,15 @@ import { isStreamConfigured, streamApiUrl, streamAuthHeaders, streamMediaUrl } f
 import { deleteMomentMedia } from "./moderation";
 import { cleanupEvent, cleanupExpiredEvents, pruneAccessFailures } from "./lifecycle";
 import {
+  CHANGES_MAX_LIMIT,
+  FEED_DEFAULT_LIMIT,
+  FEED_MAX_LIMIT,
+  clampLimit,
+  getFeedChanges,
+  getFeedPage,
+  parseCursor,
+} from "./feed";
+import {
   GUEST_TOKEN_HEADER,
   MAX_NICKNAME_LENGTH,
   PUBLIC_PARTICIPANT_COLUMNS,
@@ -463,6 +472,35 @@ app.get("/api/events/:slug/moments", async (c) => {
     total,
     your_points,
   });
+});
+
+// Cursor feed for native clients (feed.ts). The web keeps the offset list above.
+app.get("/api/events/:slug/feed", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  const page = await getFeedPage(c.env.DB, {
+    eventId: event.id,
+    before: parseCursor(c.req.query("before")),
+    limit: clampLimit(c.req.query("limit"), FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT),
+    reactorId: (c.req.query("reactor_id") ?? "").slice(0, 100),
+  });
+  c.header("Cache-Control", "no-store");
+  return c.json(page);
+});
+
+app.get("/api/events/:slug/feed/changes", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  const since = parseCursor(c.req.query("since"));
+  if (since === null) return c.json({ error: "since must be a non-negative integer cursor" }, 400);
+  const changes = await getFeedChanges(c.env.DB, {
+    eventId: event.id,
+    since,
+    limit: clampLimit(c.req.query("limit"), CHANGES_MAX_LIMIT, CHANGES_MAX_LIMIT),
+    reactorId: (c.req.query("reactor_id") ?? "").slice(0, 100),
+  });
+  c.header("Cache-Control", "no-store");
+  return c.json(changes);
 });
 
 app.post("/api/events/:slug/moments", async (c) => {
