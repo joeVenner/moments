@@ -1,21 +1,20 @@
-import MomentsDomain
+import DesignSystem
 import SwiftUI
 
-/// Placeholder until the join flow lands. Colours are the web's dark tokens
-/// (src/client/index.css); the DesignSystem module replaces these literals.
+/// Placeholder until the join flow lands.
 struct RootView: View {
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Spacing.sm) {
             Text("Moments")
-                .font(.largeTitle.weight(.semibold))
-                .foregroundStyle(Color(red: 0xED / 255, green: 0xED / 255, blue: 0xED / 255))
+                .font(MomentsFont.display())
+                .foregroundStyle(MomentsColor.text)
             Text("Scan an event QR code to join.")
-                .font(.body)
-                .foregroundStyle(Color(red: 0xA1 / 255, green: 0xA1 / 255, blue: 0xA1 / 255))
+                .font(MomentsFont.body())
+                .foregroundStyle(MomentsColor.textMuted)
         }
-        .padding(24)
+        .padding(Spacing.lg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(red: 0x1A / 255, green: 0x1A / 255, blue: 0x1A / 255))
+        .background(MomentsColor.background)
     }
 }
 
