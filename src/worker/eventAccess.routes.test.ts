@@ -77,6 +77,8 @@ beforeEach(async () => {
       created_at: "2026-11-01 00:00:00",
       starts_at: null,
       expires_at: null,
+      uploads_close_at: null,
+      purge_after: null,
       archived_at: null,
       access_mode: "private",
       access_pin_hash: await hashEventPin(PIN, PIN_SALT),

@@ -34,9 +34,12 @@ export const EventSchema = z
     cover_image_url: z.string().nullable(),
     created_at: timestamp,
     starts_at: timestamp.nullable(),
-    expires_at: timestamp.nullable(),
+    expires_at: timestamp.nullable().openapi({ description: "Legacy single end date; the two fields below default to it" }),
+    uploads_close_at: timestamp.nullable().openapi({ description: "New uploads stop here (null = expires_at)" }),
+    purge_after: timestamp.nullable().openapi({ description: "Event and media are deleted after this (null = expires_at)" }),
     archived_at: timestamp.nullable(),
     access_mode: z.enum(["public", "private"]),
+    uploads_open: z.boolean().openapi({ description: "Whether new uploads are accepted right now" }),
   })
   .openapi("Event");
 

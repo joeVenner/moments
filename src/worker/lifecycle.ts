@@ -1,4 +1,5 @@
 import type { Env, EventRow, MomentRow } from "./types";
+import { PURGE_AT_SQL } from "./events";
 import { deleteMomentMedia } from "./moderation";
 
 export async function cleanupEvent(env: Env, event: Pick<EventRow, "id">): Promise<void> {
@@ -29,7 +30,7 @@ export async function cleanupEvent(env: Env, event: Pick<EventRow, "id">): Promi
 
 export async function cleanupExpiredEvents(env: Env): Promise<number> {
   const { results } = await env.DB.prepare(
-    "SELECT * FROM events WHERE archived_at IS NULL AND expires_at IS NOT NULL AND expires_at <= datetime('now')"
+    `SELECT * FROM events WHERE archived_at IS NULL AND ${PURGE_AT_SQL} IS NOT NULL AND ${PURGE_AT_SQL} <= datetime('now')`
   ).all<EventRow>();
   for (const event of results) await cleanupEvent(env, event);
   return results.length;
