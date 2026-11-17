@@ -248,6 +248,27 @@ private func loaded(_ page: [Moment], nextBefore: Int? = nil, cursor: Int = 10) 
         #expect(Media(kind: .video, url: "o").gridImageURL == nil)
     }
 
+    @Test func picksTheViewerImage() {
+        #expect(Media(kind: .image, url: "o", thumbURL: "t", displayURL: "d").viewerImageURL == "d")
+        #expect(Media(kind: .image, url: "o", thumbURL: "t").viewerImageURL == "o")
+        #expect(Media(kind: .video, url: "o", thumbURL: "t", posterURL: "p").viewerImageURL == "p")
+        #expect(Media(kind: .video, url: "o", thumbURL: "t").viewerImageURL == "t")
+        #expect(Media(kind: .video, url: "o").viewerImageURL == nil)
+    }
+
+    @Test func picksWhatAPlayerCanOpen() {
+        let stream = "https://customer-abc.cloudflarestream.com/uid/iframe"
+        #expect(Media(kind: .video, url: stream, hlsURL: "https://customer-abc.cloudflarestream.com/uid/manifest/video.m3u8").playbackURL?.hasSuffix(".m3u8") == true)
+        #expect(Media(kind: .video, url: stream).playbackURL == nil)
+        #expect(Media(kind: .video, url: "https://iframe.videodelivery.net/uid").playbackURL == nil)
+        #expect(Media(kind: .video, url: "https://moments-hq.com/media/events/e/v.mp4?at=1.x").playbackURL == "https://moments-hq.com/media/events/e/v.mp4?at=1.x")
+        #expect(Media(kind: .image, url: "https://moments-hq.com/media/a.jpg").playbackURL == nil)
+        #expect(Media(kind: .video, url: "/media/v.mp4").playbackURL == nil)
+        #expect(Media(kind: .video, url: "file:///etc/v.mp4").playbackURL == nil)
+        // A video's display rendition, when one exists, is its best still.
+        #expect(Media(kind: .video, url: "o", displayURL: "d", posterURL: "p").viewerImageURL == "d")
+    }
+
     @Test func aspectRatioNeedsBothSides() {
         #expect(Media(kind: .image, url: "o", width: 1600, height: 900).aspectRatio == 1600.0 / 900.0)
         #expect(Media(kind: .image, url: "o", width: 1600, height: 0).aspectRatio == nil)
