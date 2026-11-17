@@ -74,7 +74,23 @@
               "string",
               "null"
             ],
-            "description": "UTC, `YYYY-MM-DD HH:MM:SS`",
+            "description": "Legacy single end date; the two fields below default to it",
+            "example": "2026-11-17 18:30:00"
+          },
+          "uploads_close_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "New uploads stop here (null = expires_at)",
+            "example": "2026-11-17 18:30:00"
+          },
+          "purge_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Event and media are deleted after this (null = expires_at)",
             "example": "2026-11-17 18:30:00"
           },
           "archived_at": {
@@ -91,6 +107,10 @@
               "public",
               "private"
             ]
+          },
+          "uploads_open": {
+            "type": "boolean",
+            "description": "Whether new uploads are accepted right now"
           }
         },
         "required": [
@@ -104,8 +124,11 @@
           "created_at",
           "starts_at",
           "expires_at",
+          "uploads_close_at",
+          "purge_after",
           "archived_at",
-          "access_mode"
+          "access_mode",
+          "uploads_open"
         ]
       },
       "Error": {

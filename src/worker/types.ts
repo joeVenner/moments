@@ -49,6 +49,10 @@ export interface EventRow {
   created_at: string;
   starts_at: string | null;
   expires_at: string | null;
+  /** New uploads stop here (migration 0015); null = expires_at. */
+  uploads_close_at: string | null;
+  /** Event is purged here (migration 0015); null = expires_at. */
+  purge_after: string | null;
   archived_at: string | null;
   access_mode: "public" | "private";
   access_pin_hash: string | null;

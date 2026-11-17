@@ -19,7 +19,7 @@ import {
   MULTIPART_PART_BYTES,
 } from "./multipartPresign";
 import { requireAdmin } from "./auth";
-import { getActiveEventBySlug, getEventBySlug, toPublicEvent } from "./events";
+import { canFinishUploads, getActiveEventBySlug, getEventBySlug, toPublicEvent, UPLOADS_CLOSED } from "./events";
 import { isHiddenMomentMedia, MEDIA_VIEW_PARAM, verifyMediaView, withAdminViewUrls } from "./mediaAccess";
 import { v1 } from "./v1";
 import { generateAiBanner, BannerGenerationError } from "./banner";
@@ -154,6 +154,10 @@ function normalizeDate(value: unknown): string | null | undefined {
   if (typeof value !== "string") return undefined;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return undefined;
+  // Outside this range toISOString() is not "YYYY-..." and would compare as
+  // already past against datetime('now'), purging the event immediately.
+  const year = parsed.getUTCFullYear();
+  if (year < 2000 || year > 2100) return undefined;
   return parsed.toISOString().slice(0, 19).replace("T", " ");
 }
 
@@ -207,7 +211,7 @@ app.use("/api/events/:slug/*", async (c, next) => {
 app.get("/api/events", async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT id, slug, title, type, main_characters, description, cover_image_url,
-            created_at, starts_at, expires_at, archived_at, access_mode, invite_token
+            created_at, starts_at, expires_at, uploads_close_at, purge_after, archived_at, access_mode, invite_token
        FROM events ORDER BY created_at DESC`
   ).all<EventRow>();
   return c.json({ events: results });
@@ -385,7 +389,7 @@ app.patch("/api/admin/events/:id/access", async (c) => {
   ).bind(mode, hash, salt, inviteToken, accessVersion, event.id).run();
   const updated = await c.env.DB.prepare(
     `SELECT id, slug, title, type, main_characters, description, cover_image_url,
-            created_at, starts_at, expires_at, archived_at, access_mode, invite_token
+            created_at, starts_at, expires_at, uploads_close_at, purge_after, archived_at, access_mode, invite_token
        FROM events WHERE id = ?`
   ).bind(event.id).first<EventRow>();
   // Re-apply requireSignedURLs to the event's existing Stream videos: on every
@@ -399,6 +403,8 @@ app.patch("/api/admin/events/:id/access", async (c) => {
 app.patch("/api/admin/events/:id/lifecycle", async (c) => {
   const body = (await c.req.json().catch(() => null)) as {
     expires_at?: unknown;
+    uploads_close_at?: unknown;
+    purge_after?: unknown;
     archive_now?: unknown;
   } | null;
   const event = await c.env.DB.prepare("SELECT * FROM events WHERE id = ?")
@@ -408,10 +414,30 @@ app.patch("/api/admin/events/:id/lifecycle", async (c) => {
   if (body?.archive_now === true) {
     await cleanupEvent(c.env, event);
   } else {
-    const expiresAt = normalizeDate(body?.expires_at);
+    const has = (field: string) => body !== null && typeof body === "object" && field in body;
+    if (!has("expires_at") && !has("uploads_close_at") && !has("purge_after")) {
+      return c.json({ error: "expires_at is invalid" }, 400);
+    }
+    const expiresAt = has("expires_at") ? normalizeDate(body?.expires_at) : event.expires_at;
     if (expiresAt === undefined) return c.json({ error: "expires_at is invalid" }, 400);
-    await c.env.DB.prepare("UPDATE events SET expires_at = ?, archived_at = NULL WHERE id = ?")
-      .bind(expiresAt, event.id).run();
+    // The web admin only knows expires_at: when that is all that is sent, it
+    // is the single end date again, so a stale split date cannot outlive it.
+    const isSingleDate = !has("uploads_close_at") && !has("purge_after");
+    const uploadsCloseAt = has("uploads_close_at")
+      ? normalizeDate(body?.uploads_close_at)
+      : isSingleDate ? null : event.uploads_close_at;
+    const purgeAfter = has("purge_after") ? normalizeDate(body?.purge_after) : isSingleDate ? null : event.purge_after;
+    if (uploadsCloseAt === undefined) return c.json({ error: "uploads_close_at is invalid" }, 400);
+    if (purgeAfter === undefined) return c.json({ error: "purge_after is invalid" }, 400);
+    const effectiveClose = uploadsCloseAt ?? expiresAt;
+    const effectivePurge = purgeAfter ?? expiresAt;
+    if (effectiveClose && effectivePurge && effectiveClose > effectivePurge) {
+      return c.json({ error: "uploads must close before the event is purged" }, 400);
+    }
+    await c.env.DB.prepare(
+      "UPDATE events SET expires_at = ?, uploads_close_at = ?, purge_after = ?, archived_at = NULL WHERE id = ?"
+    )
+      .bind(expiresAt, uploadsCloseAt, purgeAfter, event.id).run();
   }
   const updated = await c.env.DB.prepare("SELECT * FROM events WHERE id = ?")
     .bind(event.id).first<EventRow>();
@@ -517,6 +543,8 @@ app.post("/api/events/:slug/moments", async (c) => {
   if (oversized) return oversized;
   const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
+  // New uploads only; sessions opened before the close may still finish.
+  if (!event.uploads_open) return c.json(UPLOADS_CLOSED, 403);
 
   const body = await c.req.parseBody();
   const uploaderName =
@@ -785,6 +813,8 @@ app.get("/api/upload-capabilities", (c) =>
 app.post("/api/events/:slug/moments/stream/session", async (c) => {
   const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
+  // New uploads only; sessions opened before the close may still finish.
+  if (!event.uploads_open) return c.json(UPLOADS_CLOSED, 403);
   if (!isStreamConfigured(c.env)) return c.json({ error: "Stream uploads are not configured" }, 501);
   const body = (await c.req.json().catch(() => null)) as {
     uploader_name?: unknown;
@@ -814,6 +844,8 @@ app.post("/api/events/:slug/moments/stream/session", async (c) => {
 app.post("/api/events/:slug/moments/stream/tus", async (c) => {
   const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
+  // Sessions opened before the close get a short grace, not until purge.
+  if (!canFinishUploads(event)) return c.json(UPLOADS_CLOSED, 403);
   if (!isStreamConfigured(c.env)) return c.json({ error: "Stream uploads are not configured" }, 501);
   const shouldRequireSigned = event.access_mode === "private" && isStreamSigningConfigured(c.env);
 
@@ -902,6 +934,8 @@ app.post("/api/events/:slug/moments/stream/tus", async (c) => {
 app.post("/api/events/:slug/moments/stream/complete", async (c) => {
   const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
+  // Sessions opened before the close get a short grace, not until purge.
+  if (!canFinishUploads(event)) return c.json(UPLOADS_CLOSED, 403);
   if (!isStreamConfigured(c.env)) return c.json({ error: "Stream uploads are not configured" }, 501);
 
   const body = (await c.req.json().catch(() => null)) as {
@@ -1031,6 +1065,8 @@ app.post("/api/events/:slug/moments/stream/abort", async (c) => {
 app.post("/api/events/:slug/moments/multipart/init", async (c) => {
   const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
+  // New uploads only; sessions opened before the close may still finish.
+  if (!event.uploads_open) return c.json(UPLOADS_CLOSED, 403);
   if (!isR2Configured(c.env)) {
     return c.json({ error: "Large direct uploads are not configured" }, 501);
   }
@@ -1097,6 +1133,8 @@ app.post("/api/events/:slug/moments/multipart/init", async (c) => {
 app.post("/api/events/:slug/moments/multipart/part-url", async (c) => {
   const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
+  // Sessions opened before the close get a short grace, not until purge.
+  if (!event.uploads_finishing) return c.json(UPLOADS_CLOSED, 403);
   if (!isR2Configured(c.env)) {
     return c.json({ error: "Large direct uploads are not configured" }, 501);
   }
@@ -1211,6 +1249,8 @@ app.get("/api/events/:slug/moments/multipart/status", async (c) => {
 app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
   const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
+  // Sessions opened before the close get a short grace, not until purge.
+  if (!event.uploads_finishing) return c.json(UPLOADS_CLOSED, 403);
   if (!isR2Configured(c.env)) {
     return c.json({ error: "Large direct uploads are not configured" }, 501);
   }
