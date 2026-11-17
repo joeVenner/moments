@@ -20,6 +20,7 @@ import {
 } from "./multipartPresign";
 import { requireAdmin } from "./auth";
 import { getActiveEventBySlug, getEventBySlug, toPublicEvent } from "./events";
+import { isHiddenMomentMedia, MEDIA_VIEW_PARAM, verifyMediaView, withAdminViewUrls } from "./mediaAccess";
 import { v1 } from "./v1";
 import { generateAiBanner, BannerGenerationError } from "./banner";
 import { isStreamConfigured, streamApiUrl, streamAuthHeaders, streamMediaUrl } from "./stream";
@@ -609,7 +610,10 @@ app.get("/api/admin/events/:slug/moments", async (c) => {
   const { results } = await c.env.DB.prepare(
     "SELECT * FROM moments WHERE event_id = ? ORDER BY created_at DESC LIMIT 500"
   ).bind(event.id).all<MomentRow>();
-  return c.json({ moments: await signMomentsForEvent(c.env, event, results) });
+  const signed = await signMomentsForEvent(c.env, event, results);
+  // Carries signed view URLs: keep it out of every cache.
+  c.header("Cache-Control", "private, no-store");
+  return c.json({ moments: await withAdminViewUrls(c.env.EVENT_ACCESS_SECRET, signed) });
 });
 
 app.get("/api/admin/events/:slug/analytics", async (c) => {
@@ -664,7 +668,9 @@ app.patch("/api/admin/moments/:id", async (c) => {
   const event = await c.env.DB.prepare("SELECT access_mode FROM events WHERE id = ?")
     .bind(moment.event_id).first<{ access_mode: string }>();
   const [signed] = event ? await signMomentsForEvent(c.env, event, [moment]) : [moment];
-  return c.json({ moment: signed });
+  const [viewable] = await withAdminViewUrls(c.env.EVENT_ACCESS_SECRET, [signed]);
+  c.header("Cache-Control", "private, no-store");
+  return c.json({ moment: viewable });
 });
 
 app.delete("/api/admin/moments/:id", async (c) => {
@@ -1463,19 +1469,37 @@ app.post("/api/admin/generate-banner", async (c) => {
   }
 });
 
+type MediaEvent = Pick<EventRow, "id" | "access_mode" | "invite_token" | "access_version">;
+
 app.get("/media/*", async (c) => {
   const key = c.req.path.slice("/media/".length);
   const eventId = /^events\/([^/]+)\//.exec(key)?.[1];
-  const mediaEvent = eventId
-    ? await c.env.DB.prepare("SELECT * FROM events WHERE id = ?").bind(eventId).first<EventRow>()
-    : await c.env.DB.prepare("SELECT * FROM events WHERE cover_image_url = ? LIMIT 1")
-        .bind(`/media/${key}`).first<EventRow>();
-  if (mediaEvent?.access_mode === "private" && !(await verifyEventAccess(c, mediaEvent))) {
-    return c.json({ error: "access required" }, 401);
+  // Only what the access check needs; the three lookups are independent.
+  const eventColumns = "id, access_mode, invite_token, access_version";
+  const secret = c.env.EVENT_ACCESS_SECRET;
+  const [mediaEvent, isHidden, isAdminView] = await Promise.all([
+    eventId
+      ? c.env.DB.prepare(`SELECT ${eventColumns} FROM events WHERE id = ?`).bind(eventId).first<MediaEvent>()
+      : c.env.DB.prepare(`SELECT ${eventColumns} FROM events WHERE cover_image_url = ? LIMIT 1`)
+          .bind(`/media/${key}`).first<MediaEvent>(),
+    isHiddenMomentMedia(c.env.DB, key),
+    // Admin dashboard loads (hidden or private media) carry a signed ?mv= view.
+    secret
+      ? verifyMediaView(secret, key, c.req.query(MEDIA_VIEW_PARAM), Math.floor(Date.now() / 1000))
+      : Promise.resolve(false),
+  ]);
+  if (!isAdminView) {
+    if (mediaEvent?.access_mode === "private" && !(await verifyEventAccess(c, mediaEvent))) {
+      return c.json({ error: "access required" }, 401);
+    }
+    // Hidden moments disappear from the feed and from direct links alike.
+    if (isHidden) return c.notFound();
   }
-  const mediaCacheControl = mediaEvent?.access_mode === "private"
-    ? "private, max-age=3600"
-    : "public, max-age=31536000, immutable";
+  // Not immutable: hiding a moment must take effect, so browsers revalidate
+  // after 5 minutes (cheap: ETag -> 304, and the hidden check runs again).
+  const mediaCacheControl = mediaEvent?.access_mode === "private" || isAdminView
+    ? "private, max-age=300"
+    : "public, max-age=300";
   const ifNoneMatch = c.req.header("If-None-Match") ?? "";
   const rangeHeader = c.req.header("Range") ?? "";
   // Single byte range only (what browsers send for <video> seeking): bytes=a-b,
@@ -1512,8 +1536,8 @@ app.get("/media/*", async (c) => {
     ETag: etag,
   };
 
-  // 304: client already has this exact object (revalidation). Rare in practice
-  // because responses are `immutable`, but correct when browsers do revalidate.
+  // 304: client already has this exact object. Common: media is cached for an
+  // hour and then revalidated (hidden moments are rejected above, never 304).
   if (conditional && ifNoneMatch === etag) {
     return new Response(null, { status: 304, headers: baseHeaders });
   }
