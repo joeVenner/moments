@@ -13,6 +13,7 @@ import {
   parseCursor,
 } from "../feed";
 import { GUEST_TOKEN_HEADER, joinEventAsGuest, toPublicParticipant } from "../guestIdentity";
+import { signMomentsForEvent, STREAM_SIGNING_UNAVAILABLE, StreamSigningError } from "../streamSigning";
 import type { Env, EventRow } from "../types";
 import {
   ChangesQuerySchema,
@@ -161,6 +162,7 @@ export const v1 = new OpenAPIHono<V1Env>({
 // Client mistakes the validator raises itself (e.g. a non-JSON body) keep
 // their 4xx status and the stable error shape instead of becoming a 500.
 v1.onError((err, c) => {
+  if (err instanceof StreamSigningError) return c.json(STREAM_SIGNING_UNAVAILABLE, 503);
   if (err instanceof HTTPException && err.status < 500) {
     return c.json({ error: "invalid request", code: "invalid_request" }, err.status);
   }
@@ -187,7 +189,7 @@ v1.openapi(getFeedRoute, async (c) => {
     reactorId: query.reactor_id ?? "",
   });
   c.header("Cache-Control", "no-store");
-  return c.json(page, 200);
+  return c.json({ ...page, moments: await signMomentsForEvent(c.env, c.get("event"), page.moments) }, 200);
 });
 
 v1.openapi(getFeedChangesRoute, async (c) => {
@@ -199,7 +201,7 @@ v1.openapi(getFeedChangesRoute, async (c) => {
     reactorId: query.reactor_id ?? "",
   });
   c.header("Cache-Control", "no-store");
-  return c.json(changes, 200);
+  return c.json({ ...changes, upserts: await signMomentsForEvent(c.env, c.get("event"), changes.upserts) }, 200);
 });
 
 v1.openapi(joinEventRoute, async (c) => {
