@@ -85,6 +85,11 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
         #expect(local.resolve("http://other.test/media/x.jpg") == nil)
     }
 
+    @Test func keepsTheSignedMediaQuery() {
+        let signed = "/media/events/e1/moments/a.jpg?at=1800021600.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ"
+        #expect(mapper.resolve(signed) == "https://moments.test\(signed)")
+    }
+
     @Test func acceptsSameOriginAbsoluteURLsAndDotSegmentsStayOnOrigin() {
         #expect(mapper.resolve("https://MOMENTS.test/media/x.jpg") != nil)
         #expect(mapper.resolve("/media/../x")?.hasPrefix("https://moments.test/") == true)

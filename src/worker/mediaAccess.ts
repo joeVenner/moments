@@ -1,11 +1,16 @@
 import { timingSafeEqual } from "./eventAccess";
+import type { MomentMedia } from "./media";
 
 /**
  * Access rules for /media objects beyond the private-event gate:
  * - objects belonging to a hidden moment are not served to guests;
  * - admins view them (and private-event media) through short-lived signed
  *   `?mv=` URLs that the admin moment responses carry, because <img>/<video>
- *   loads cannot send the admin Authorization header.
+ *   loads cannot send the admin Authorization header;
+ * - native guests of a private event load media through signed `?at=` URLs
+ *   that v1 feed responses carry, because AVPlayer and image loaders cannot
+ *   send `X-Event-Access`. Each is bound to one key and the event's
+ *   access_version, so a PIN change revokes them; hidden moments stay hidden.
  */
 
 export const MEDIA_VIEW_PARAM = "mv";
@@ -89,4 +94,97 @@ export async function isHiddenMomentMedia(db: D1Database, key: string): Promise<
     .bind(`/media/${key}`, key, key, key)
     .first();
   return row !== null;
+}
+
+export const MEDIA_GRANT_PARAM = "at";
+const GRANT_BUCKET_SECONDS = 6 * 60 * 60;
+
+/** Expiry shared within six hours so URLs stay cacheable: 6-12 h validity. */
+export function mediaGrantExpiry(nowSeconds: number): number {
+  return Math.ceil((nowSeconds + 1) / GRANT_BUCKET_SECONDS) * GRANT_BUCKET_SECONDS + GRANT_BUCKET_SECONDS;
+}
+
+// Domain-separated from admin views and access grants (same secret).
+const grantMessage = (key: string, accessVersion: number, exp: number) =>
+  `media-grant:v1:${exp}:${accessVersion}:${key}`;
+
+/** `<exp>.<signature>` letting a guest load exactly this R2 key until `exp`. */
+export async function signMediaGrant(
+  secret: string | CryptoKey,
+  key: string,
+  accessVersion: number,
+  nowSeconds: number
+): Promise<string> {
+  const exp = mediaGrantExpiry(nowSeconds);
+  return `${exp}.${await hmac(secret, grantMessage(key, accessVersion, exp))}`;
+}
+
+export async function verifyMediaGrant(
+  secret: string,
+  key: string,
+  accessVersion: number,
+  token: string | undefined,
+  nowSeconds: number
+): Promise<boolean> {
+  const match = token ? /^(\d{10})\.([A-Za-z0-9_-]{43})$/.exec(token) : null;
+  if (!match) return false;
+  const exp = Number(match[1]);
+  if (exp <= nowSeconds || exp > nowSeconds + 2 * GRANT_BUCKET_SECONDS) return false;
+  return timingSafeEqual(match[2], await hmac(secret, grantMessage(key, accessVersion, exp)));
+}
+
+type GrantableMoment = { media_url: string; media?: MomentMedia };
+type GrantableEvent = { access_mode: string; access_version: number };
+
+/**
+ * Signs one `/media/` URL for a private event's guests. Other URLs (Stream,
+ * absolute, or already carrying a query: none are emitted today) are returned
+ * unchanged.
+ */
+async function signGuestUrl(key: string | CryptoKey, event: GrantableEvent, url: string, nowSeconds: number): Promise<string> {
+  if (!url.startsWith("/media/") || url.includes("?")) return url;
+  const token = await signMediaGrant(key, url.slice("/media/".length), event.access_version, nowSeconds);
+  return `${url}?${MEDIA_GRANT_PARAM}=${token}`;
+}
+
+/** `withGuestMediaGrants` for a single URL, such as the event cover. */
+export async function withGuestMediaGrant(
+  secret: string | undefined,
+  event: GrantableEvent,
+  url: string | null,
+  nowSeconds: number = Math.floor(Date.now() / 1000)
+): Promise<string | null> {
+  if (!secret || event.access_mode !== "private" || url === null) return url;
+  return signGuestUrl(secret, event, url, nowSeconds);
+}
+
+/**
+ * For a private event, adds `?at=` to every R2 URL of each moment (the
+ * original, thumb, display and poster). Call only for requests that already
+ * passed the event's access check. Public events, Stream URLs and a missing
+ * secret leave URLs as they are.
+ */
+export async function withGuestMediaGrants<T extends GrantableMoment>(
+  secret: string | undefined,
+  event: GrantableEvent,
+  moments: readonly T[],
+  nowSeconds: number = Math.floor(Date.now() / 1000)
+): Promise<T[]> {
+  if (!secret || event.access_mode !== "private") return [...moments];
+  const hmacKey = await importHmacKey(secret);
+  const sign = (url: string) => signGuestUrl(hmacKey, event, url, nowSeconds);
+  const signOptional = async (url: string | null) => (url === null ? null : sign(url));
+  return Promise.all(
+    moments.map(async (moment) => {
+      const mediaUrl = await sign(moment.media_url);
+      if (!moment.media) return { ...moment, media_url: mediaUrl };
+      const [url, thumb, display, poster] = await Promise.all([
+        sign(moment.media.url),
+        signOptional(moment.media.thumb_url),
+        signOptional(moment.media.display_url),
+        signOptional(moment.media.poster_url),
+      ]);
+      return { ...moment, media_url: mediaUrl, media: { ...moment.media, url, thumb_url: thumb, display_url: display, poster_url: poster } };
+    })
+  );
 }
