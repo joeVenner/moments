@@ -18,10 +18,13 @@ final class StubTransport: ClientTransport, @unchecked Sendable {
     private let contentType: String
     private let failure: (any Error)?
 
-    init(status: Int = 200, json: String, contentType: String = "application/json") {
+    private let extraHeaders: [String: String]
+
+    init(status: Int = 200, json: String, contentType: String = "application/json", headers: [String: String] = [:]) {
         self.status = status
         self.json = json
         self.contentType = contentType
+        extraHeaders = headers
         failure = nil
     }
 
@@ -30,6 +33,7 @@ final class StubTransport: ClientTransport, @unchecked Sendable {
         status = 0
         json = ""
         contentType = ""
+        extraHeaders = [:]
         self.failure = failure
     }
 
@@ -41,6 +45,7 @@ final class StubTransport: ClientTransport, @unchecked Sendable {
         if let failure { throw failure }
         var fields = HTTPFields()
         fields[.contentType] = contentType
+        for (name, value) in extraHeaders { fields[HTTPField.Name(name)!] = value }
         return (HTTPResponse(status: .init(code: status), headerFields: fields), HTTPBody(json))
     }
 }

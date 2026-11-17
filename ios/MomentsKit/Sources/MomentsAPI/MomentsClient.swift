@@ -53,6 +53,25 @@ public struct JoinResult: Sendable, Hashable {
     }
 }
 
+/// A private-event grant: send `token` as the access grant until `expiresAt`.
+public struct AccessGrant: Sendable, Hashable {
+    public let token: String
+    public let expiresAt: Date
+
+    public init(token: String, expiresAt: Date) {
+        self.token = token
+        self.expiresAt = expiresAt
+    }
+}
+
+/// What the guest offers to unlock a private event.
+public enum AccessCredential: Sendable, Hashable {
+    /// Typed by the guest; surrounding spaces are ignored.
+    case pin(String)
+    /// The `invite` value from the event link (never throttled by the server).
+    case invite(String)
+}
+
 /// Per-event secrets for the requests that need them.
 public struct EventCredentials: Sendable, Hashable {
     /// Signed grant from the access endpoint (private events only).
@@ -69,6 +88,8 @@ public struct EventCredentials: Sendable, Hashable {
 /// What screens and stores depend on, so tests can pass a fake.
 /// Every method throws `MomentsAPIError` (or `CancellationError`).
 public protocol MomentsService: Sendable {
+    /// Nil when the event is public (no grant needed).
+    func access(slug: String, credential: AccessCredential) async throws -> AccessGrant?
     func event(slug: String, credentials: EventCredentials) async throws -> Event
     func feedPage(slug: String, before: Int?, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> FeedPage
     func feedChanges(slug: String, since: Int, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> FeedChanges
@@ -125,6 +146,50 @@ public struct MomentsClient: MomentsService {
         configuration.urlCache = nil
         configuration.timeoutIntervalForRequest = 30
         return URLSession(configuration: configuration, delegate: RedirectRefusal(), delegateQueue: nil)
+    }
+
+    /// Used when a non-JSON 429 has no Retry-After either
+    /// (the server's lockout window, `ACCESS_RETRY_AFTER_SECONDS`).
+    static let defaultRetryAfterSeconds = 15 * 60
+
+    /// Exchanges a PIN or the invite token from an event link for a grant.
+    /// Nil when the event is public. Store the grant in the keychain.
+    public func access(slug: String, credential: AccessCredential) async throws -> AccessGrant? {
+        let body: Components.Schemas.AccessRequest
+        switch credential {
+        case let .pin(pin):
+            let trimmed = pin.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { throw MomentsAPIError.invalidRequest }
+            body = .init(pin: trimmed)
+        case let .invite(token):
+            guard !token.isEmpty else { throw MomentsAPIError.invalidRequest }
+            body = .init(inviteToken: token)
+        }
+        return try await perform {
+            let output = try await client.requestAccess(path: .init(slug: slug), body: .json(body))
+            switch output {
+            case let .ok(response):
+                let body = try response.body.json
+                guard let token = body.accessToken else { return nil }
+                guard let expiresAt = body.expiresAt.flatMap(ServerDate.parse) else {
+                    throw MomentsAPIError.unexpectedResponse
+                }
+                return AccessGrant(token: token, expiresAt: expiresAt)
+            case let .tooManyRequests(response):
+                // A non-JSON 429 (proxy) is handled by NonJSONErrorMiddleware.
+                let seconds = (try? response.body.json.retryAfterSeconds)
+                    ?? response.headers.retryAfter.flatMap { Int($0) }
+                    ?? Self.defaultRetryAfterSeconds
+                throw MomentsAPIError.tooManyAttempts(retryAfterSeconds: max(1, seconds))
+            // On this endpoint every 401 means the PIN or invite was wrong.
+            case .unauthorized: throw MomentsAPIError.invalidAccess
+            case let .badRequest(response): throw Self.error(400, try? response.body.json.code)
+            case let .notFound(response): throw Self.error(404, try? response.body.json.code)
+            case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+            case let .serviceUnavailable(response): throw Self.error(503, try? response.body.json.code)
+            case let .default(status, response): throw Self.error(status, try? response.body.json.code)
+            }
+        }
     }
 
     public func event(slug: String, credentials: EventCredentials = .init()) async throws -> Event {
@@ -231,7 +296,9 @@ public struct MomentsClient: MomentsService {
     /// Maps a status and the server's stable `code` to a typed error.
     static func error(_ status: Int, _ code: String?) -> MomentsAPIError {
         switch (status, code) {
+        case (401, "invalid_access"): .invalidAccess
         case (401, _): .accessRequired
+        case (503, "access_unavailable"): .accessUnavailable
         case (404, "event_not_found"): .eventNotFound
         case (426, _): .upgradeRequired
         case (409, "nickname_taken"): .nicknameTaken
