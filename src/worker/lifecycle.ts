@@ -19,6 +19,7 @@ export async function cleanupEvent(env: Env, event: Pick<EventRow, "id">): Promi
     env.DB.prepare("DELETE FROM moments WHERE event_id = ?").bind(event.id),
     env.DB.prepare("DELETE FROM participants WHERE event_id = ?").bind(event.id),
     env.DB.prepare("DELETE FROM uploads WHERE event_id = ?").bind(event.id),
+    env.DB.prepare("DELETE FROM access_failures WHERE event_id = ?").bind(event.id),
     env.DB.prepare("UPDATE events SET archived_at = datetime('now') WHERE id = ?").bind(event.id),
   ]);
 }
@@ -29,4 +30,9 @@ export async function cleanupExpiredEvents(env: Env): Promise<number> {
   ).all<EventRow>();
   for (const event of results) await cleanupEvent(env, event);
   return results.length;
+}
+
+/** Failed-PIN rows only matter inside the throttling window; keep a day for auditing. */
+export async function pruneAccessFailures(env: Env): Promise<void> {
+  await env.DB.prepare("DELETE FROM access_failures WHERE created_at < datetime('now', '-1 day')").run();
 }

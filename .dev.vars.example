@@ -15,3 +15,7 @@ R2_BUCKET_NAME=moments-media
 STREAM_ACCOUNT_ID=
 STREAM_API_TOKEN=
 STREAM_CUSTOMER_CODE=
+
+# Signs private-event access grants (any long random string, e.g. `openssl rand -hex 32`).
+# Leave blank to keep the legacy unsigned invite-token cookie.
+EVENT_ACCESS_SECRET=

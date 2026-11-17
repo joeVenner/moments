@@ -13,3 +13,6 @@ dist/
 *.tsbuildinfo
 .DS_Store
 worker-configuration.d.ts
+
+# Agent instructions (local only)
+CLAUDE.md

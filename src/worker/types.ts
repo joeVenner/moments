@@ -25,6 +25,9 @@ export interface Env {
   STREAM_ACCOUNT_ID?: string;
   STREAM_API_TOKEN?: string;
   STREAM_CUSTOMER_CODE?: string;
+  // HMAC key for signed private-event access grants (eventAccess.ts). When
+  // unset, private events fall back to the legacy raw invite-token cookie.
+  EVENT_ACCESS_SECRET?: string;
 }
 
 export interface EventRow {
@@ -43,6 +46,7 @@ export interface EventRow {
   access_pin_hash: string | null;
   access_pin_salt: string | null;
   invite_token: string | null;
+  access_version: number;
 }
 
 export interface MomentRow {
