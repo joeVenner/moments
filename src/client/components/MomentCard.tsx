@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import type { MomentData } from "../lib/types";
 import { toggleMomentReaction } from "../lib/api";
 
-const VIDEO_EXT = /\.(mp4|webm|mov|m4v)$/i;
+// Admin URLs carry a signed ?mv= view query, so match the path part only.
+const VIDEO_EXT = /\.(mp4|webm|mov|m4v)(?:\?|$)/i;
 
 function isVideoMoment(moment: PendingMoment): boolean {
   const mime = moment.mime_type ?? moment._mimeType;
