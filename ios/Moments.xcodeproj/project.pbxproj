@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		D0885E05C7E3D2937E9924EF /* MomentsDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 23F47EB25CD897107984C822 /* MomentsDomain */; };
 		894EDC74B96DD6AAF2CB504C /* MomentsDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 0122416D65AF3DAC4C083DBF /* MomentsDomain */; };
+		C2FBCFA6CA5703472D203BEE /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 8F57B567318C731ACDB06C83 /* DesignSystem */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -46,6 +47,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D0885E05C7E3D2937E9924EF /* MomentsDomain in Frameworks */,
+				C2FBCFA6CA5703472D203BEE /* DesignSystem in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -108,6 +110,7 @@
 			name = Moments;
 			packageProductDependencies = (
 				23F47EB25CD897107984C822 /* MomentsDomain */,
+				8F57B567318C731ACDB06C83 /* DesignSystem */,
 			);
 			productName = Moments;
 			productReference = B79AD8397EB9294C45D7A230 /* Moments.app */;
@@ -353,6 +356,10 @@
 		0122416D65AF3DAC4C083DBF /* MomentsDomain */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MomentsDomain;
+		};
+		8F57B567318C731ACDB06C83 /* DesignSystem */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DesignSystem;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
