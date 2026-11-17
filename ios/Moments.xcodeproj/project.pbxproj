@@ -1,0 +1,360 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		D0885E05C7E3D2937E9924EF /* MomentsDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 23F47EB25CD897107984C822 /* MomentsDomain */; };
+		894EDC74B96DD6AAF2CB504C /* MomentsDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 0122416D65AF3DAC4C083DBF /* MomentsDomain */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		39DECC8CA0826B835104DB7C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E8ABC6C90A8FA5AA4833075A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7E42F14C8B35690A99455093;
+			remoteInfo = Moments;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		B79AD8397EB9294C45D7A230 /* Moments.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moments.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9841BD4DBD909C95939AE4E5 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		53DFC14767CE2A791C09F61E /* MomentsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MomentsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		EFCB34A7D2BEE1A9E1380B4F /* Moments */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Moments;
+			sourceTree = "<group>";
+		};
+		2E7F959437C484A8560DCEDE /* MomentsTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MomentsTests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CCCE23FB6C551788EC37EA52 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D0885E05C7E3D2937E9924EF /* MomentsDomain in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		65BE0F1C5714026ABC9DA854 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				894EDC74B96DD6AAF2CB504C /* MomentsDomain in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		3DBAA48ADAD5362D6FAAEA31 = {
+			isa = PBXGroup;
+			children = (
+				7EDF518EF40896CC13AF1277 /* Config */,
+				EFCB34A7D2BEE1A9E1380B4F /* Moments */,
+				2E7F959437C484A8560DCEDE /* MomentsTests */,
+				7E163D566289A1BA505EA238 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		7EDF518EF40896CC13AF1277 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				9841BD4DBD909C95939AE4E5 /* Base.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		7E163D566289A1BA505EA238 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B79AD8397EB9294C45D7A230 /* Moments.app */,
+				53DFC14767CE2A791C09F61E /* MomentsTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		7E42F14C8B35690A99455093 /* Moments */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 83EEC277DF1017257AD37040 /* Build configuration list for PBXNativeTarget "Moments" */;
+			buildPhases = (
+				9EADAD101F7A9CABAEEA39E6 /* Sources */,
+				CCCE23FB6C551788EC37EA52 /* Frameworks */,
+				7E9135449DEBB42374C76A5A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				EFCB34A7D2BEE1A9E1380B4F /* Moments */,
+			);
+			name = Moments;
+			packageProductDependencies = (
+				23F47EB25CD897107984C822 /* MomentsDomain */,
+			);
+			productName = Moments;
+			productReference = B79AD8397EB9294C45D7A230 /* Moments.app */;
+			productType = "com.apple.product-type.application";
+		};
+		4677E44F5CB164A8678A1467 /* MomentsTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4AB2488C3C2F0C69FB28183D /* Build configuration list for PBXNativeTarget "MomentsTests" */;
+			buildPhases = (
+				7DB59F9168A587CC8641D6D7 /* Sources */,
+				65BE0F1C5714026ABC9DA854 /* Frameworks */,
+				CC94FCCC866841F24DBB5612 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D1A80F66CCBE66B88D645940 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				2E7F959437C484A8560DCEDE /* MomentsTests */,
+			);
+			name = MomentsTests;
+			packageProductDependencies = (
+				0122416D65AF3DAC4C083DBF /* MomentsDomain */,
+			);
+			productName = MomentsTests;
+			productReference = 53DFC14767CE2A791C09F61E /* MomentsTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E8ABC6C90A8FA5AA4833075A /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					4677E44F5CB164A8678A1467 = {
+						TestTargetID = 7E42F14C8B35690A99455093;
+					};
+				};
+			};
+			buildConfigurationList = E3ED6DF716EC8EB7A2D0EDBB /* Build configuration list for PBXProject "Moments" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				fr,
+				Base,
+			);
+			mainGroup = 3DBAA48ADAD5362D6FAAEA31;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D5C8F0E45376C9CCFB98A497 /* XCLocalSwiftPackageReference "MomentsKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 7E163D566289A1BA505EA238 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				7E42F14C8B35690A99455093 /* Moments */,
+				4677E44F5CB164A8678A1467 /* MomentsTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		7E9135449DEBB42374C76A5A = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CC94FCCC866841F24DBB5612 = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		9EADAD101F7A9CABAEEA39E6 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7DB59F9168A587CC8641D6D7 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D1A80F66CCBE66B88D645940 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7E42F14C8B35690A99455093 /* Moments */;
+			targetProxy = 39DECC8CA0826B835104DB7C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		C37BB25C104AF23DDA0B45B4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9841BD4DBD909C95939AE4E5 /* Base.xcconfig */;
+			buildSettings = {
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		DC6CB6EE24489D9BA3F42149 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9841BD4DBD909C95939AE4E5 /* Base.xcconfig */;
+			buildSettings = {
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		11B1155A6A7FAFEA34D2ACE2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Moments;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MOMENTS_BUNDLE_ID_PREFIX).moments";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		9F2FC4DEDB3676BCB3EFB063 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Moments;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MOMENTS_BUNDLE_ID_PREFIX).moments";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		0D489DAF1B2C2E210A50E093 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MOMENTS_BUNDLE_ID_PREFIX).moments.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Moments.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Moments";
+			};
+			name = Debug;
+		};
+		83F7A18886315229D28F0A0E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MOMENTS_BUNDLE_ID_PREFIX).moments.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Moments.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Moments";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E3ED6DF716EC8EB7A2D0EDBB /* Build configuration list for PBXProject "Moments" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C37BB25C104AF23DDA0B45B4 /* Debug */,
+				DC6CB6EE24489D9BA3F42149 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		83EEC277DF1017257AD37040 /* Build configuration list for PBXNativeTarget "Moments" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				11B1155A6A7FAFEA34D2ACE2 /* Debug */,
+				9F2FC4DEDB3676BCB3EFB063 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4AB2488C3C2F0C69FB28183D /* Build configuration list for PBXNativeTarget "MomentsTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0D489DAF1B2C2E210A50E093 /* Debug */,
+				83F7A18886315229D28F0A0E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		D5C8F0E45376C9CCFB98A497 /* XCLocalSwiftPackageReference "MomentsKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = MomentsKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		23F47EB25CD897107984C822 /* MomentsDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MomentsDomain;
+		};
+		0122416D65AF3DAC4C083DBF /* MomentsDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MomentsDomain;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E8ABC6C90A8FA5AA4833075A /* Project object */;
+}
