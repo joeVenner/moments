@@ -19,6 +19,7 @@ let package = Package(
         .library(name: "DesignSystem", targets: ["DesignSystem"]),
         .library(name: "AppRouting", targets: ["AppRouting"]),
         .library(name: "CredentialStore", targets: ["CredentialStore"]),
+        .library(name: "FeatureGuest", targets: ["FeatureGuest"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-openapi-generator", exact: "1.14.3"),
@@ -52,6 +53,8 @@ let package = Package(
         .testTarget(name: "AppRoutingTests", dependencies: ["AppRouting", "MomentsDomain"]),
         .target(name: "CredentialStore", dependencies: ["MomentsDomain"]),
         .testTarget(name: "CredentialStoreTests", dependencies: ["CredentialStore", "MomentsDomain"]),
+        .target(name: "FeatureGuest", dependencies: ["MomentsAPI", "MomentsDomain", "CredentialStore", "DesignSystem"]),
+        .testTarget(name: "FeatureGuestTests", dependencies: ["FeatureGuest", "MomentsAPI", "MomentsDomain", "CredentialStore"]),
         .target(name: "DesignSystem"),
         .testTarget(name: "DesignSystemTests", dependencies: ["DesignSystem"]),
     ]
