@@ -38,7 +38,8 @@ export async function downloadMomentsZip(title: string, moments: MomentData[]): 
         uploader: moment.uploader_name,
         caption: moment.caption,
         created_at: moment.created_at,
-        media_url: moment.media_url,
+        // Drop the admin view token (?mv=...): the archive outlives it.
+        media_url: moment.media_url.split("?")[0],
       }));
       const manifestEntry = new ZipPassThrough("moments.json");
       zip.add(manifestEntry);
