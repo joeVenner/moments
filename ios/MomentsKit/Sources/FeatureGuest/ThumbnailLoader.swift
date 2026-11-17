@@ -25,7 +25,7 @@ public actor ThumbnailLoader {
     private let fetch: Fetch
     private let cache = NSCache<NSString, Box>()
     private var inFlight: [String: (task: Task<CGImage, any Error>, waiters: Int)] = [:]
-    private let limiter = Limiter(slots: ThumbnailLoader.maxConcurrentLoads)
+    private let limiter: Limiter
     /// Decoding a large PNG can briefly need hundreds of MB: two at a time.
     private let decodeLimiter = Limiter(slots: ThumbnailLoader.maxConcurrentDecodes)
 
@@ -37,16 +37,21 @@ public actor ThumbnailLoader {
 
     public enum LoadError: Error, Equatable { case undecodable }
 
-    public init(fetch: @escaping Fetch) {
+    public init(fetch: @escaping Fetch, maxConcurrentLoads: Int = ThumbnailLoader.maxConcurrentLoads) {
         self.fetch = fetch
+        limiter = Limiter(slots: max(1, maxConcurrentLoads))
         cache.totalCostLimit = Self.cacheCostLimit
     }
 
-    /// Feed images for one event, with the grant read for each request.
-    public init(fetcher: MediaFetcher, accessGrant: @escaping @Sendable () -> String?) {
-        self.init { url in
-            try await fetcher.data(for: url, accessGrant: accessGrant(), maxBytes: ThumbnailLoader.maxThumbnailBytes)
-        }
+    /// Images for one event, with the grant read for each request. The
+    /// viewer passes a larger `maxBytes`: it may load full originals.
+    public init(
+        fetcher: MediaFetcher, accessGrant: @escaping @Sendable () -> String?,
+        maxBytes: Int = ThumbnailLoader.maxThumbnailBytes, maxConcurrentLoads: Int = ThumbnailLoader.maxConcurrentLoads
+    ) {
+        self.init(fetch: { url in
+            try await fetcher.data(for: url, accessGrant: accessGrant(), maxBytes: maxBytes)
+        }, maxConcurrentLoads: maxConcurrentLoads)
     }
 
     /// Forget every image (access to the event was lost).
