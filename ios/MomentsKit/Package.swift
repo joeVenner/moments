@@ -21,6 +21,7 @@ let package = Package(
         .library(name: "CredentialStore", targets: ["CredentialStore"]),
         .library(name: "FeatureGuest", targets: ["FeatureGuest"]),
         .library(name: "UploadEngine", targets: ["UploadEngine"]),
+        .library(name: "MediaPipeline", targets: ["MediaPipeline"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-openapi-generator", exact: "1.14.3"),
@@ -58,6 +59,8 @@ let package = Package(
         .testTarget(name: "FeatureGuestTests", dependencies: ["FeatureGuest", "MomentsAPI", "MomentsDomain", "CredentialStore"]),
         .target(name: "UploadEngine", dependencies: ["MomentsAPI", "MomentsDomain"]),
         .testTarget(name: "UploadEngineTests", dependencies: ["UploadEngine", "MomentsAPI", "MomentsDomain"]),
+        .target(name: "MediaPipeline"),
+        .testTarget(name: "MediaPipelineTests", dependencies: ["MediaPipeline"]),
         .target(name: "DesignSystem"),
         .testTarget(name: "DesignSystemTests", dependencies: ["DesignSystem"]),
     ]
