@@ -16,9 +16,10 @@ import {
 } from "../lib/multipartUpload";
 import { ACTIVE_UPLOAD_STATUSES, findResumableUpload, getUploadFile, listUploads } from "../lib/uploadStore";
 import { useUploadWakeLock } from "../lib/useUploadWakeLock";
-import { getNickname, setNickname as saveNickname } from "../lib/nickname";
+import { clearNickname, getGuestToken, getNickname, setNickname as saveNickname } from "../lib/nickname";
+import { rejoinIfTokenless, sessionRejoinFlags } from "../lib/guestRejoin";
 import type { EventData } from "../lib/types";
-import { NicknameGate } from "../components/NicknameGate";
+import { NicknameGate, type JoinProblem } from "../components/NicknameGate";
 import { UploadDropzone } from "../components/UploadDropzone";
 import { MomentCard, type PendingMoment } from "../components/MomentCard";
 import { PointsToast, MilestoneBanner } from "../components/Toast";
@@ -68,6 +69,8 @@ export default function EventPage() {
   const [event, setEvent] = useState<EventData | null>(null);
   const [moments, setMoments] = useState<PendingMoment[]>([]);
   const [nickname, setNicknameState] = useState<string | null>(null);
+  // Why the nickname prompt is back (another device owns the saved name).
+  const [gateProblem, setGateProblem] = useState<JoinProblem | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [accessRequired, setAccessRequired] = useState(false);
@@ -101,8 +104,10 @@ export default function EventPage() {
 
   useEffect(() => {
     if (!slug) return;
+    let isCurrent = true;
     const name = getNickname(slug);
     setNicknameState(name);
+    setGateProblem(null);
     setMoments([]);
     setPage(1);
     setTotal(0);
@@ -125,6 +130,18 @@ export default function EventPage() {
         setMoments(momentsRes.moments);
         setTotal(momentsRes.total ?? 0);
         setMyPoints(momentsRes.your_points ?? 0);
+        // After the event loaded (a private event is unlocked by now): a saved
+        // nickname without a guest token joins again in the background.
+        if (!name) return;
+        void rejoinIfTokenless(slug, name, { getGuestToken, join: joinEvent, ...sessionRejoinFlags }).then((problem) => {
+          if (problem !== "nickname_taken") return;
+          // Cleared even if this effect is stale: the "tried" flag is spent, so
+          // the next run must find no nickname and show the prompt.
+          clearNickname(slug);
+          if (!isCurrent) return;
+          setNicknameState(null);
+          setGateProblem(problem);
+        });
       })
       .catch((error) => {
         if (error instanceof AccessRequiredError || error instanceof Error && error.message.includes("access")) {
@@ -134,6 +151,9 @@ export default function EventPage() {
         }
       })
       .finally(() => setLoading(false));
+    return () => {
+      isCurrent = false;
+    };
   }, [slug, accessVersion]);
 
   // Resume staged files on cold start, when connectivity returns, and when iOS
@@ -597,6 +617,7 @@ export default function EventPage() {
       {!nickname && (
         <NicknameGate
           event={event}
+          initialProblem={gateProblem}
           onSubmit={async (name, avatarSeed) => {
             // Join first: a rate limit or a taken nickname keeps the form open
             // (the guest has no token yet). Other failures still let them in.
@@ -604,6 +625,7 @@ export default function EventPage() {
             if (outcome === "rate_limited" || outcome === "nickname_taken") return outcome;
             saveNickname(slug!, name);
             setNicknameState(name);
+            setGateProblem(null);
             // Bump the strip so the new guest (and their avatar) show up
             // immediately without a page refresh. Also refetch page 1 with the
             // now-known nickname so `your_points` (any moments this guest

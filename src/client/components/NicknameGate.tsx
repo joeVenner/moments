@@ -22,15 +22,19 @@ export type JoinProblem = "rate_limited" | "nickname_taken";
 
 export function NicknameGate({
   event,
+  initialProblem = null,
   onSubmit,
 }: {
   event: EventData;
+  /** Shown on open, e.g. when the saved nickname turned out to be someone else's. */
+  initialProblem?: JoinProblem | null;
   onSubmit: (nickname: string, avatarSeed: string) => Promise<JoinProblem | null>;
 }) {
   const { t, eventTypeLabel } = useI18n();
   const [name, setName] = useState("");
   const [isJoining, setIsJoining] = useState(false);
-  const [problem, setProblem] = useState<JoinProblem | null>(null);
+  // Read on mount only: the gate is mounted fresh each time it reopens.
+  const [problem, setProblem] = useState<JoinProblem | null>(initialProblem);
   const [avatarSeed, setAvatarSeed] = useState(randomSeed);
   const reduced = prefersReducedMotion();
 

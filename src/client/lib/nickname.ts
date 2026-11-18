@@ -10,6 +10,15 @@ export function setNickname(slug: string, nickname: string): void {
   localStorage.setItem(storageKey(slug), nickname);
 }
 
+/** Forgets the saved nickname (another device owns it). */
+export function clearNickname(slug: string): void {
+  try {
+    localStorage.removeItem(storageKey(slug));
+  } catch {
+    // Storage blocked: nothing was saved.
+  }
+}
+
 function guestTokenKey(slug: string): string {
   return `moments:guest-token:${slug}`;
 }
