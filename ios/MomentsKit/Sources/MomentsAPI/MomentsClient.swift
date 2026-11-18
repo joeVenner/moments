@@ -238,7 +238,7 @@ public struct MomentsClient: MomentsService {
             let output = try await client.getFeed(
                 path: .init(slug: slug),
                 query: .init(before: before, limit: limit, reactorId: reactorID),
-                headers: .init(xEventAccess: credentials.accessGrant)
+                headers: .init(xEventAccess: credentials.accessGrant, xGuestToken: credentials.guestToken)
             )
             switch output {
             case let .ok(response): return mapper.feedPage(try response.body.json)
@@ -258,7 +258,7 @@ public struct MomentsClient: MomentsService {
             let output = try await client.getHighlights(
                 path: .init(slug: slug),
                 query: .init(limit: limit, reactorId: reactorID),
-                headers: .init(xEventAccess: credentials.accessGrant)
+                headers: .init(xEventAccess: credentials.accessGrant, xGuestToken: credentials.guestToken)
             )
             switch output {
             case let .ok(response): return mapper.highlights(try response.body.json)
@@ -297,7 +297,7 @@ public struct MomentsClient: MomentsService {
             let output = try await client.getFeedChanges(
                 path: .init(slug: slug),
                 query: .init(since: since, limit: limit, reactorId: reactorID),
-                headers: .init(xEventAccess: credentials.accessGrant)
+                headers: .init(xEventAccess: credentials.accessGrant, xGuestToken: credentials.guestToken)
             )
             switch output {
             case let .ok(response): return mapper.feedChanges(try response.body.json)
