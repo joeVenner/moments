@@ -63,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Website: going from one event straight to another no longer carries over the first event's screen state ("not found", the PIN prompt, the open tab, an upload or a join in progress).
 - iOS: VoiceOver now says "3 new moments" instead of reading out formatting code when new moments arrive.
 - Website: when joining is refused ("too many people are joining from this network" or a taken nickname), the join form now stays open and says why. Before, the guest entered without their guest identity.
 - Captions can no longer hide text-direction override characters, which could make a caption read differently than it is (for example a file name that seems to end in .txt). The app refuses them and says so; the website silently removes them. Emoji and Arabic, Persian or Hebrew text are unaffected.
