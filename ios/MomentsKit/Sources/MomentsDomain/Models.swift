@@ -117,6 +117,29 @@ public struct Media: Sendable, Hashable {
     public var gridImageURL: String? {
         thumbURL ?? posterURL ?? (kind == .image ? url : nil)
     }
+
+    /// Best still for the full-screen viewer: the display rendition, else the
+    /// original photo, else a video's poster.
+    public var viewerImageURL: String? {
+        displayURL ?? (kind == .image ? url : posterURL ?? thumbURL)
+    }
+
+    /// What a player can open: Stream's HLS manifest, or an R2 video file.
+    /// A Stream original is an embed page, never playable directly.
+    public var playbackURL: String? {
+        guard kind == .video else { return nil }
+        let candidate = hlsURL ?? (Self.isStreamEmbed(url) ? nil : url)
+        // Only absolute web URLs reach a player (the API client resolves ours).
+        guard let candidate, let scheme = URL(string: candidate)?.scheme?.lowercased(),
+              scheme == "https" || scheme == "http"
+        else { return nil }
+        return candidate
+    }
+
+    static func isStreamEmbed(_ url: String) -> Bool {
+        guard let host = URL(string: url)?.host()?.lowercased() else { return false }
+        return host.hasSuffix(".cloudflarestream.com") || host == "iframe.videodelivery.net"
+    }
 }
 
 /// Omits the wire's `media_url` (same as `media.url`), `size_bytes` and

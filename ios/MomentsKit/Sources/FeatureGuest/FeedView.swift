@@ -7,14 +7,19 @@ import SwiftUI
 public struct FeedView: View {
     let model: FeedModel
     let thumbnails: ThumbnailLoader
+    let viewerImages: ThumbnailLoader
     @Environment(\.scenePhase) private var scenePhase
+    #if os(iOS)
+    @State private var viewing: ViewerRequest?
+    #endif
 
     private static let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
     private static let topID = "feed-top"
 
-    public init(model: FeedModel, thumbnails: ThumbnailLoader) {
+    public init(model: FeedModel, thumbnails: ThumbnailLoader, viewerImages: ThumbnailLoader) {
         self.model = model
         self.thumbnails = thumbnails
+        self.viewerImages = viewerImages
     }
 
     public var body: some View {
@@ -54,6 +59,12 @@ public struct FeedView: View {
             await model.loadFirstPage()
             await model.pollUntilCancelled()
         }
+        #if os(iOS)
+        .fullScreenCover(item: $viewing) { request in
+            MomentViewer(model: model, images: viewerImages, start: request.id)
+                .presentationBackground(.clear)
+        }
+        #endif
     }
 
     @ViewBuilder private var content: some View {
@@ -90,8 +101,12 @@ public struct FeedView: View {
             }
             LazyVGrid(columns: Self.columns, spacing: 2) {
                 ForEach(model.moments) { moment in
-                    MomentThumbnail(moment: moment, thumbnails: thumbnails)
-                        .onAppear { model.loadOlderIfNeeded(near: moment) }
+                    Button { open(moment) } label: {
+                        MomentThumbnail(moment: moment, thumbnails: thumbnails)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint(Text("Opens it full screen"))
+                    .onAppear { model.loadOlderIfNeeded(near: moment) }
                 }
             }
             if model.isLoadingOlder {
@@ -103,6 +118,12 @@ public struct FeedView: View {
                     .frame(minHeight: Radius.minimumTapTarget)
             }
         }
+    }
+
+    private func open(_ moment: Moment) {
+        #if os(iOS)
+        viewing = ViewerRequest(id: moment.id)
+        #endif
     }
 
     private func newMomentsPill(scrollToTop: @escaping () -> Void) -> some View {
@@ -176,8 +197,8 @@ struct MomentThumbnail: View {
             }
             .clipped()
             .contentShape(Rectangle())
-            // A failed thumbnail retries on tap (the viewer comes later).
-            .onTapGesture { if failed { attempt += 1 } }
+            // Scrolling a failed thumbnail back into view retries it.
+            .onAppear { if failed { attempt += 1 } }
             .accessibilityElement()
             .accessibilityLabel(accessibilityLabel)
             .accessibilityAddTraits(.isImage)
