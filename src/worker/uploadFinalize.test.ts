@@ -109,8 +109,14 @@ describe("checkParts", () => {
     ["a short middle part", [{ partNumber: 2, etag: "x", size: 5 }]],
     ["a wrong last part", [{ partNumber: 3, etag: "x", size: 101 }]],
     ["a part past the end", [{ partNumber: 4, etag: "x", size: 1 }]],
+    ["part zero", [{ partNumber: 0, etag: "x", size: MB8 }]],
+    ["a last part one byte short", [{ partNumber: 3, etag: "x", size: 99 }]],
   ])("rejects %s", (_name, parts) => {
     expect(checkParts(session, parts)).toEqual({ kind: "bad" });
+  });
+  it("counts a repeated part number once", () => {
+    const [first] = fullParts();
+    expect(checkParts(session, [first, first])).toEqual({ kind: "incomplete", uploadedParts: [1] });
   });
   it("handles a one-part file", () => {
     expect(checkParts({ size_bytes: 10, part_size: MB8 }, [{ partNumber: 1, etag: "x", size: 10 }])).toEqual({ kind: "ready" });
@@ -231,6 +237,54 @@ describe("finalizeUpload", () => {
     expect(moments()).toHaveLength(0);
     expect(r2.state.object).toBeNull();
   });
+
+  it("answers not_open, never an error, once the moment was deleted", async () => {
+    const r2 = fakeR2();
+    const session = await openSession(r2);
+    r2.state.parts = fullParts();
+    expect((await finalizeUpload(sqlite.db, r2.backend, session)).kind).toBe("completed");
+    sqlite.raw.prepare("DELETE FROM moments").run();
+    const fresh = await getUploadById(sqlite.db, session.id);
+    expect(fresh).toMatchObject({ status: "completed", moment_id: null });
+    expect(await finalizeUpload(sqlite.db, r2.backend, fresh!)).toEqual({ kind: "not_open" });
+  });
+
+  it("adds no moment to an event purged while it checked, and removes the object", async () => {
+    const r2 = fakeR2();
+    const session = await openSession(r2);
+    r2.state.parts = fullParts();
+    const readStart = r2.backend.readStart;
+    r2.backend.readStart = async (key, length) => {
+      sqlite.raw.prepare("UPDATE events SET archived_at = datetime('now')").run();
+      return readStart(key, length);
+    };
+    expect(await finalizeUpload(sqlite.db, r2.backend, session)).toEqual({ kind: "not_open" });
+    expect(moments()).toHaveLength(0);
+    expect(r2.state.object).toBeNull();
+  });
+
+  it("passes a failed Complete on when no object was assembled", async () => {
+    const r2 = fakeR2();
+    const session = await openSession(r2);
+    r2.state.parts = fullParts();
+    r2.backend.complete = async () => {
+      throw new R2RequestError("completeMultipartUpload", 400, "InvalidPart");
+    };
+    await expect(finalizeUpload(sqlite.db, r2.backend, session)).rejects.toThrow("InvalidPart");
+    expect((await getUploadById(sqlite.db, session.id))?.status).toBe("open");
+  });
+
+  it("keeps the object when a rejection loses to a finalize that completed", async () => {
+    const r2 = fakeR2();
+    const session = await openSession(r2);
+    r2.state.parts = fullParts();
+    expect((await finalizeUpload(sqlite.db, r2.backend, session)).kind).toBe("completed");
+    // A stale caller still holding the open row sees a mismatching head.
+    r2.state.object = { ...r2.state.assembled, size: 1 };
+    r2.state.multipartGone = true;
+    expect((await finalizeUpload(sqlite.db, r2.backend, session)).kind).toBe("completed");
+    expect(r2.state.object).not.toBeNull();
+  });
 });
 
 describe("finalizeReadyUploads", () => {
@@ -256,7 +310,7 @@ describe("finalizeReadyUploads", () => {
     age(5);
     expect(await finalizeReadyUploads(env(), r2.backend)).toMatchObject({ completed: 0 });
     age(31);
-    expect(await finalizeReadyUploads(env(), r2.backend)).toEqual({ completed: 1, waiting: 0, rejected: 0, failed: 0 });
+    expect(await finalizeReadyUploads(env(), r2.backend)).toEqual({ completed: 1, waiting: 0, rejected: 0, closed: 0, failed: 0 });
     expect(moments()).toHaveLength(1);
   });
 
@@ -267,7 +321,7 @@ describe("finalizeReadyUploads", () => {
     expect(await finalizeReadyUploads(env(), r2.backend)).toMatchObject({ waiting: 1 });
     sqlite.raw.prepare("UPDATE events SET purge_after = datetime('now', '-1 minute')").run();
     r2.state.parts = fullParts();
-    expect(await finalizeReadyUploads(env(), r2.backend)).toEqual({ completed: 0, waiting: 0, rejected: 0, failed: 0 });
+    expect(await finalizeReadyUploads(env(), r2.backend)).toEqual({ completed: 0, waiting: 0, rejected: 0, closed: 0, failed: 0 });
   });
 
   it("logs a failing session by id and goes on", async () => {
@@ -286,6 +340,7 @@ describe("finalizeReadyUploads", () => {
       completed: 0,
       waiting: 0,
       rejected: 0,
+      closed: 0,
       failed: 0,
     });
     expect(FINALIZE_SWEEP_BATCH).toBeGreaterThan(0);

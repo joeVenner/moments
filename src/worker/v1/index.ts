@@ -703,7 +703,10 @@ v1.openapi(completeUploadRoute, async (c) => {
   if (!guest) return c.json(GUEST_REQUIRED, 403);
   const session = await getOwnedUpload(c.env.DB, { eventId: event.id, participantId: guest.participant.id, uploadId: c.req.valid("param").id });
   if (!session) return c.json(UPLOAD_NOT_FOUND, 404);
-  if (session.status === "completed" && session.moment_id) return c.json(toUploadSession(session), 200);
+  if (session.status === "completed") {
+    // Without a moment it was deleted since (moderation): finished, not retryable.
+    return session.moment_id ? c.json(toUploadSession(session), 200) : c.json(UPLOAD_NOT_OPEN, 409);
+  }
   if (session.status === "aborted") return c.json(UPLOAD_NOT_OPEN, 409);
   if (!canFinishUploads(event)) return c.json(UPLOADS_CLOSED, 403);
   if (!isR2Configured(c.env)) return c.json(UPLOADS_UNAVAILABLE, 501);

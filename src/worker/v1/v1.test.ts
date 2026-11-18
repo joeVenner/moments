@@ -1049,6 +1049,15 @@ describe("completing an upload", () => {
     expect(s3Calls).toEqual([]);
   });
 
+  it("answers 409, not a server error, once the moment was deleted", async () => {
+    const { token, id } = await openUpload();
+    expect((await complete(token, id)).status).toBe(200);
+    sqlite.raw.prepare("DELETE FROM moments").run();
+    const res = await complete(token, id);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "upload_not_open" });
+  });
+
   it("says which parts are missing", async () => {
     const { token, id } = await openUpload();
     listedParts = `<Part><PartNumber>2</PartNumber><ETag>"e2"</ETag><Size>${PART}</Size></Part>`;

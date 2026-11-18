@@ -60,7 +60,7 @@ export type FinalizeResult =
   | { kind: "incomplete"; uploadedParts: number[] }
   /** The bytes don't match the session; it is aborted and the object removed. */
   | { kind: "rejected"; reason: RejectReason }
-  /** Aborted (by the guest, the sweeper or a rejection). */
+  /** Aborted (by the guest, a sweep or a rejection), or its moment was since deleted. */
   | { kind: "not_open" };
 
 export type PartCheck = { kind: "ready" } | { kind: "incomplete"; uploadedParts: number[] } | { kind: "bad" };
@@ -80,21 +80,24 @@ export function checkParts(session: Pick<UploadSessionRow, "size_bytes" | "part_
   return { kind: "ready" };
 }
 
+/** Aborts first, so bytes are only removed from a session nobody completed. */
 async function reject(
   db: D1Database,
   session: UploadSessionRow,
   reason: RejectReason,
   cleanup: () => Promise<void>
 ): Promise<FinalizeResult> {
+  if (!(await markAborted(db, session.id))) return settled(db, session.id);
   await cleanup();
-  await markAborted(db, session.id);
   return { kind: "rejected", reason };
 }
 
-async function completedSession(db: D1Database, id: string): Promise<FinalizeResult> {
+/** The answer for a session that is no longer open. */
+async function settled(db: D1Database, id: string): Promise<FinalizeResult> {
   const session = await getUploadById(db, id);
-  if (!session?.moment_id) throw new Error("completed upload has no moment");
-  return { kind: "completed", session };
+  // A completed session whose moment was deleted (moderation) is finished too.
+  if (session?.status === "completed" && session.moment_id) return { kind: "completed", session };
+  return { kind: "not_open" };
 }
 
 /** Checks the assembled object, then inserts the moment and closes the session. */
@@ -102,7 +105,7 @@ async function register(db: D1Database, backend: FinalizeBackend, session: Uploa
   const object = await backend.head(session.key);
   if (!object) {
     // No multipart and no object: aborted elsewhere (e.g. R2's lifecycle rule).
-    await markAborted(db, session.id);
+    if (!(await markAborted(db, session.id))) return settled(db, session.id);
     return { kind: "not_open" };
   }
   const removeObject = () => backend.deleteObject(session.key);
@@ -119,32 +122,37 @@ async function register(db: D1Database, backend: FinalizeBackend, session: Uploa
       .prepare(
         `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type)
          SELECT ?, ?, ?, ?, ?, ?, ?, ?
-          WHERE EXISTS (SELECT 1 FROM uploads WHERE id = ? AND status = 'open')`
+          WHERE EXISTS (${OPEN_IN_LIVE_EVENT})`
       )
       .bind(
         crypto.randomUUID(), session.event_id, session.uploader_name, `/media/${session.key}`, session.caption,
         pointsForContentType(session.content_type), object.size, session.content_type, session.id
       ),
     db
-      .prepare("UPDATE uploads SET status = 'completed', completed_at = datetime('now') WHERE id = ? AND status = 'open'")
-      .bind(session.id),
+      .prepare(`UPDATE uploads SET status = 'completed', completed_at = datetime('now') WHERE id = ? AND EXISTS (${OPEN_IN_LIVE_EVENT})`)
+      .bind(session.id, session.id),
   ]);
   const current = await getUploadById(db, session.id);
   if (current?.status === "completed" && current.moment_id) return { kind: "completed", session: current };
-  // Cancelled while we checked: nothing points at the object any more.
+  // Cancelled, or the event purged, while we checked: nothing points at the object.
   await removeObject();
   return { kind: "not_open" };
 }
+
+/**
+ * Guards the moment insert: the session is still open and its event not
+ * archived, so a finalize racing a purge can't leave a moment (with the
+ * guest's name and caption) in a purged event.
+ */
+const OPEN_IN_LIVE_EVENT = `SELECT 1 FROM uploads u JOIN events e ON e.id = u.event_id
+  WHERE u.id = ? AND u.status = 'open' AND e.archived_at IS NULL`;
 
 export async function finalizeUpload(
   db: D1Database,
   backend: FinalizeBackend,
   session: UploadSessionRow
 ): Promise<FinalizeResult> {
-  if (session.status === "completed") return completedSession(db, session.id);
-  if (session.status === "aborted") return { kind: "not_open" };
-  // A replay after the moment insert but before the response.
-  if (session.moment_id) return completedSession(db, session.id);
+  if (session.status !== "open") return settled(db, session.id);
 
   let parts: R2Part[];
   try {
@@ -163,7 +171,8 @@ export async function finalizeUpload(
     await backend.complete(session.key, session.upload_id, parts);
   } catch (err) {
     // The call may have succeeded with its response lost; register checks.
-    if (!(await backend.head(session.key))) throw err;
+    const assembled = await backend.head(session.key).catch(() => null);
+    if (!assembled) throw err;
   }
   return register(db, backend, session);
 }
@@ -177,6 +186,8 @@ export interface FinalizeSweepSummary {
   completed: number;
   waiting: number;
   rejected: number;
+  /** Aborted or cancelled meanwhile. */
+  closed: number;
   failed: number;
 }
 
@@ -191,19 +202,19 @@ export async function finalizeReadyUploads(
   env: Env,
   backend: FinalizeBackend = r2FinalizeBackend(env)
 ): Promise<FinalizeSweepSummary> {
-  const summary: FinalizeSweepSummary = { completed: 0, waiting: 0, rejected: 0, failed: 0 };
+  const summary: FinalizeSweepSummary = { completed: 0, waiting: 0, rejected: 0, closed: 0, failed: 0 };
   if (!isR2Configured(env)) return summary;
   const { results } = await env.DB.prepare(
     `SELECT u.id FROM uploads u JOIN events e ON e.id = u.event_id
       WHERE u.status = 'open' AND u.client_upload_id IS NOT NULL
-        AND u.created_at <= datetime('now', '-${FINALIZE_SWEEP_MIN_AGE_MINUTES} minutes')
+        AND u.created_at <= datetime('now', ?)
         -- Live events only (PURGE_AT_SQL, qualified for the join).
         AND e.archived_at IS NULL
         AND (COALESCE(e.purge_after, e.expires_at) IS NULL OR COALESCE(e.purge_after, e.expires_at) > datetime('now'))
       ORDER BY random()
       LIMIT ?`
   )
-    .bind(FINALIZE_SWEEP_BATCH)
+    .bind(`-${FINALIZE_SWEEP_MIN_AGE_MINUTES} minutes`, FINALIZE_SWEEP_BATCH)
     .all<{ id: string }>();
   for (const { id } of results) {
     try {
@@ -212,7 +223,8 @@ export async function finalizeReadyUploads(
       const result = await finalizeUpload(env.DB, backend, session);
       if (result.kind === "completed") summary.completed += 1;
       else if (result.kind === "incomplete") summary.waiting += 1;
-      else summary.rejected += 1;
+      else if (result.kind === "rejected") summary.rejected += 1;
+      else summary.closed += 1;
     } catch (err) {
       summary.failed += 1;
       console.error(
