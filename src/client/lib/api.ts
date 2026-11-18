@@ -1,7 +1,7 @@
 import type { EventData, MomentData } from "./types";
 import { getAdminAuthHeader } from "./adminAuth";
 import { getReactionId } from "./reactionId";
-import { getGuestToken, setGuestToken } from "./nickname";
+import { getGuestToken, guestTokenHeaders, setGuestToken } from "./nickname";
 import { joinOutcome, type JoinOutcome } from "./joinOutcome";
 
 export class UnauthorizedError extends Error {}
@@ -108,11 +108,10 @@ export function listHighlights(slug: string) {
 }
 
 export function toggleMomentReaction(slug: string, momentId: string) {
-  const token = getGuestToken(slug);
   return fetch(`/api/events/${encodeURIComponent(slug)}/moments/${encodeURIComponent(momentId)}/reactions`, {
     method: "POST",
     // The guest token ties this device's hearts to the guest (see worker reactions.ts).
-    headers: { "Content-Type": "application/json", ...(token ? { "X-Guest-Token": token } : {}) },
+    headers: { "Content-Type": "application/json", ...guestTokenHeaders(slug) },
     body: JSON.stringify({ reactor_id: getReactionId() }),
   }).then((response) => asJson<{ reacted: boolean; reaction_count: number }>(response));
 }
@@ -159,7 +158,7 @@ export function deleteAdminMoment(id: string) {
 }
 
 export function uploadMoment(slug: string, data: FormData) {
-  return fetch(`/api/events/${slug}/moments`, { method: "POST", body: data }).then((r) =>
+  return fetch(`/api/events/${slug}/moments`, { method: "POST", body: data, headers: guestTokenHeaders(slug) }).then((r) =>
     asJson<{ moment: MomentData; points_awarded: number }>(r)
   );
 }

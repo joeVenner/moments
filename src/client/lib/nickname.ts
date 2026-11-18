@@ -28,8 +28,19 @@ export function getGuestToken(slug: string): string | null {
   try {
     return localStorage.getItem(guestTokenKey(slug));
   } catch {
-    return null; // Storage blocked (private mode); the guest just joins tokenless.
+    // Storage blocked (private mode), or none at all (the upload service
+    // worker): the request goes tokenless.
+    return null;
   }
+}
+
+/**
+ * The `X-Guest-Token` header for this event's requests, or none for a guest
+ * without a token (they still work while GUEST_TOKENS_ENFORCED is off).
+ */
+export function guestTokenHeaders(slug: string): Record<string, string> {
+  const token = getGuestToken(slug);
+  return token ? { "X-Guest-Token": token } : {};
 }
 
 export function setGuestToken(slug: string, token: string): void {
