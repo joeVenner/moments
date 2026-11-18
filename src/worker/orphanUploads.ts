@@ -4,7 +4,7 @@
  * reaps them instead of waiting on the bucket's lifecycle rule.
  */
 
-import { UPLOAD_FINISH_GRACE_MINUTES, UPLOADS_CLOSE_AT_SQL } from "./events";
+import { PURGE_AT_SQL, UPLOAD_FINISH_GRACE_MINUTES, UPLOADS_CLOSE_AT_SQL } from "./events";
 import { abortMultipartUpload } from "./multipartPresign";
 import { isR2Configured } from "./presign";
 import type { Env } from "./types";
@@ -47,7 +47,8 @@ export type AbortFn = (env: Env, key: string, uploadId: string) => Promise<void>
 /**
  * Open sessions to reap, in random order: abandoned (older than
  * ORPHAN_UPLOAD_AGE_HOURS) or still open past the event's upload close plus
- * the finish grace. Purged events' sessions are aborted by cleanupEvent.
+ * the finish grace. Purged events' sessions are aborted by cleanupEvent;
+ * any it could not abort stay open and are picked up here.
  */
 export async function findOrphanUploads(db: D1Database, limit: number): Promise<OpenUploadSession[]> {
   const { results } = await db
@@ -113,6 +114,11 @@ export async function abortUploadSessions(
 export async function abortOrphanUploads(env: Env, abort: AbortFn = abortMultipartUpload): Promise<AbortSummary> {
   if (!isR2Configured(env)) return { aborted: 0, failed: 0 };
   const summary = await abortUploadSessions(env, await findOrphanUploads(env.DB, ORPHAN_ABORT_BATCH), abort);
+  // Rows a purge kept only so they could be aborted are done with now.
+  await env.DB.prepare(
+    `DELETE FROM uploads WHERE status = 'aborted'
+        AND event_id IN (SELECT id FROM events WHERE archived_at IS NOT NULL AND ${PURGE_AT_SQL} <= datetime('now'))`
+  ).run();
   console.log(JSON.stringify({ scope: "upload", event: "orphan_uploads_reaped", ...summary }));
   return summary;
 }
