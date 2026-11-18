@@ -7,23 +7,28 @@ import MomentsDomain
 /// creates exactly one, at launch, and keeps it (a background session
 /// identifier can't be used twice in one process).
 ///
-/// Each part is copied from the checked staged-file handle into
-/// `<staging>/.parts/<ITEM>-<part>` and handed to the system with
-/// `uploadTask(with:fromFile:)`; the file is deleted when its task ends.
-/// Tasks are labelled `<ITEM>:<part>` only. After a relaunch, `recover()`
-/// adopts the tasks still running, so a part the queue asks for again is
-/// waited on rather than sent twice; whatever finished meanwhile is kept
-/// for the next `upload` call. The server stays the source of truth: a
-/// result lost with the process only costs a resend.
+/// Each attempt at a part copies its bytes from the checked staged-file
+/// handle into its own file, `<staging>/.parts/<PartTaskKey.fileName>`,
+/// hands it to the system with `uploadTask(with:fromFile:)`, and deletes it
+/// when the task ends. Tasks are labelled with their `PartTaskKey` only.
+/// After a relaunch, `recover()` adopts the tasks still running, so a part
+/// the queue asks for again is waited on rather than sent twice; whatever
+/// finished meanwhile is kept for the next `upload` call of the same
+/// session. The server stays the source of truth: a result lost with the
+/// process only costs a resend.
 ///
 /// The same storage rules as the foreground uploader apply
 /// (`StorageTarget`). Background sessions follow redirects without asking
-/// the delegate, so a part whose final URL differs from the one signed is
-/// treated as failed.
+/// the delegate, so a part whose final URL isn't exactly the signed one is
+/// treated as failed — detection, not prevention: the bytes have gone by
+/// then. The signed, account-pinned URL is what keeps them on our storage.
 public final class BackgroundPartUploader: PartUploader, Sendable {
     /// Part files that may exist at once per upload call; each is up to a
     /// part size (8 MiB), so a large video doesn't stage a second copy.
     public static let defaultMaxPartFiles = 4
+    /// How long the system keeps trying one part. Part URLs are signed for
+    /// at least this long; past it the URL would be refused anyway.
+    public static let resourceTimeout: TimeInterval = 24 * 60 * 60
 
     private let service: any UploadService
     private let staging: StagingArea
@@ -41,6 +46,7 @@ public final class BackgroundPartUploader: PartUploader, Sendable {
         let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
         configuration.sessionSendsLaunchEvents = true
         configuration.isDiscretionary = false
+        configuration.timeoutIntervalForResource = Self.resourceTimeout
         self.init(service: service, staging: staging, hosts: hosts, configuration: configuration)
     }
 
@@ -59,9 +65,11 @@ public final class BackgroundPartUploader: PartUploader, Sendable {
         configuration.httpShouldSetCookies = false
         let tasks = PartTasks()
         self.tasks = tasks
-        // The delegate holds the task book and the staging area, never the
-        // uploader.
-        session = URLSession(configuration: configuration, delegate: SessionEvents(tasks: tasks, staging: staging), delegateQueue: nil)
+        // The delegate holds the task book, the staging area and the host
+        // policy, never the uploader.
+        session = URLSession(
+            configuration: configuration, delegate: SessionEvents(tasks: tasks, staging: staging, hosts: hosts), delegateQueue: nil
+        )
     }
 
     /// Call from the app delegate's `handleEventsForBackgroundURLSession`:
@@ -72,13 +80,16 @@ public final class BackgroundPartUploader: PartUploader, Sendable {
     }
 
     /// Adopts the tasks still running from an earlier launch and deletes
-    /// every part file none of them is sending. Tasks this app didn't label
-    /// are cancelled.
+    /// every part file none of them is sending. Tasks this app didn't label,
+    /// or whose URL no longer passes the host policy, are cancelled.
     public func recover() async throws {
         var live: Set<String> = []
         for task in await session.allTasks {
-            guard let key = PartTaskKey(label: task.taskDescription), task.state == .running || task.state == .suspended else {
-                if task.state != .completed { task.cancel() }
+            guard task.state == .running || task.state == .suspended else { continue }
+            guard let key = PartTaskKey(label: task.taskDescription), let url = task.originalRequest?.url,
+                  let host = StorageTarget.storageHost(of: url), hosts.allows(host)
+            else {
+                task.cancel()
                 continue
             }
             tasks.adopt(key)
@@ -94,45 +105,51 @@ public final class BackgroundPartUploader: PartUploader, Sendable {
     ) async throws -> Set<Int> {
         let parts = Array(Set(parts)).sorted()
         guard !parts.isEmpty else { return [] }
+        let sessionTag = PartTaskKey.sessionTag(ref.id)
         var sent: Set<Int> = []
-        var jobs: [Job] = []
+        var waits: [PartTaskKey] = []
         var toSend: [Int] = []
         for part in parts {
-            switch tasks.take(PartTaskKey(item: item.id, part: part)) {
+            switch tasks.take(PartSlot(item: item.id, part: part), session: sessionTag) {
             case .finished(.success): sent.insert(part)
-            case .running: jobs.append(.wait(part))
+            case let .running(key): waits.append(key)
             case .finished(.failure), nil: toSend.append(part)
             }
         }
+        var sends: [(key: PartTaskKey, url: URL)] = []
         if !toSend.isEmpty {
             do {
                 let batch = try await service.partURLs(slug: item.eventSlug, uploadID: ref.id, parts: toSend, credentials: credentials)
-                jobs += try StorageTarget.checked(batch, parts: toSend, hosts: hosts, pins: pins, sessionID: ref.id)
-                    .map { Job.send($0.part, $0.url) }
+                sends = try StorageTarget.checked(batch, parts: toSend, hosts: hosts, pins: pins, sessionID: ref.id)
+                    .map { (PartTaskKey(item: item.id, part: $0.part, session: sessionTag), $0.url) }
             } catch {
                 // Parts still running keep going; their results wait for
                 // the next call.
-                if sent.isEmpty || !StorageTarget.isRetryable(error) { throw error }
+                if sent.isEmpty || error is CancellationError || !StorageTarget.isRetryable(error) { throw error }
                 return sent
             }
         }
         var failures: [any Error] = []
-        await withTaskGroup(of: (part: Int, error: (any Error)?).self) { group in
-            var pending = jobs.makeIterator()
-            for _ in 0 ..< maxPartFiles {
-                guard let job = pending.next() else { break }
-                group.addTask { await self.run(job, ref: ref, item: item, file: file) }
+        await withTaskGroup(of: Finished.self) { group in
+            // Waiting creates no file, so only sends count against the window.
+            for key in waits {
+                group.addTask { await self.wait(for: key, isSend: false) }
             }
-            while let result = await group.next() {
-                if let error = result.error {
+            var pending = sends.makeIterator()
+            for _ in 0 ..< maxPartFiles {
+                guard let next = pending.next() else { break }
+                group.addTask { await self.send(next.key, to: next.url, ref: ref, item: item, file: file) }
+            }
+            while let finished = await group.next() {
+                if let error = finished.error {
                     failures.append(error)
                 } else {
-                    sent.insert(result.part)
+                    sent.insert(finished.part)
                 }
                 // After a failure, the parts in flight finish but no more
                 // start.
-                if failures.isEmpty, let job = pending.next() {
-                    group.addTask { await self.run(job, ref: ref, item: item, file: file) }
+                if finished.isSend, failures.isEmpty, let next = pending.next() {
+                    group.addTask { await self.send(next.key, to: next.url, ref: ref, item: item, file: file) }
                 }
             }
         }
@@ -145,39 +162,36 @@ public final class BackgroundPartUploader: PartUploader, Sendable {
 
     // MARK: Sending
 
-    private enum Job: Sendable {
-        /// A task from earlier is already sending it.
-        case wait(Int)
-        case send(Int, URL)
-    }
-
-    private func run(_ job: Job, ref: QueuedUpload.SessionRef, item: QueuedUpload, file: FileHandle) async -> (part: Int, error: (any Error)?) {
+    private struct Finished: Sendable {
         let part: Int
-        switch job {
-        case let .wait(number): part = number
-        case let .send(number, url):
-            part = number
-            do {
-                try Task.checkCancellation()
-                try start(part: number, of: ref, item: item, file: file, to: url)
-            } catch {
-                return (part, error)
-            }
-        }
+        let isSend: Bool
+        let error: (any Error)?
+    }
+
+    private func send(_ key: PartTaskKey, to url: URL, ref: QueuedUpload.SessionRef, item: QueuedUpload, file: FileHandle) async -> Finished {
         do {
-            // Cancelling stops the wait, not the upload: the task finishes
-            // in the background and its result waits for the next call.
-            try await tasks.wait(for: PartTaskKey(item: item.id, part: part))
-            return (part, nil)
+            try Task.checkCancellation()
+            try start(key, to: url, ref: ref, item: item, file: file)
         } catch {
-            return (part, error)
+            return Finished(part: key.part, isSend: true, error: error)
+        }
+        return await wait(for: key, isSend: true)
+    }
+
+    /// Cancelling stops the wait, not the upload: the task finishes in the
+    /// background and its result waits for the next call.
+    private func wait(for key: PartTaskKey, isSend: Bool) async -> Finished {
+        do {
+            try await tasks.wait(for: key)
+            return Finished(part: key.part, isSend: isSend, error: nil)
+        } catch {
+            return Finished(part: key.part, isSend: isSend, error: error)
         }
     }
 
-    /// Writes the part file and starts its task.
-    private func start(part number: Int, of ref: QueuedUpload.SessionRef, item: QueuedUpload, file: FileHandle, to url: URL) throws {
-        let key = PartTaskKey(item: item.id, part: number)
-        guard let range = UploadPlan.byteRange(part: number, size: item.file.size, partSize: ref.partSize) else {
+    /// Writes the attempt's part file and starts its task.
+    private func start(_ key: PartTaskKey, to url: URL, ref: QueuedUpload.SessionRef, item: QueuedUpload, file: FileHandle) throws {
+        guard let range = UploadPlan.byteRange(part: key.part, size: item.file.size, partSize: ref.partSize) else {
             throw MomentsAPIError.invalidUpload
         }
         let partURL: URL
@@ -192,8 +206,7 @@ public final class BackgroundPartUploader: PartUploader, Sendable {
         request.cachePolicy = .reloadIgnoringLocalCacheData
         let task = session.uploadTask(with: request, fromFile: partURL)
         task.taskDescription = key.label
-        // Marked running before it can finish, so its result is never
-        // taken for an unknown task's.
+        // Recorded before it can finish, so its result always finds it.
         tasks.start(key)
         task.resume()
     }
@@ -201,9 +214,6 @@ public final class BackgroundPartUploader: PartUploader, Sendable {
     private func writePart(from file: FileHandle, range: Range<Int64>, to url: URL) throws(MomentsAPIError) {
         writeLock.lock()
         defer { writeLock.unlock() }
-        // A copy left by an earlier attempt; no task is sending it (the
-        // task book said so), and the file is created exclusively.
-        unlink(url.path(percentEncoded: false))
         do throws(PartFile.Problem) {
             try PartFile.write(from: file, range: range, to: url)
         } catch .shortRead {
@@ -214,13 +224,14 @@ public final class BackgroundPartUploader: PartUploader, Sendable {
     }
 
     /// A finished task's result as the queue understands it.
-    static func outcome(original: URL?, final: URL?, response: URLResponse?, error: (any Error)?) -> Result<Void, MomentsAPIError> {
+    static func outcome(
+        original: URL?, final: URL?, response: URLResponse?, error: (any Error)?, hosts: StorageHostPolicy
+    ) -> Result<Void, MomentsAPIError> {
         if let error {
             return .failure(.transport((error as? URLError)?.code))
         }
-        // Followed a redirect: the bytes may have gone somewhere unsigned.
-        guard let original, let final, original.host()?.lowercased() == final.host()?.lowercased(),
-              original.path(percentEncoded: true) == final.path(percentEncoded: true)
+        // Any redirect (another host, path, query, scheme or port) fails it.
+        guard let original, let final, original == final, let host = StorageTarget.storageHost(of: final), hosts.allows(host)
         else { return .failure(.unexpectedResponse) }
         do throws(MomentsAPIError) {
             try StorageTarget.check(response)
@@ -234,24 +245,26 @@ public final class BackgroundPartUploader: PartUploader, Sendable {
     var sessionDelegate: (any URLSessionDelegate)? { session.delegate }
 }
 
-/// The session's delegate: deletes each part file when its task ends and
-/// hands the result to the task book.
+/// The session's delegate: deletes each attempt's part file when its task
+/// ends and hands the result to the task book.
 final class SessionEvents: NSObject, URLSessionTaskDelegate, Sendable {
     private let tasks: PartTasks
     private let staging: StagingArea
+    private let hosts: StorageHostPolicy
 
-    init(tasks: PartTasks, staging: StagingArea) {
+    init(tasks: PartTasks, staging: StagingArea, hosts: StorageHostPolicy) {
         self.tasks = tasks
         self.staging = staging
+        self.hosts = hosts
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
         guard let key = PartTaskKey(label: task.taskDescription) else { return }
-        // Deleted before the result is recorded, so a resend never finds
-        // this task's file in its way.
+        // The file is this attempt's alone.
         unlink(staging.partFileURL(named: key.fileName).path(percentEncoded: false))
         tasks.finish(key, BackgroundPartUploader.outcome(
-            original: task.originalRequest?.url, final: task.currentRequest?.url, response: task.response, error: error
+            original: task.originalRequest?.url, final: task.currentRequest?.url, response: task.response, error: error,
+            hosts: hosts
         ))
     }
 
@@ -269,105 +282,126 @@ final class SessionEvents: NSObject, URLSessionTaskDelegate, Sendable {
     }
 }
 
-/// What is known about each part's task: running (with whoever waits for
-/// it) or finished with a result no one has collected yet.
+/// What is known about each part: the attempt running (with whoever waits
+/// for it), or the latest attempt's result no one has collected yet.
+/// Reports from any other attempt are ignored.
 final class PartTasks: @unchecked Sendable {
     enum State {
-        case running
+        case running(PartTaskKey)
         case finished(Result<Void, MomentsAPIError>)
     }
 
-    /// Uncollected results beyond this are dropped (a resend recovers them).
+    /// Uncollected results beyond this are all dropped (resends recover
+    /// them).
     static let maxFinished = 1024
 
     private enum Entry {
-        case running([UUID: CheckedContinuation<Void, any Error>])
-        case finished(Result<Void, MomentsAPIError>)
+        case running(PartTaskKey, [UUID: CheckedContinuation<Void, any Error>])
+        case finished(PartTaskKey, Result<Void, MomentsAPIError>)
     }
 
     private let lock = NSLock()
-    private var entries: [PartTaskKey: Entry] = [:]
+    private var entries: [PartSlot: Entry] = [:]
     private var finishedCount = 0
     private var backgroundCompletion: (@MainActor @Sendable () -> Void)?
 
-    /// The part's state; a finished result is handed over once.
-    func take(_ key: PartTaskKey) -> State? {
+    /// The part's state within this upload session. A finished result is
+    /// handed over once; anything from another session counts as nothing
+    /// (a result is dropped, a running attempt is left to end on its own).
+    func take(_ slot: PartSlot, session: String) -> State? {
         lock.withLock {
-            switch entries[key] {
-            case .running: return .running
-            case let .finished(result):
-                entries[key] = nil
+            switch entries[slot] {
+            case let .running(key, _):
+                return key.session == session ? .running(key) : nil
+            case let .finished(key, result):
+                entries[slot] = nil
                 finishedCount -= 1
-                return .finished(result)
+                return key.session == session ? .finished(result) : nil
             case nil: return nil
             }
         }
     }
 
-    /// A task for the part was just created.
+    /// A new attempt for the part was just created. Anyone still waiting on
+    /// an attempt it replaces is told to try again.
     func start(_ key: PartTaskKey) {
         lock.withLock {
-            if case .finished = entries[key] { finishedCount -= 1 }
-            entries[key] = .running([:])
+            switch entries[key.slot] {
+            case let .running(_, waiters):
+                for waiter in waiters.values { waiter.resume(throwing: MomentsAPIError.storageUnavailable) }
+            case .finished: finishedCount -= 1
+            case nil: break
+            }
+            entries[key.slot] = .running(key, [:])
         }
     }
 
-    /// A task from an earlier launch is still sending the part (unless its
-    /// result already arrived).
+    /// An attempt from an earlier launch is still sending the part (unless
+    /// something newer is already known).
     func adopt(_ key: PartTaskKey) {
         lock.withLock {
-            if entries[key] == nil { entries[key] = .running([:]) }
+            if entries[key.slot] == nil { entries[key.slot] = .running(key, [:]) }
         }
     }
 
-    /// Waits for the part's running task. A result that already arrived
-    /// is returned at once; cancelling stops only the wait.
+    /// Waits for this attempt. A result that already arrived is returned
+    /// at once; cancelling stops only the wait.
     func wait(for key: PartTaskKey) async throws {
         let id = UUID()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
                 lock.withLock {
-                    switch entries[key] {
-                    case let .finished(result):
-                        entries[key] = nil
+                    switch entries[key.slot] {
+                    case let .finished(found, result) where found == key:
+                        entries[key.slot] = nil
                         finishedCount -= 1
                         continuation.resume(with: result.mapError { $0 as any Error })
-                    case var .running(waiters):
+                    case .running(key, var waiters):
                         if Task.isCancelled {
                             continuation.resume(throwing: CancellationError())
                         } else {
                             waiters[id] = continuation
-                            entries[key] = .running(waiters)
+                            entries[key.slot] = .running(key, waiters)
                         }
-                    case nil:
-                        continuation.resume(throwing: MomentsAPIError.transport(nil))
+                    default:
+                        // Replaced by another attempt, or unknown.
+                        continuation.resume(throwing: MomentsAPIError.storageUnavailable)
                     }
                 }
             }
         } onCancel: {
             lock.withLock {
-                guard case var .running(waiters) = entries[key], let waiter = waiters.removeValue(forKey: id) else { return }
-                entries[key] = .running(waiters)
+                guard case .running(key, var waiters) = entries[key.slot], let waiter = waiters.removeValue(forKey: id) else { return }
+                entries[key.slot] = .running(key, waiters)
                 waiter.resume(throwing: CancellationError())
             }
         }
     }
 
-    /// The part's task ended: wakes its waiters, or keeps the result for
-    /// the next upload call when no one waits.
+    /// An attempt's task ended: wakes its waiters, or keeps the result for
+    /// the next upload call. Ignored if another attempt is running.
     func finish(_ key: PartTaskKey, _ result: Result<Void, MomentsAPIError>) {
         lock.withLock {
-            if case let .running(waiters) = entries[key], !waiters.isEmpty {
-                entries[key] = nil
-                for waiter in waiters.values { waiter.resume(with: result.mapError { $0 as any Error }) }
-                return
+            switch entries[key.slot] {
+            case let .running(running, waiters):
+                guard running == key else { return }
+                if !waiters.isEmpty {
+                    entries[key.slot] = nil
+                    for waiter in waiters.values { waiter.resume(with: result.mapError { $0 as any Error }) }
+                    return
+                }
+            case let .finished(found, _):
+                // Only a repeat of the same attempt replaces it; anything
+                // else is older.
+                guard found == key else { return }
+                finishedCount -= 1
+            case nil: break
             }
-            if case .finished = entries[key] { finishedCount -= 1 }
             if finishedCount >= Self.maxFinished {
                 entries = entries.filter { if case .finished = $0.value { false } else { true } }
                 finishedCount = 0
             }
-            entries[key] = .finished(result)
+            entries[key.slot] = .finished(key, result)
             finishedCount += 1
         }
     }

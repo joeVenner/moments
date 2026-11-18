@@ -51,12 +51,15 @@ private struct BackgroundSetup: @unchecked Sendable {
     }
 }
 
-/// Polls until `condition` holds (at most ~2 s).
-private func eventually(_ condition: () -> Bool) async throws {
+/// Polls until `condition` holds; fails the test after ~2 s.
+private func eventually(_ condition: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async throws {
     for _ in 0 ..< 200 where !condition() {
         try await Task.sleep(for: .milliseconds(10))
     }
+    try #require(condition(), sourceLocation: sourceLocation)
 }
+
+private let tagU1 = PartTaskKey.sessionTag("u1")
 
 private func partNumber(_ url: URL) -> Int { StorageTarget.partNumber(in: url) ?? 0 }
 
@@ -115,12 +118,14 @@ extension URLSessionPartUploaderTests {
         let uploader = setup.uploader()
         let gate = DispatchSemaphore(value: 0)
         StorageStub.onStart = { _ in gate.wait() }
+        defer { gate.signal() }
         let waiting = Task { try await setup.upload([1], with: uploader) }
         try await eventually { !StorageStub.sent.isEmpty }
         waiting.cancel()
         await #expect(throws: CancellationError.self) { try await waiting.value }
         gate.signal()
         try await eventually { setup.partFiles.isEmpty }
+        try await Task.sleep(for: .milliseconds(20))
         // Asked again: the finished result is used, nothing is sent twice.
         #expect(try await setup.upload([1], with: uploader) == [1])
         #expect(StorageStub.sent.count == 1)
@@ -130,7 +135,7 @@ extension URLSessionPartUploaderTests {
     @Test func backgroundRecoverDeletesPartFilesNoTaskIsSending() async throws {
         let setup = try BackgroundSetup()
         let folder = try setup.staging.partsFolder()
-        try Data("photo".utf8).write(to: folder.appending(path: PartTaskKey(item: setup.item.id, part: 1).fileName))
+        try Data("photo".utf8).write(to: folder.appending(path: PartTaskKey(item: setup.item.id, part: 1, session: tagU1).fileName))
         try await setup.uploader().recover()
         #expect(setup.partFiles.isEmpty)
     }
@@ -149,11 +154,16 @@ extension URLSessionPartUploaderTests {
     }
 
     @Test func partTaskKeysRoundTripAndRejectJunk() {
-        let key = PartTaskKey(item: UUID(), part: 12)
+        let key = PartTaskKey(item: UUID(), part: 12, session: tagU1)
         #expect(PartTaskKey(label: key.label) == key && PartTaskKey(fileName: key.fileName) == key)
         #expect(PartTaskKey(label: key.fileName) == nil && PartTaskKey(fileName: key.label) == nil)
-        let id = key.item.uuidString
-        for junk in ["", "x:1", "\(id):0", "\(id):-1", "\(id):1x", "\(id.lowercased()):1", "\(id):01", " \(id):1"] {
+        #expect(tagU1.count == 16 && tagU1 == PartTaskKey.sessionTag("u1") && tagU1 != PartTaskKey.sessionTag("u2"))
+        let (id, attempt) = (key.item.uuidString, key.attempt.uuidString)
+        for junk in [
+            "", "x:1:\(tagU1):\(attempt)", "\(id):0:\(tagU1):\(attempt)", "\(id):-1:\(tagU1):\(attempt)",
+            "\(id.lowercased()):1:\(tagU1):\(attempt)", "\(id):01:\(tagU1):\(attempt)", "\(id):1:\(tagU1.uppercased()):\(attempt)",
+            "\(id):1:abc:\(attempt)", "\(id):1:\(tagU1)", "\(id):1:\(tagU1):\(attempt):x", "../\(id):1:\(tagU1):\(attempt)",
+        ] {
             #expect(PartTaskKey(label: junk) == nil)
         }
         #expect(PartTaskKey(label: nil) == nil)
@@ -162,58 +172,106 @@ extension URLSessionPartUploaderTests {
     @Test func outcomeTreatsARedirectAsAFailure() {
         let signed = URL(string: "https://\(account).r2.cloudflarestorage.com/b/k?partNumber=1")!
         let ok = HTTPURLResponse(url: signed, statusCode: 200, httpVersion: nil, headerFields: ["ETag": "\"e\""])
-        #expect((try? BackgroundPartUploader.outcome(original: signed, final: signed, response: ok, error: nil).get()) != nil)
+        let policy = StorageHostPolicy.r2Account(account)!
+        #expect((try? BackgroundPartUploader.outcome(original: signed, final: signed, response: ok, error: nil, hosts: policy).get()) != nil)
+        // Same host and path, another query: still a redirect.
+        let requery = URL(string: "https://\(account).r2.cloudflarestorage.com/b/k?partNumber=2")!
+        #expect(failure(BackgroundPartUploader.outcome(original: signed, final: requery, response: ok, error: nil, hosts: policy)) == .unexpectedResponse)
+        // Not our storage at all, even unredirected (an adopted task).
+        let foreign = URL(string: "https://ffffffffffffffffffffffffffffffff.r2.cloudflarestorage.com/b/k?partNumber=1")!
+        #expect(failure(BackgroundPartUploader.outcome(original: foreign, final: foreign, response: ok, error: nil, hosts: policy)) == .unexpectedResponse)
         let moved = URL(string: "https://elsewhere.example.com/b/k")!
-        #expect(failure(BackgroundPartUploader.outcome(original: signed, final: moved, response: ok, error: nil)) == .unexpectedResponse)
-        #expect(failure(BackgroundPartUploader.outcome(original: signed, final: nil, response: ok, error: nil)) == .unexpectedResponse)
+        #expect(failure(BackgroundPartUploader.outcome(original: signed, final: moved, response: ok, error: nil, hosts: policy)) == .unexpectedResponse)
+        #expect(failure(BackgroundPartUploader.outcome(original: signed, final: nil, response: ok, error: nil, hosts: policy)) == .unexpectedResponse)
         #expect(
-            failure(BackgroundPartUploader.outcome(original: signed, final: signed, response: nil, error: URLError(.timedOut)))
+            failure(BackgroundPartUploader.outcome(original: signed, final: signed, response: nil, error: URLError(.timedOut), hosts: policy))
                 == .transport(.timedOut)
         )
         let gone = HTTPURLResponse(url: signed, statusCode: 404, httpVersion: nil, headerFields: nil)
-        #expect(failure(BackgroundPartUploader.outcome(original: signed, final: signed, response: gone, error: nil)) == .uploadNotOpen)
+        #expect(failure(BackgroundPartUploader.outcome(original: signed, final: signed, response: gone, error: nil, hosts: policy)) == .uploadNotOpen)
     }
 
     @Test func taskBookKeepsResultsNoOneWaitedFor() async throws {
         let tasks = PartTasks()
-        let key = PartTaskKey(item: UUID(), part: 1)
-        #expect(tasks.take(key) == nil)
+        let key = PartTaskKey(item: UUID(), part: 1, session: tagU1)
+        #expect(tasks.take(key.slot, session: tagU1) == nil)
         tasks.start(key)
         tasks.finish(key, .success(()))
         // A late adopt doesn't hide the result.
-        tasks.adopt(key)
-        guard case .finished(.success) = tasks.take(key) else { Issue.record("result lost"); return }
-        #expect(tasks.take(key) == nil)
+        tasks.adopt(PartTaskKey(item: key.item, part: 1, session: tagU1))
+        guard case .finished(.success) = tasks.take(key.slot, session: tagU1) else { Issue.record("result lost"); return }
+        #expect(tasks.take(key.slot, session: tagU1) == nil)
         // A waiter gets a result that arrives later.
         tasks.start(key)
         let waited = Task { try await tasks.wait(for: key) }
         try await Task.sleep(for: .milliseconds(20))
         tasks.finish(key, .failure(.storageUnavailable))
         await #expect(throws: MomentsAPIError.storageUnavailable) { try await waited.value }
-        #expect(tasks.take(key) == nil)
+        #expect(tasks.take(key.slot, session: tagU1) == nil)
     }
 
-    @Test func taskBookDropsTheOldestResultsWhenFull() {
+    @Test func taskBookIgnoresLateReportsFromOlderAttempts() async throws {
+        let tasks = PartTasks()
+        let old = PartTaskKey(item: UUID(), part: 1, session: tagU1)
+        let new = PartTaskKey(item: old.item, part: 1, session: tagU1)
+        tasks.adopt(old)
+        // The queue resends before the old attempt reports.
+        tasks.start(new)
+        tasks.finish(old, .failure(.transport(.cancelled)))
+        guard case let .running(running) = tasks.take(new.slot, session: tagU1), running == new else {
+            Issue.record("old report replaced the new attempt"); return
+        }
+        tasks.finish(new, .success(()))
+        tasks.finish(old, .failure(.storageUnavailable))
+        guard case .finished(.success) = tasks.take(new.slot, session: tagU1) else { Issue.record("new result lost"); return }
+    }
+
+    @Test func taskBookNeverCountsAnotherSessionsParts() {
+        let tasks = PartTasks()
+        let old = PartTaskKey(item: UUID(), part: 1, session: PartTaskKey.sessionTag("old"))
+        tasks.start(old)
+        #expect(tasks.take(old.slot, session: tagU1) == nil)
+        tasks.finish(old, .success(()))
+        #expect(tasks.take(old.slot, session: tagU1) == nil)
+        // And the stale result is gone, not waiting for its session.
+        #expect(tasks.take(old.slot, session: old.session) == nil)
+    }
+
+    @Test func taskBookTellsReplacedWaitersToRetry() async throws {
+        let tasks = PartTasks()
+        let old = PartTaskKey(item: UUID(), part: 1, session: tagU1)
+        tasks.start(old)
+        let waited = Task { try await tasks.wait(for: old) }
+        try await Task.sleep(for: .milliseconds(20))
+        tasks.start(PartTaskKey(item: old.item, part: 1, session: tagU1))
+        await #expect(throws: MomentsAPIError.storageUnavailable) { try await waited.value }
+    }
+
+    @Test func taskBookDropsResultsWhenFull() {
         let tasks = PartTasks()
         let item = UUID()
         for part in 1 ... PartTasks.maxFinished + 1 {
-            tasks.finish(PartTaskKey(item: item, part: part), .success(()))
+            tasks.finish(PartTaskKey(item: item, part: part, session: tagU1), .success(()))
         }
-        #expect(tasks.take(PartTaskKey(item: item, part: 1)) == nil)
-        #expect(tasks.take(PartTaskKey(item: item, part: PartTasks.maxFinished + 1)) != nil)
+        #expect(tasks.take(PartSlot(item: item, part: 1), session: tagU1) == nil)
+        #expect(tasks.take(PartSlot(item: item, part: PartTasks.maxFinished + 1), session: tagU1) != nil)
     }
 
     @Test func backgroundEventsCompletionRunsOnceOnMain() async throws {
         let setup = try BackgroundSetup()
         let uploader = setup.uploader()
         let calls = Counter()
-        uploader.handleBackgroundEvents { calls.raise(to: calls.value + 1) }
+        let onMain = Counter()
+        uploader.handleBackgroundEvents {
+            if Thread.isMainThread { onMain.raise(to: 1) }
+            calls.raise(to: calls.value + 1)
+        }
         let events = try #require(uploader.sessionDelegate as? SessionEvents)
         events.urlSessionDidFinishEvents(forBackgroundURLSession: URLSession.shared)
         events.urlSessionDidFinishEvents(forBackgroundURLSession: URLSession.shared)
         try await eventually { calls.value == 1 }
         try await Task.sleep(for: .milliseconds(20))
-        #expect(calls.value == 1)
+        #expect(calls.value == 1 && onMain.value == 1)
     }
 }
 

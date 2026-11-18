@@ -110,7 +110,7 @@ public final class URLSessionPartUploader: PartUploader, Sendable {
 /// asked first.
 private final class TaskLabel: NSObject, URLSessionTaskDelegate, Sendable {
     let label: String
-    init(item: UUID, part: Int) { label = PartTaskKey(item: item, part: part).label }
+    init(item: UUID, part: Int) { label = "\(item.uuidString):\(part)" }
 
     func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
         task.taskDescription = label
