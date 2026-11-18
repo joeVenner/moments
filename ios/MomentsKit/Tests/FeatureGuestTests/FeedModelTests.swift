@@ -407,6 +407,27 @@ private final class Clock: @unchecked Sendable {
         #expect(model.reactionFailureCount == 0)
     }
 
+    @Test func reportsSettledHeartsAndTakesOnesFromElsewhere() async {
+        let (model, service) = await loadedModel()
+        var settled: [(String, ReactionState)] = []
+        model.onReactionSettled = { settled.append(($0, $1)) }
+        service.reactionResults = [.success(ReactionState(reacted: true, reactionCount: 5))]
+        await model.toggleReaction(onMomentID: "m1")?.value
+        #expect(settled.map(\.0) == ["m1"])
+        #expect(settled.first?.1 == ReactionState(reacted: true, reactionCount: 5))
+        model.applyServerReaction(momentID: "m1", state: ReactionState(reacted: false, reactionCount: 4))
+        #expect(model.moments.first?.hasReacted == false)
+        #expect(model.moments.first?.reactionCount == 4)
+    }
+
+    @Test func otherScreensCanEndTheFeed() async {
+        let (model, _) = await loadedModel()
+        #expect(model.endIfFatal(MomentsAPIError.rateLimited) == false)
+        #expect(model.phase == .loaded)
+        #expect(model.endIfFatal(MomentsAPIError.accessRequired))
+        #expect(model.phase == .accessLost)
+    }
+
     @Test func ignoresUnknownMomentsAndUnloadedFeeds() async {
         let (model, service) = makeModel()
         #expect(model.toggleReaction(onMomentID: "m1") == nil)
