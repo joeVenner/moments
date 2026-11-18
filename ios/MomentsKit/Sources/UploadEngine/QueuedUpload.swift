@@ -106,6 +106,8 @@ public struct QueuedUpload: Codable, Sendable, Hashable, Identifiable {
         /// The server no longer knows this upload. It may have finished and
         /// been removed by the host, so it is never started over.
         case sessionLost
+        /// The staged file is gone or changed; there is nothing to send.
+        case fileLost
     }
 
     /// Why the bytes were refused, as a closed set (a server string is
@@ -215,6 +217,8 @@ public extension QueuedUpload {
         case completeAnswered(CompleteOutcome)
         /// A request made under `clientUploadID` failed.
         case requestFailed(MomentsAPIError, clientUploadID: UUID)
+        /// The staged file can no longer be read as recorded.
+        case fileLost(clientUploadID: UUID)
     }
 
     func nextAction(now: Date) -> Action {
@@ -258,6 +262,10 @@ public extension QueuedUpload {
         case let .requestFailed(error, requestClientID):
             guard requestClientID == clientUploadID else { return }
             fail(error, now: now)
+        case let .fileLost(requestClientID):
+            guard requestClientID == clientUploadID else { return }
+            phase = .failed(.fileLost)
+            retryAt = nil
         }
     }
 
@@ -275,7 +283,7 @@ public extension QueuedUpload {
     mutating func retryByGuest() {
         guard case let .failed(failure) = phase else { return }
         switch failure {
-        case .uploadsClosed, .eventGone, .refused, .rejected, .sessionLost:
+        case .uploadsClosed, .eventGone, .refused, .rejected, .sessionLost, .fileLost:
             return
         case .accessLost, .appTooOld, .unavailable, .gaveUp:
             attempts = 0

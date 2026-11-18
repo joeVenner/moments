@@ -207,67 +207,118 @@ private func item(_ name: String = "a.jpg", at seconds: TimeInterval = 0) -> Que
 }
 
 @Suite struct StagingAreaTests {
-    private func staged(_ path: String, size: Int64 = 4) -> QueuedUpload.StagedFile {
-        .init(relativePath: path, size: size, contentType: "image/jpeg")!
+    private let owner = UUID()
+
+    private func staged(_ name: String, size: Int64 = 4, owner: UUID? = nil) -> QueuedUpload.StagedFile {
+        .init(relativePath: StagingArea.relativePath(for: owner ?? self.owner, name: name), size: size, contentType: "image/jpeg")!
     }
 
-    @Test func resolvesAFileInsideTheFolder() throws {
+    /// A staging area with the owner's folder created.
+    private func area(_ folder: TempFolder) throws -> StagingArea {
+        let area = StagingArea(root: folder.url.appending(path: "staging"))
+        try FileManager.default.createDirectory(at: area.folder(for: owner), withIntermediateDirectories: true)
+        return area
+    }
+
+    private func write(_ area: StagingArea, _ name: String, owner: UUID? = nil) throws -> URL {
+        let url = area.folder(for: owner ?? self.owner).appending(path: name)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("abcd".utf8).write(to: url)
+        return url
+    }
+
+    @Test func opensAndRemovesAFileInItsOwnersFolder() throws {
         let folder = try TempFolder()
-        let root = folder.url.appending(path: "staging")
-        try FileManager.default.createDirectory(at: root.appending(path: "ev"), withIntermediateDirectories: true)
-        try Data("abcd".utf8).write(to: root.appending(path: "ev/a.jpg"))
-        let handle = try StagingArea(root: root).open(staged("ev/a.jpg"))
-        #expect(try handle.readToEnd() == Data("abcd".utf8))
+        let area = try area(folder)
+        let url = try write(area, "sub/a.jpg")
+        #expect(try area.open(staged("sub/a.jpg"), owner: owner).readToEnd() == Data("abcd".utf8))
+        try area.remove(staged("sub/a.jpg"), owner: owner)
+        #expect(!FileManager.default.fileExists(atPath: url.path()))
+        try area.remove(staged("sub/a.jpg"), owner: owner) // already gone: fine
+    }
+
+    @Test func refusesAnotherItemsFile() throws {
+        let folder = try TempFolder()
+        let area = try area(folder)
+        let other = UUID()
+        let url = try write(area, "a.jpg", owner: other)
+        #expect(throws: StagingArea.Problem.outsideStaging) { try area.open(staged("a.jpg", owner: other), owner: owner) }
+        #expect(throws: StagingArea.Problem.outsideStaging) { try area.remove(staged("a.jpg", owner: other), owner: owner) }
+        #expect(FileManager.default.fileExists(atPath: url.path()))
     }
 
     @Test func refusesMissingChangedAndNonFiles() throws {
         let folder = try TempFolder()
-        let area = StagingArea(root: folder.url)
-        try Data("abcd".utf8).write(to: folder.url.appending(path: "a.jpg"))
-        try FileManager.default.createDirectory(at: folder.url.appending(path: "dir"), withIntermediateDirectories: true)
-        #expect(throws: StagingArea.Problem.missing) { try area.open(staged("b.jpg")) }
-        #expect(throws: StagingArea.Problem.sizeChanged) { try area.open(staged("a.jpg", size: 5)) }
-        #expect(throws: StagingArea.Problem.notAFile) { try area.open(staged("dir")) }
+        let area = try area(folder)
+        _ = try write(area, "a.jpg")
+        try FileManager.default.createDirectory(at: area.folder(for: owner).appending(path: "dir"), withIntermediateDirectories: true)
+        #expect(throws: StagingArea.Problem.missing) { try area.open(staged("b.jpg"), owner: owner) }
+        #expect(throws: StagingArea.Problem.sizeChanged) { try area.open(staged("a.jpg", size: 5), owner: owner) }
+        #expect(throws: StagingArea.Problem.notAFile) { try area.open(staged("dir"), owner: owner) }
     }
 
     @Test func refusesHardLinksFifosAndUnreadableFiles() throws {
         let folder = try TempFolder()
-        let area = StagingArea(root: folder.url)
-        let file = folder.url.appending(path: "a.jpg")
-        try Data("abcd".utf8).write(to: file)
-        try FileManager.default.linkItem(at: file, to: folder.url.appending(path: "b.jpg"))
-        #expect(throws: StagingArea.Problem.notAFile) { try area.open(staged("b.jpg")) }
+        let area = try area(folder)
+        let file = try write(area, "a.jpg")
+        try FileManager.default.linkItem(at: file, to: area.folder(for: owner).appending(path: "b.jpg"))
+        #expect(throws: StagingArea.Problem.notAFile) { try area.open(staged("b.jpg"), owner: owner) }
 
-        #expect(mkfifo(folder.url.appending(path: "f.jpg").path(), 0o600) == 0)
-        #expect(throws: StagingArea.Problem.notAFile) { try area.open(staged("f.jpg")) }
+        #expect(mkfifo(area.folder(for: owner).appending(path: "f.jpg").path(), 0o600) == 0)
+        #expect(throws: StagingArea.Problem.notAFile) { try area.open(staged("f.jpg"), owner: owner) }
 
-        let locked = folder.url.appending(path: "c.jpg")
-        try Data("abcd".utf8).write(to: locked)
+        let locked = try write(area, "c.jpg")
         try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: locked.path())
-        #expect(throws: StagingArea.Problem.unreadable) { try area.open(staged("c.jpg")) }
+        #expect(throws: StagingArea.Problem.unreadable) { try area.open(staged("c.jpg"), owner: owner) }
+    }
+
+    @Test func refusesLinksEvenInsideTheFolder() throws {
+        let folder = try TempFolder()
+        let area = try area(folder)
+        let other = UUID()
+        let target = try write(area, "a.jpg", owner: other)
+        // A file link to another item's file, and a folder link to another
+        // item's folder.
+        try FileManager.default.createSymbolicLink(at: area.folder(for: owner).appending(path: "a.jpg"), withDestinationURL: target)
+        try FileManager.default.createSymbolicLink(
+            at: area.folder(for: owner).appending(path: "up"), withDestinationURL: area.folder(for: other)
+        )
+        #expect(throws: StagingArea.Problem.notAFile) { try area.open(staged("a.jpg"), owner: owner) }
+        #expect(throws: StagingArea.Problem.outsideStaging) { try area.open(staged("up/a.jpg"), owner: owner) }
+        #expect(throws: StagingArea.Problem.outsideStaging) { try area.remove(staged("up/a.jpg"), owner: owner) }
+        // Removing the link deletes the link, not the other item's file.
+        try area.remove(staged("a.jpg"), owner: owner)
+        #expect(FileManager.default.fileExists(atPath: target.path()))
+    }
+
+    @Test func refusesAnOwnerFolderThatIsALink() throws {
+        let folder = try TempFolder()
+        let area = StagingArea(root: folder.url.appending(path: "staging"))
+        let other = UUID()
+        _ = try write(area, "a.jpg", owner: other)
+        try FileManager.default.createSymbolicLink(at: area.folder(for: owner), withDestinationURL: area.folder(for: other))
+        #expect(throws: StagingArea.Problem.outsideStaging) { try area.open(staged("a.jpg"), owner: owner) }
+    }
+
+    @Test func handlesOddPathsAndAMissingOwnerFolder() throws {
+        let folder = try TempFolder()
+        let area = StagingArea(root: folder.url.appending(path: "staging/"))
+        let other = UUID()
+        let escape = QueuedUpload.StagedFile(relativePath: "\(owner.uuidString)/../\(other.uuidString)/a.jpg", size: 4, contentType: "image/jpeg")
+        // Refused when decoded or created, so it never reaches the area.
+        #expect(escape == nil)
+        #expect(throws: StagingArea.Problem.missing) { try area.open(staged("a.jpg"), owner: owner) }
+        try area.remove(staged("a.jpg"), owner: owner)
     }
 
     @Test func refusesSymlinksThatLeaveTheFolder() throws {
         let folder = try TempFolder()
-        let root = folder.url.appending(path: "staging")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let area = try area(folder)
         let secret = folder.url.appending(path: "secret.jpg")
         try Data("abcd".utf8).write(to: secret)
-        try FileManager.default.createSymbolicLink(at: root.appending(path: "a.jpg"), withDestinationURL: secret)
-        try FileManager.default.createSymbolicLink(at: root.appending(path: "up"), withDestinationURL: folder.url)
-        let area = StagingArea(root: root)
-        #expect(throws: StagingArea.Problem.outsideStaging) { try area.open(staged("a.jpg")) }
-        #expect(throws: StagingArea.Problem.outsideStaging) { try area.open(staged("up/secret.jpg")) }
-    }
-
-    @Test func refusesAPrefixLookalikeFolder() throws {
-        let folder = try TempFolder()
-        let root = folder.url.appending(path: "staging")
-        let sibling = folder.url.appending(path: "staging-other")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: sibling, withIntermediateDirectories: true)
-        try Data("abcd".utf8).write(to: sibling.appending(path: "a.jpg"))
-        try FileManager.default.createSymbolicLink(at: root.appending(path: "s"), withDestinationURL: sibling)
-        #expect(throws: StagingArea.Problem.outsideStaging) { try StagingArea(root: root).open(staged("s/a.jpg")) }
+        try FileManager.default.createSymbolicLink(at: area.folder(for: owner).appending(path: "out"), withDestinationURL: folder.url)
+        #expect(throws: StagingArea.Problem.outsideStaging) { try area.open(staged("out/secret.jpg"), owner: owner) }
+        #expect(throws: StagingArea.Problem.outsideStaging) { try area.remove(staged("out/secret.jpg"), owner: owner) }
+        #expect(FileManager.default.fileExists(atPath: secret.path()))
     }
 }
