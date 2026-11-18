@@ -597,26 +597,29 @@ export default function EventPage() {
       {!nickname && (
         <NicknameGate
           event={event}
-          onSubmit={(name, avatarSeed) => {
+          onSubmit={async (name, avatarSeed) => {
+            // Join first: a rate limit or a taken nickname keeps the form open
+            // (the guest has no token yet). Other failures still let them in.
+            const outcome = await joinEvent(slug!, name, avatarSeed);
+            if (outcome === "rate_limited" || outcome === "nickname_taken") return outcome;
             saveNickname(slug!, name);
             setNicknameState(name);
-            // Join, then bump the strip so the new guest (and their avatar)
-            // show up immediately without a page refresh. Also refetch page 1
-            // with the now-known nickname so `your_points` (any moments this
-            // guest uploaded on another device/session under the same name)
-            // populates the sticky points bar right away — otherwise a returning
-            // guest who cleared localStorage would see 0 until a page nav/reload.
-            joinEvent(slug!, name, avatarSeed).finally(() => {
-              setParticipantVersion((v) => v + 1);
-              listMoments(slug!, { limit: PAGE_SIZE, offset: 0, uploaderName: name })
-                .then((res) => {
-                  setMoments(res.moments);
-                  setTotal(res.total ?? 0);
-                  setMyPoints(res.your_points ?? 0);
-                  setPage(1);
-                })
-                .catch(() => {});
-            });
+            // Bump the strip so the new guest (and their avatar) show up
+            // immediately without a page refresh. Also refetch page 1 with the
+            // now-known nickname so `your_points` (any moments this guest
+            // uploaded on another device/session under the same name) populates
+            // the sticky points bar right away — otherwise a returning guest who
+            // cleared localStorage would see 0 until a page nav/reload.
+            setParticipantVersion((v) => v + 1);
+            listMoments(slug!, { limit: PAGE_SIZE, offset: 0, uploaderName: name })
+              .then((res) => {
+                setMoments(res.moments);
+                setTotal(res.total ?? 0);
+                setMyPoints(res.your_points ?? 0);
+                setPage(1);
+              })
+              .catch(() => {});
+            return null;
           }}
         />
       )}

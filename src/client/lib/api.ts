@@ -2,6 +2,7 @@ import type { EventData, MomentData } from "./types";
 import { getAdminAuthHeader } from "./adminAuth";
 import { getReactionId } from "./reactionId";
 import { getGuestToken, setGuestToken } from "./nickname";
+import { joinOutcome, type JoinOutcome } from "./joinOutcome";
 
 export class UnauthorizedError extends Error {}
 export class AccessRequiredError extends Error {}
@@ -188,18 +189,19 @@ export const DIRECT_UPLOAD_MAX_BYTES = 512 * 1024 * 1024;
 // parts, resume from R2 ListParts). The old `directUploadMoment` / `putToR2`
 // helpers and the worker `/presign` + `/register` routes were removed with it.
 
-export function joinEvent(slug: string, nickname: string, avatarSeed: string): Promise<void> {
+/** Joins the roster and keeps the guest token. Never throws; see `JoinOutcome`. */
+export function joinEvent(slug: string, nickname: string, avatarSeed: string): Promise<JoinOutcome> {
   const data = new URLSearchParams({ nickname, avatar_seed: avatarSeed });
   const token = getGuestToken(slug);
   const headers: Record<string, string> = token ? { "X-Guest-Token": token } : {};
   return fetch(`/api/events/${slug}/participants`, { method: "POST", body: data, headers })
-    .then(async (res) => {
-      if (!res.ok) return;
-      const body = (await res.json()) as { guest_token?: unknown };
-      if (typeof body.guest_token === "string") setGuestToken(slug, body.guest_token);
+    .then(async (res): Promise<JoinOutcome> => {
+      const parsed: unknown = await res.json().catch(() => null);
+      const body = (typeof parsed === "object" && parsed !== null ? parsed : {}) as { guest_token?: unknown; code?: unknown };
+      const outcome = joinOutcome(res.status, body.code);
+      if (outcome === "joined" && typeof body.guest_token === "string") setGuestToken(slug, body.guest_token);
+      return outcome;
     })
-    .catch(() => {
-      // Joining the participant roster is a nice-to-have for the leaderboard/avatar
-      // strip — never block the guest from reaching the feed if this fails.
-    });
+    // A network failure must not keep the guest out of the feed.
+    .catch((): JoinOutcome => "unavailable");
 }
