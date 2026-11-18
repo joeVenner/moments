@@ -19,6 +19,7 @@
     "openapi:update": "UPDATE_OPENAPI=1 vitest run src/worker/v1/openapi.test.ts",
     "verify:roadmap": "node scripts/verify-roadmap.mjs",
     "verify:seo": "node scripts/verify-seo.mjs",
+    "ios:strings:check": "node scripts/check-ios-strings.mjs",
     "seo:indexnow": "node scripts/submit-indexnow.mjs"
   },
   "dependencies": {
