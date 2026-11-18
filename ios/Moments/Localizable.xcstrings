@@ -1,0 +1,1603 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%lld in progress": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld in progress"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld in progress"
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld en cours"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld en cours"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld need attention": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld needs attention"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld need attention"
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld demande votre attention"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld demandent votre attention"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld of %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld sur %lld"
+          }
+        }
+      }
+    },
+    "Access changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accès modifié"
+          }
+        }
+      }
+    },
+    "Add a caption (optional)": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter une légende (facultatif)"
+          }
+        }
+      }
+    },
+    "Add more": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En ajouter d'autres"
+          }
+        }
+      }
+    },
+    "Added": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouté"
+          }
+        }
+      }
+    },
+    "Can't reach Moments": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de joindre Moments"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annuler"
+          }
+        }
+      }
+    },
+    "Caption": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Légende"
+          }
+        }
+      }
+    },
+    "Captions can be up to %lld characters.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les légendes peuvent compter jusqu'à %lld caractères."
+          }
+        }
+      }
+    },
+    "Captions can't contain tabs or other special characters.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les légendes ne peuvent pas contenir de tabulations ni d'autres caractères spéciaux."
+          }
+        }
+      }
+    },
+    "Check the link or QR code with the host.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérifiez le lien ou le QR code auprès de l'hôte."
+          }
+        }
+      }
+    },
+    "Check your connection and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérifiez votre connexion et réessayez."
+          }
+        }
+      }
+    },
+    "Choose photos and videos": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisir des photos et vidéos"
+          }
+        }
+      }
+    },
+    "Clear finished": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer les envois terminés"
+          }
+        }
+      }
+    },
+    "Close": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermer"
+          }
+        }
+      }
+    },
+    "Couldn't add these to your uploads. Try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de les ajouter à vos envois. Réessayez."
+          }
+        }
+      }
+    },
+    "Couldn't leave the event": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de quitter l'événement"
+          }
+        }
+      }
+    },
+    "Couldn't load more. Try again": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d'en charger plus. Réessayer"
+          }
+        }
+      }
+    },
+    "Couldn't load this moment.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de charger ce souvenir."
+          }
+        }
+      }
+    },
+    "Couldn't prepare this. Keep the app open while it prepares.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Préparation impossible. Gardez l'app ouverte pendant la préparation."
+          }
+        }
+      }
+    },
+    "Couldn't refresh. Check your connection.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualisation impossible. Vérifiez votre connexion."
+          }
+        }
+      }
+    },
+    "Couldn't remove that from this device. Try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de le retirer de cet appareil. Réessayez."
+          }
+        }
+      }
+    },
+    "Couldn't save your name on this device.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d'enregistrer votre nom sur cet appareil."
+          }
+        }
+      }
+    },
+    "Couldn't upload. Check your connection.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoi impossible. Vérifiez votre connexion."
+          }
+        }
+      }
+    },
+    "Couldn't use this device's storage": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d'utiliser le stockage de cet appareil"
+          }
+        }
+      }
+    },
+    "Done": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminé"
+          }
+        }
+      }
+    },
+    "Enter a name between 1 and 60 characters.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisissez un nom de 1 à 60 caractères."
+          }
+        }
+      }
+    },
+    "Enter the event PIN or open the private invitation link from the host.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisissez le code de l'événement ou ouvrez le lien d'invitation privé de l'hôte."
+          }
+        }
+      }
+    },
+    "Enter your name to join": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisissez votre nom pour rejoindre"
+          }
+        }
+      }
+    },
+    "Event PIN": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code de l'événement"
+          }
+        }
+      }
+    },
+    "Event not found": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Événement introuvable"
+          }
+        }
+      }
+    },
+    "Event options": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Options de l'événement"
+          }
+        }
+      }
+    },
+    "Finishing": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finalisation"
+          }
+        }
+      }
+    },
+    "Heart": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aimer"
+          }
+        }
+      }
+    },
+    "Heart your favourite moments and they'll show up here.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aimez vos souvenirs préférés et ils apparaîtront ici."
+          }
+        }
+      }
+    },
+    "Highlights": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favoris"
+          }
+        }
+      }
+    },
+    "Item %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Élément %lld"
+          }
+        }
+      }
+    },
+    "Its moments are no longer available.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ses souvenirs ne sont plus disponibles."
+          }
+        }
+      }
+    },
+    "Join again": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rejoindre à nouveau"
+          }
+        }
+      }
+    },
+    "Join the Feed": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rejoindre le fil"
+          }
+        }
+      }
+    },
+    "Leaderboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Classement"
+          }
+        }
+      }
+    },
+    "Leave and delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitter et supprimer"
+          }
+        }
+      }
+    },
+    "Leave event…": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitter l'événement…"
+          }
+        }
+      }
+    },
+    "Leave this event?": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitter cet événement ?"
+          }
+        }
+      }
+    },
+    "Leaving…": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Départ…"
+          }
+        }
+      }
+    },
+    "Loading highlights": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement des favoris"
+          }
+        }
+      }
+    },
+    "Loading moments": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement des souvenirs"
+          }
+        }
+      }
+    },
+    "Loading the event": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement de l'événement"
+          }
+        }
+      }
+    },
+    "Loading the leaderboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement du classement"
+          }
+        }
+      }
+    },
+    "Moment %lld of %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Souvenir %lld sur %lld"
+          }
+        }
+      }
+    },
+    "Moments": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moments"
+          }
+        }
+      }
+    },
+    "Moments couldn't finish leaving the event. Try again to continue where it stopped.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moments n'a pas pu terminer votre départ. Réessayez pour reprendre là où il s'est arrêté."
+          }
+        }
+      }
+    },
+    "No guests yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun invité pour l'instant"
+          }
+        }
+      }
+    },
+    "No highlights yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun favori pour l'instant"
+          }
+        }
+      }
+    },
+    "No moments yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun souvenir pour l'instant"
+          }
+        }
+      }
+    },
+    "Nothing is uploading.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun envoi en cours."
+          }
+        }
+      }
+    },
+    "Off, ^[%lld heart](inflect: true)": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivé, ^[%lld cœur](inflect: true)"
+          }
+        }
+      }
+    },
+    "On, ^[%lld heart](inflect: true)": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activé, ^[%lld cœur](inflect: true)"
+          }
+        }
+      }
+    },
+    "Open the event link again, then try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rouvrez le lien de l'événement, puis réessayez."
+          }
+        }
+      }
+    },
+    "Opens it full screen": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'ouvre en plein écran"
+          }
+        }
+      }
+    },
+    "Photo": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo"
+          }
+        }
+      }
+    },
+    "Photo %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo %lld"
+          }
+        }
+      }
+    },
+    "Photo by %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo de %@"
+          }
+        }
+      }
+    },
+    "Photo by %@: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo de %@ : %@"
+          }
+        }
+      }
+    },
+    "Photos and videos shared by guests will appear here.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les photos et vidéos partagées par les invités apparaîtront ici."
+          }
+        }
+      }
+    },
+    "Play video": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lire la vidéo"
+          }
+        }
+      }
+    },
+    "Please try again later.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réessayez plus tard."
+          }
+        }
+      }
+    },
+    "Preparing…": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Préparation…"
+          }
+        }
+      }
+    },
+    "Private event": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Événement privé"
+          }
+        }
+      }
+    },
+    "Private events are unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les événements privés sont indisponibles"
+          }
+        }
+      }
+    },
+    "Rank %lld, %@, ^[%lld point](inflect: true)": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rang %lld, %@, ^[%lld point](inflect: true)"
+          }
+        }
+      }
+    },
+    "Rank %lld, you, ^[%lld point](inflect: true)": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rang %lld, vous, ^[%lld point](inflect: true)"
+          }
+        }
+      }
+    },
+    "Ready": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prêt"
+          }
+        }
+      }
+    },
+    "Ready, %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prêt, %@"
+          }
+        }
+      }
+    },
+    "Remove": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer"
+          }
+        }
+      }
+    },
+    "Remove heart": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ne plus aimer"
+          }
+        }
+      }
+    },
+    "Scan an event QR code to join.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scannez le QR code d'un événement pour le rejoindre."
+          }
+        }
+      }
+    },
+    "Share": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partager"
+          }
+        }
+      }
+    },
+    "Share ^[%lld moment](inflect: true)": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partager ^[%lld souvenir](inflect: true)"
+          }
+        }
+      }
+    },
+    "Share moments": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partager des souvenirs"
+          }
+        }
+      }
+    },
+    "Share moments to earn points and climb the board.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partagez des souvenirs pour gagner des points et grimper au classement."
+          }
+        }
+      }
+    },
+    "Share photos and videos": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partager photos et vidéos"
+          }
+        }
+      }
+    },
+    "Shared": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partagé"
+          }
+        }
+      }
+    },
+    "Sharing": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partage en cours"
+          }
+        }
+      }
+    },
+    "Shows them at the top of the feed": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les affiche en haut du fil"
+          }
+        }
+      }
+    },
+    "Still preparing.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Préparation en cours."
+          }
+        }
+      }
+    },
+    "Stopped.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêté."
+          }
+        }
+      }
+    },
+    "That PIN or invitation is not valid.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce code ou cette invitation n'est pas valide."
+          }
+        }
+      }
+    },
+    "The event stopped taking uploads.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'événement n'accepte plus d'envois."
+          }
+        }
+      }
+    },
+    "The file is no longer on this device.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le fichier n'est plus sur cet appareil."
+          }
+        }
+      }
+    },
+    "The host changed this event's access. Join again to keep watching.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'hôte a modifié l'accès à cet événement. Rejoignez-le à nouveau pour continuer."
+          }
+        }
+      }
+    },
+    "The moments guests love most": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les souvenirs préférés des invités"
+          }
+        }
+      }
+    },
+    "The photos and videos you shared from this app are deleted and your nickname is freed. Anything shared from the website stays. This can't be undone.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les photos et vidéos partagées depuis cette app sont supprimées et votre pseudo est libéré. Ce qui a été partagé depuis le site reste. Action irréversible."
+          }
+        }
+      }
+    },
+    "The slideshow is coming soon.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le diaporama arrive bientôt."
+          }
+        }
+      }
+    },
+    "The upload didn't arrive intact.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'envoi n'est pas arrivé intact."
+          }
+        }
+      }
+    },
+    "This event has ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet événement est terminé"
+          }
+        }
+      }
+    },
+    "This event no longer exists.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet événement n'existe plus."
+          }
+        }
+      }
+    },
+    "This file can't be shared.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce fichier ne peut pas être partagé."
+          }
+        }
+      }
+    },
+    "This invitation link is no longer valid. Enter the event PIN instead.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce lien d'invitation n'est plus valide. Saisissez plutôt le code de l'événement."
+          }
+        }
+      }
+    },
+    "This nickname is already taken in this event.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce pseudo est déjà pris dans cet événement."
+          }
+        }
+      }
+    },
+    "This photo is too large.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette photo est trop volumineuse."
+          }
+        }
+      }
+    },
+    "This upload was lost on the server.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet envoi a été perdu sur le serveur."
+          }
+        }
+      }
+    },
+    "This video can't play right now.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette vidéo ne peut pas être lue pour le moment."
+          }
+        }
+      }
+    },
+    "This video isn't ready yet.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette vidéo n'est pas encore prête."
+          }
+        }
+      }
+    },
+    "Too long or too large (up to 10 minutes).": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop longue ou trop volumineuse (10 minutes maximum)."
+          }
+        }
+      }
+    },
+    "Too many attempts. Try again in %lld min.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop de tentatives. Réessayez dans %lld min."
+          }
+        }
+      }
+    },
+    "Too many moments are waiting to upload. Try again once some have finished.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop de souvenirs attendent d'être envoyés. Réessayez quand certains seront terminés."
+          }
+        }
+      }
+    },
+    "Too many people are joining from this network. Try again in a minute.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop de personnes rejoignent depuis ce réseau. Réessayez dans une minute."
+          }
+        }
+      }
+    },
+    "Too many requests right now. Try again in a minute.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop de demandes en ce moment. Réessayez dans une minute."
+          }
+        }
+      }
+    },
+    "Try again": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réessayer"
+          }
+        }
+      }
+    },
+    "Unlock": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déverrouiller"
+          }
+        }
+      }
+    },
+    "Unlock your phone and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déverrouillez votre téléphone et réessayez."
+          }
+        }
+      }
+    },
+    "Update Moments from the App Store to join this event.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettez Moments à jour depuis l'App Store pour rejoindre cet événement."
+          }
+        }
+      }
+    },
+    "Update Moments to leave this event.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettez Moments à jour pour quitter cet événement."
+          }
+        }
+      }
+    },
+    "Update Moments, then try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettez Moments à jour, puis réessayez."
+          }
+        }
+      }
+    },
+    "Update required": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mise à jour requise"
+          }
+        }
+      }
+    },
+    "Uploading %lld%%": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoi %lld %%"
+          }
+        }
+      }
+    },
+    "Uploads are unavailable right now.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les envois sont indisponibles pour le moment."
+          }
+        }
+      }
+    },
+    "Video": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vidéo"
+          }
+        }
+      }
+    },
+    "Video %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vidéo %lld"
+          }
+        }
+      }
+    },
+    "Video by %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vidéo de %@"
+          }
+        }
+      }
+    },
+    "Video by %@: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vidéo de %@ : %@"
+          }
+        }
+      }
+    },
+    "Videos are shared with their sound.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les vidéos sont partagées avec leur son."
+          }
+        }
+      }
+    },
+    "Waiting": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En attente"
+          }
+        }
+      }
+    },
+    "Welcome, %@!": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bienvenue, %@ !"
+          }
+        }
+      }
+    },
+    "You": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous"
+          }
+        }
+      }
+    },
+    "Your access to this event has expired. Enter the event PIN again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre accès à cet événement a expiré. Saisissez à nouveau le code."
+          }
+        }
+      }
+    },
+    "Your name": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre nom"
+          }
+        }
+      }
+    },
+    "Your phone is out of storage.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre téléphone n'a plus d'espace."
+          }
+        }
+      }
+    },
+    "Your uploads": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos envois"
+          }
+        }
+      }
+    },
+    "Your uploads are deleted, but this device couldn't forget your name. Try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos envois sont supprimés, mais cet appareil n'a pas pu oublier votre nom. Réessayez."
+          }
+        }
+      }
+    },
+    "Zoom in": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoomer"
+          }
+        }
+      }
+    },
+    "Zoom out": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dézoomer"
+          }
+        }
+      }
+    },
+    "^[%lld heart](inflect: true)": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "^[%lld cœur](inflect: true)"
+          }
+        }
+      }
+    },
+    "^[%lld heart](inflect: true), including yours": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "^[%lld cœur](inflect: true), dont le vôtre"
+          }
+        }
+      }
+    },
+    "^[%lld new moment](inflect: true)": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "^[%lld nouveau souvenir](inflect: true)"
+          }
+        }
+      }
+    },
+    "^[%lld point](inflect: true)": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "^[%lld point](inflect: true)"
+          }
+        }
+      }
+    },
+    "^[%lld pt](inflect: true)": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "^[%lld pt](inflect: true)"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
