@@ -3,6 +3,7 @@ import { MAX_PIN_LENGTH } from "../eventAccess";
 import { MAX_NICKNAME_LENGTH } from "../guestIdentity";
 import { REACTOR_ID_PATTERN } from "../reactions";
 import { CLIENT_UPLOAD_ID_PATTERN, MAX_CAPTION_LENGTH } from "../uploadSessions";
+import { CAPTION_FORBIDDEN } from "../captionText";
 
 /**
  * Schemas for the native app API. The OpenAPI document generated from these
@@ -247,8 +248,8 @@ export const StartUploadRequestSchema = z
       .string()
       .trim()
       .max(MAX_CAPTION_LENGTH)
-      // Plain text: no control characters other than line breaks (LF, CR).
-      .refine((value) => !/[\u0000-\u0009\u000B\u000C\u000E-\u001F\u007F]/.test(value), "caption has control characters")
+      // Plain text: no controls but line breaks, no bidi overrides (captionText.ts).
+      .refine((value) => !CAPTION_FORBIDDEN.test(value), "caption has control or text-direction characters")
       .optional(),
     filename: z.string().max(255).optional().openapi({ description: "Original name; only sanitized letters survive in the key" }),
   })

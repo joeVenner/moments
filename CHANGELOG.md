@@ -59,6 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Captions can no longer hide text-direction override characters, which could make a caption read differently than it is (for example a file name that seems to end in .txt). The app refuses them and says so; the website silently removes them. Emoji and Arabic, Persian or Hebrew text are unaffected.
 - A purge no longer forgets upload sessions it failed to abort in R2: their rows stay (without guest data) until the daily sweeper aborts them.- Event slugs no longer end in a dash (or contain `--` with a suffix) when a long title is cut at a separator.
 - Abandoned multipart uploads are now cancelled in R2, so their parts stop costing storage. A daily job sweeps sessions still open after 7 days, or 30 minutes after an event's uploads close (up to 40 per run). Deleting an event (the daily purge or "archive now") now cancels its unfinished uploads before removing their records, which used to leave billed parts behind.
 
