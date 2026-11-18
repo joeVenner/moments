@@ -82,11 +82,18 @@ struct ReactionLedger: Sendable, Equatable {
     }
 
     /// The server's state learned elsewhere (another list's settled answer).
-    /// Applies only when nothing is pending here, so local intent wins.
+    /// Ignored while a request is in flight here (local intent wins). Over a
+    /// confirmed toggle it is newer than what we hold, so it replaces it and
+    /// restarts the "outlive one sync" clock (a sync read before it landed
+    /// must not revert it).
     mutating func applyServerState(_ id: String, reacted: Bool, reactionCount: Int, in moments: inout [Moment]) {
-        guard pending[id] == nil, let index = moments.firstIndex(where: { $0.id == id }) else { return }
+        guard pending[id]?.isConfirmed != false, let index = moments.firstIndex(where: { $0.id == id }) else { return }
         moments[index].hasReacted = reacted
         moments[index].reactionCount = reactionCount
+        if pending[id] != nil {
+            pending[id]?.server = Snapshot(hasReacted: reacted, reactionCount: reactionCount)
+            confirmedAtLastSync.remove(id)
+        }
     }
 
     // MARK: - Syncs

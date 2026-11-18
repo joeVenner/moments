@@ -407,4 +407,17 @@ private func loaded(_ page: [Moment], nextBefore: Int? = nil, cursor: Int = 10) 
         #expect(feed.moments.first { $0.id == "b" }?.reactionCount == 2)
         feed.applyServerReaction(forMomentID: "missing", reacted: true, reactionCount: 1)
     }
+
+    @Test func newerStateFromElsewhereReplacesAConfirmedToggleAndSurvivesAStaleSync() {
+        var feed = loaded([moment("a", seq: 1, reactions: 3)], cursor: 10)
+        feed.setReacted(true, forMomentID: "a")
+        feed.confirmReaction(forMomentID: "a", reacted: true, reactionCount: 4)
+        // Un-hearted from highlights.
+        feed.applyServerReaction(forMomentID: "a", reacted: false, reactionCount: 3)
+        #expect(feed.moments.first?.hasReacted == false)
+        // A sync read before that landed still shows the heart.
+        feed.applyChanges(upserts: [moment("a", seq: 1, changeSeq: 11, reactions: 4, hasReacted: true)], removed: [], cursor: 11, hasMore: false)
+        #expect(feed.moments.first?.hasReacted == false)
+        #expect(feed.moments.first?.reactionCount == 3)
+    }
 }
