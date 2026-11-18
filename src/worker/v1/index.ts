@@ -344,7 +344,7 @@ const completeUploadRoute = createRoute({
   tags: ["Uploads"],
   summary: "Finish a session on the server once its parts are uploaded (idempotent)",
   description:
-    "Call after the last part (from the background, one call is enough). The server checks every part's size, assembles the file, checks its type and creates the moment. A daily sweep finishes sessions nobody nudged. Safe to retry: a completed session returns 200 again.",
+    "Call after the last part (from the background, one call is enough). The server checks every part's size, assembles the file, checks its type and creates the moment. An hourly sweep finishes sessions nobody nudged. Safe to retry: a completed session returns 200 again.",
   request: { params: UploadParamSchema, headers: UploadHeadersSchema },
   responses: {
     200: json(UploadSessionSchema, "Completed; moment_id is the new moment"),

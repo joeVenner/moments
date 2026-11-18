@@ -41,7 +41,7 @@ export async function cleanupEvent(env: Env, event: Pick<EventRow, "id">, abort?
     env.DB.prepare("DELETE FROM participants WHERE event_id = ?").bind(event.id),
     // Sessions still open here failed to abort (or were past the per-purge
     // cap). Their part URLs work until R2 aborts them, so keep the rows,
-    // stripped of guest data, for the daily sweeper to finish the job.
+    // stripped of guest data, for the hourly sweeper to finish the job.
     env.DB.prepare("DELETE FROM uploads WHERE event_id = ? AND status <> 'open'").bind(event.id),
     env.DB.prepare(
       "UPDATE uploads SET uploader_name = '', caption = NULL, participant_id = NULL WHERE event_id = ?"
@@ -51,13 +51,21 @@ export async function cleanupEvent(env: Env, event: Pick<EventRow, "id">, abort?
   ]);
 }
 
+/**
+ * Events purged per hourly run, so the R2 work stays inside the run's
+ * subrequest budget and leaves room for the upload stages after it. Random,
+ * so an event that keeps failing can't block the rest.
+ */
+export const PURGE_EVENTS_PER_RUN = 5;
+
 export async function cleanupExpiredEvents(env: Env): Promise<number> {
   const { results } = await env.DB.prepare(
-    `SELECT * FROM events WHERE archived_at IS NULL AND ${PURGE_AT_SQL} IS NOT NULL AND ${PURGE_AT_SQL} <= datetime('now')`
-  ).all<EventRow>();
+    `SELECT * FROM events WHERE archived_at IS NULL AND ${PURGE_AT_SQL} IS NOT NULL AND ${PURGE_AT_SQL} <= datetime('now')
+      ORDER BY random() LIMIT ?`
+  ).bind(PURGE_EVENTS_PER_RUN).all<EventRow>();
   let purged = 0;
   for (const event of results) {
-    // One failing event must not stop the others; it is retried tomorrow.
+    // One failing event must not stop the others; it is retried next run.
     try {
       await cleanupEvent(env, event);
       purged += 1;

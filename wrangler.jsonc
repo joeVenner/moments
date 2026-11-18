@@ -10,7 +10,9 @@
     "head_sampling_rate": 0.1
   },
   "triggers": {
-    "crons": ["0 3 * * *"]
+    // Hourly: lifecycle cleanup, upload finalize and the orphan sweep each do
+    // a bounded batch per run (subrequest budget), so they need the cadence.
+    "crons": ["0 * * * *"]
   },
   "routes": [
     {

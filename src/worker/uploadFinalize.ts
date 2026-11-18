@@ -177,7 +177,7 @@ export async function finalizeUpload(
   return register(db, backend, session);
 }
 
-/** Sessions the daily sweep tries per run (each costs up to 5 R2 calls). */
+/** Sessions the hourly sweep tries per run (each costs up to 5 R2 calls). */
 export const FINALIZE_SWEEP_BATCH = 5;
 /** Leave sessions this young alone; the app is probably still uploading. */
 export const FINALIZE_SWEEP_MIN_AGE_MINUTES = 30;
@@ -192,7 +192,7 @@ export interface FinalizeSweepSummary {
 }
 
 /**
- * Daily cron: finishes open v1 sessions nobody nudged (the app was killed,
+ * Hourly cron: finishes open v1 sessions nobody nudged (the app was killed,
  * or its background "complete" call never ran), in live events only. Runs
  * before the orphan sweep so a finished upload is kept, not aborted. A part
  * URL can't be minted after the close grace and lives 6 h, so this can't

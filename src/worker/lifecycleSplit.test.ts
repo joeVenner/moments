@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "./index";
 import { areUploadsOpen, canFinishUploads } from "./events";
-import { cleanupExpiredEvents } from "./lifecycle";
+import { cleanupExpiredEvents, PURGE_EVENTS_PER_RUN } from "./lifecycle";
 import { createSqliteD1, type SqliteD1 } from "./testing/sqliteD1";
 import type { Env } from "./types";
 
@@ -245,3 +245,15 @@ describe("app (v1) upload sessions on the web routes", () => {
   });
 });
 
+describe("purge batches", () => {
+  it("purges a bounded number of events per run, the rest next run", async () => {
+    const total = PURGE_EVENTS_PER_RUN + 2;
+    for (let i = 0; i < total; i++) {
+      sqlite.raw
+        .prepare("INSERT INTO events (id, slug, title, type, purge_after) VALUES (?, ?, 'P', 'Party', ?)")
+        .run(`ev${i}`, `party-${i}`, PAST);
+    }
+    expect(await cleanupExpiredEvents(env())).toBe(PURGE_EVENTS_PER_RUN);
+    expect(await cleanupExpiredEvents(env())).toBe(2);
+  });
+});

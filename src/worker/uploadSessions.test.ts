@@ -10,6 +10,9 @@ import {
   startUpload,
   abortUpload,
   MAX_OPEN_UPLOADS_PER_EVENT,
+  MAX_OPEN_UPLOADS_FOR_NEW_GUESTS,
+  MAX_OPEN_UPLOADS_PER_NEW_GUEST,
+  UPLOAD_SESSION_TTL_HOURS,
   type StartUploadHooks,
   type StartUploadInput,
 } from "./uploadSessions";
@@ -139,7 +142,74 @@ describe("startUpload", () => {
     expect(calls.create).toHaveLength(0);
   });
 
+  const clientId = (i: number) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+  /** A completed upload for p1: the guest has shared something. */
+  const markShared = () =>
+    sqlite.raw
+      .prepare(
+        `INSERT INTO uploads (id, event_id, uploader_name, key, upload_id, size_bytes, status, participant_id, client_upload_id)
+         VALUES ('done-1', 'event-1', 'x', 'k', 'u', 1, 'completed', 'p1', 'ffffffff-0000-4000-8000-000000000000')`
+      )
+      .run();
+
+  it("gives a guest who hasn't shared yet only a few open sessions", async () => {
+    const { backend } = fakeBackend();
+    for (let i = 0; i < MAX_OPEN_UPLOADS_PER_NEW_GUEST; i++) {
+      expect((await startUpload(sqlite.db, backend, input({ clientUploadId: clientId(i) }), HOOKS)).kind).toBe("started");
+    }
+    expect((await startUpload(sqlite.db, backend, input({ clientUploadId: clientId(99) }), HOOKS)).kind).toBe("too_many_open");
+    // Once one completes, the full cap applies.
+    sqlite.raw.prepare("UPDATE uploads SET status = 'completed' WHERE client_upload_id = ?").run(clientId(0));
+    expect((await startUpload(sqlite.db, backend, input({ clientUploadId: clientId(99) }), HOOKS)).kind).toBe("started");
+  });
+
+  it("stops counting app sessions older than the session lifetime", async () => {
+    const { backend } = fakeBackend();
+    for (let i = 0; i < MAX_OPEN_UPLOADS_PER_NEW_GUEST; i++) {
+      await startUpload(sqlite.db, backend, input({ clientUploadId: clientId(i) }), HOOKS);
+    }
+    sqlite.raw.prepare(`UPDATE uploads SET created_at = datetime('now', '-${UPLOAD_SESSION_TTL_HOURS + 1} hours')`).run();
+    expect((await startUpload(sqlite.db, backend, input({ clientUploadId: clientId(99) }), HOOKS)).kind).toBe("started");
+  });
+
+  it("keeps a share of the event for guests who have shared", async () => {
+    const insert = sqlite.raw.prepare(
+      `INSERT INTO uploads (id, event_id, uploader_name, key, upload_id, size_bytes, participant_id, client_upload_id)
+       VALUES (?, 'event-1', 'x', 'k', 'u', 1, ?, ?)`
+    );
+    for (let i = 0; i < MAX_OPEN_UPLOADS_FOR_NEW_GUESTS; i++) insert.run(`r${i}`, `new-${i}`, `c${i}`);
+    const { backend } = fakeBackend();
+    // A new guest finds the new-guest share full...
+    expect((await startUpload(sqlite.db, backend, input(), HOOKS)).kind).toBe("too_many_open");
+    // ...while a guest who has shared still gets in.
+    markShared();
+    expect((await startUpload(sqlite.db, backend, input(), HOOKS)).kind).toBe("started");
+  });
+
+  it("counts only guests who haven't shared, and web rows, toward the new-guest share", async () => {
+    const insert = sqlite.raw.prepare(
+      `INSERT INTO uploads (id, event_id, uploader_name, key, upload_id, size_bytes, status, participant_id, client_upload_id)
+       VALUES (?, 'event-1', 'x', 'k', 'u', 1, ?, ?, ?)`
+    );
+    // One guest who has shared holds the pool-sized rest; it doesn't count.
+    insert.run("veteran-done", "completed", "veteran", "v-done");
+    for (let i = 0; i < MAX_OPEN_UPLOADS_FOR_NEW_GUESTS - 1; i++) insert.run(`v${i}`, "open", "veteran", `v${i}`);
+    const { backend } = fakeBackend();
+    expect((await startUpload(sqlite.db, backend, input({ clientUploadId: clientId(1) }), HOOKS)).kind).toBe("started");
+    // Web rows (no participant) do count: a few of them fill it.
+    sqlite.raw.prepare("UPDATE uploads SET participant_id = NULL, client_upload_id = NULL WHERE participant_id = 'veteran' AND status = 'open'").run();
+    expect((await startUpload(sqlite.db, backend, input({ clientUploadId: clientId(2) }), HOOKS)).kind).toBe("too_many_open");
+  });
+
+  it("looks up shared guests and open rows by index", () => {
+    const plan = (sql: string) =>
+      (sqlite.raw.prepare(`EXPLAIN QUERY PLAN ${sql}`).all("p1") as { detail: string }[]).map((r) => r.detail).join("\n");
+    expect(plan("SELECT 1 FROM uploads d WHERE d.participant_id = ? AND d.status = 'completed'")).toContain("idx_uploads_participant_completed");
+    expect(plan("SELECT COUNT(*) FROM uploads u WHERE u.event_id = ? AND u.status = 'open'")).toContain("idx_uploads_event_open");
+  });
+
   it("caps open sessions per guest", async () => {
+    markShared();
     const { backend } = fakeBackend();
     for (let i = 0; i < MAX_OPEN_UPLOADS_PER_GUEST; i++) {
       const id = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;

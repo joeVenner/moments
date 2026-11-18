@@ -48,8 +48,38 @@ export function r2MultipartBackend(env: Env): MultipartBackend {
 export const PART_URL_TTL_SECONDS = 6 * 60 * 60;
 /** Open sessions one guest may hold; a full queue of 8 MiB-part uploads fits. */
 export const MAX_OPEN_UPLOADS_PER_GUEST = 50;
+/**
+ * Until one of their uploads completes, a guest may hold only this many, so
+ * a network minting fresh guests gets 5 slots per guest instead of 50.
+ */
+export const MAX_OPEN_UPLOADS_PER_NEW_GUEST = 5;
 /** Open sessions per event, so new guests can't multiply the guest cap. */
 export const MAX_OPEN_UPLOADS_PER_EVENT = 2000;
+/**
+ * The share of the event's open sessions guests without a completed upload
+ * may hold together; the rest stays free for guests who have shared already,
+ * so a flood of new guests can't lock them out.
+ */
+export const MAX_OPEN_UPLOADS_FOR_NEW_GUESTS = 1500;
+/**
+ * An app session not finished within this many hours stops counting toward
+ * any cap, and the hourly orphan sweep aborts it (the app then starts a fresh
+ * one). Web rows (no client id) keep the 7-day orphan rule.
+ */
+export const UPLOAD_SESSION_TTL_HOURS = 48;
+
+/** An open row still holding a slot; `u` is the uploads alias. */
+const HOLDS_SLOT = (u: string) =>
+  `${u}.status = 'open' AND (${u}.client_upload_id IS NULL OR ${u}.created_at > datetime('now', '-${UPLOAD_SESSION_TTL_HOURS} hours'))`;
+/** Whether `participant` (a bind `?` or a column) has a completed upload; participants are per event. */
+const HAS_SHARED = (participant: string) =>
+  `EXISTS (SELECT 1 FROM uploads d WHERE d.participant_id = ${participant} AND d.status = 'completed')`;
+/**
+ * Slots held in event `?` by guests without a completed upload. Web rows
+ * (no participant) count here too: they can never become "shared".
+ */
+const NEW_GUEST_SLOTS = `(SELECT COUNT(*) FROM uploads n WHERE n.event_id = ? AND ${HOLDS_SLOT("n")}
+    AND NOT ${HAS_SHARED("n.participant_id")})`;
 export const MAX_CAPTION_LENGTH = 500;
 /** The app's id for one queued item: a UUID (compared lowercased). */
 export const CLIENT_UPLOAD_ID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -148,15 +178,40 @@ function existingResult(session: UploadSessionRow, input: StartUploadInput): Sta
   return { kind: "existing", session };
 }
 
-async function openCounts(db: D1Database, input: StartUploadInput): Promise<{ guest: number; event: number }> {
+interface OpenCounts {
+  guest: number;
+  event: number;
+  newGuests: number;
+  hasShared: boolean;
+}
+
+async function openCounts(db: D1Database, input: StartUploadInput): Promise<OpenCounts> {
   const row = await db
     .prepare(
-      `SELECT (SELECT COUNT(*) FROM uploads WHERE participant_id = ? AND status = 'open') AS guest,
-              (SELECT COUNT(*) FROM uploads WHERE event_id = ? AND status = 'open') AS event`
+      `SELECT (SELECT COUNT(*) FROM uploads u WHERE u.participant_id = ? AND ${HOLDS_SLOT("u")}) AS guest,
+              (SELECT COUNT(*) FROM uploads u WHERE u.event_id = ? AND ${HOLDS_SLOT("u")}) AS event,
+              ${NEW_GUEST_SLOTS} AS new_guests,
+              ${HAS_SHARED("?")} AS has_shared`
     )
-    .bind(input.participantId, input.eventId)
-    .first<{ guest: number; event: number }>();
-  return { guest: row?.guest ?? 0, event: row?.event ?? 0 };
+    .bind(input.participantId, input.eventId, input.eventId, input.participantId)
+    .first<{ guest: number; event: number; new_guests: number; has_shared: number }>();
+  return { guest: row?.guest ?? 0, event: row?.event ?? 0, newGuests: row?.new_guests ?? 0, hasShared: !!row?.has_shared };
+}
+
+/** This guest's own cap, and whether the new-guest share applies to them. */
+function capsFor(counts: OpenCounts): { perGuest: number; newGuestShare: boolean } {
+  return counts.hasShared
+    ? { perGuest: MAX_OPEN_UPLOADS_PER_GUEST, newGuestShare: false }
+    : { perGuest: MAX_OPEN_UPLOADS_PER_NEW_GUEST, newGuestShare: true };
+}
+
+function overCap(counts: OpenCounts): boolean {
+  const caps = capsFor(counts);
+  return (
+    counts.guest >= caps.perGuest ||
+    counts.event >= MAX_OPEN_UPLOADS_PER_EVENT ||
+    (caps.newGuestShare && counts.newGuests >= MAX_OPEN_UPLOADS_FOR_NEW_GUESTS)
+  );
 }
 
 /**
@@ -179,9 +234,10 @@ export async function startUpload(
   const gate = await hooks.canStartNew();
   if (gate !== "ok") return { kind: gate };
   const counts = await openCounts(db, input);
-  if (counts.guest >= MAX_OPEN_UPLOADS_PER_GUEST || counts.event >= MAX_OPEN_UPLOADS_PER_EVENT) {
-    return { kind: "too_many_open" };
-  }
+  if (overCap(counts)) return { kind: "too_many_open" };
+  // A guest only ever moves from new to shared, so caps read here are never
+  // looser than the truth at insert time.
+  const caps = capsFor(counts);
 
   const contentType = input.contentType.toLowerCase();
   const key = momentKey(input.eventId, input.filename || "upload");
@@ -196,8 +252,9 @@ export async function startUpload(
            (id, event_id, uploader_name, key, upload_id, content_type, size_bytes, status,
             client_upload_id, participant_id, caption, part_size)
          SELECT ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?
-          WHERE (SELECT COUNT(*) FROM uploads WHERE participant_id = ? AND status = 'open') < ?
-            AND (SELECT COUNT(*) FROM uploads WHERE event_id = ? AND status = 'open') < ?
+          WHERE (SELECT COUNT(*) FROM uploads u WHERE u.participant_id = ? AND ${HOLDS_SLOT("u")}) < ?
+            AND (SELECT COUNT(*) FROM uploads u WHERE u.event_id = ? AND ${HOLDS_SLOT("u")}) < ?
+            AND (? = 0 OR ${NEW_GUEST_SLOTS} < ?)
             -- A guest who left meanwhile must not get a session nobody can abort.
             AND EXISTS (SELECT 1 FROM participants WHERE id = ? AND event_id = ?)
          ON CONFLICT (event_id, participant_id, client_upload_id) WHERE client_upload_id IS NOT NULL DO NOTHING`
@@ -205,7 +262,8 @@ export async function startUpload(
       .bind(
         id, input.eventId, input.nickname, key, uploadId, contentType, input.size,
         input.clientUploadId.toLowerCase(), input.participantId, input.caption, MULTIPART_PART_BYTES,
-        input.participantId, MAX_OPEN_UPLOADS_PER_GUEST, input.eventId, MAX_OPEN_UPLOADS_PER_EVENT,
+        input.participantId, caps.perGuest, input.eventId, MAX_OPEN_UPLOADS_PER_EVENT,
+        caps.newGuestShare ? 1 : 0, input.eventId, MAX_OPEN_UPLOADS_FOR_NEW_GUESTS,
         input.participantId, input.eventId
       )
       .run();

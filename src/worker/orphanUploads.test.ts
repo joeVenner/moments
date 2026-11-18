@@ -85,6 +85,18 @@ describe("findOrphanUploads", () => {
     expect(ids).toEqual(["on-closed", "stale"]);
   });
 
+  it("expires app sessions after the session lifetime, web ones after a week", async () => {
+    seedEvent("live");
+    seedUpload("web-2-days", "live", 49);
+    seedUpload("app-fresh", "live", 47);
+    seedUpload("app-2-days", "live", 49);
+    sqlite.raw
+      .prepare("UPDATE uploads SET client_upload_id = id WHERE id LIKE 'app-%'")
+      .run();
+    const ids = (await findOrphanUploads(sqlite.db, 10)).map((row) => row.id);
+    expect(ids).toEqual(["app-2-days"]);
+  });
+
   it("does not let permanently failing rows starve the rest", async () => {
     seedEvent("live");
     for (let index = 0; index < 6; index++) seedUpload(`u${index}`, "live", 200);

@@ -72,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- App uploads are shared fairly within an event. A guest gets 5 uploads in progress until one finishes, then 50. Guests who haven't shared anything yet can hold at most 1,500 of an event's 2,000 slots, so a burst of new guests from one network can't lock out people who are already sharing. An app upload left unfinished for 48 hours frees its slot and is cancelled. Needs migration 0018.
 - Leaving an event from the app now also removes the guest's hearts in that event, those made with their guest identity, so a guest who leaves leaves no trace.
 - Website: photo and video uploads now send the guest's identity with each request to the server (never to storage), ready for identities being required. Nothing changes for guests yet.
 - Hearts are now tied to the guest who made them when the guest sends their identity, as the website and the app now do. One guest keeps one heart per moment even if their device's heart id changes; after a reinstall that kept the login, their earlier hearts follow them. The website's heart button now checks the heart id, is rate limited like the app's, and will require joining once identities are required. A double tap no longer errors, and a refused heart leaves the button as it was. Needs migration 0017.
