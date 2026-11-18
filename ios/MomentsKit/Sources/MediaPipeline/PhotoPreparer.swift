@@ -47,15 +47,21 @@ public enum PhotoPreparer {
 
     /// Bounds on what is read.
     public struct Limits: Sendable {
-        /// For JPEG and HEIC, which ImageIO subsamples while decoding.
+        /// For JPEG, which ImageIO subsamples while decoding.
         public var subsampledPixels: Int
+        /// For HEIC/HEIF: tiles decode at full size before scaling.
+        public var heicPixels: Int
         /// For the other formats, which decode at full size (4 bytes each).
         public var fullDecodePixels: Int
         /// Size of the source file.
         public var sourceBytes: Int64
 
-        public init(subsampledPixels: Int = 120_000_000, fullDecodePixels: Int = 50_000_000, sourceBytes: Int64 = 200_000_000) {
+        public init(
+            subsampledPixels: Int = 120_000_000, heicPixels: Int = 60_000_000, fullDecodePixels: Int = 50_000_000,
+            sourceBytes: Int64 = 200_000_000
+        ) {
             self.subsampledPixels = subsampledPixels
+            self.heicPixels = heicPixels
             self.fullDecodePixels = fullDecodePixels
             self.sourceBytes = sourceBytes
         }
@@ -66,7 +72,7 @@ public enum PhotoPreparer {
     /// JPEG quality of the uploaded photo.
     public static let quality = 0.85
 
-    static let subsampledTypes: [UTType] = [.jpeg, .heic, .heif]
+    static let heicTypes: [UTType] = [.heic, .heif]
     static let otherTypes: [UTType] = [.png, .gif, .webP]
 
     /// Reads the photo at `source` and writes the upload JPEG to
@@ -101,8 +107,10 @@ public enum PhotoPreparer {
               let type = CGImageSourceGetType(imageSource).flatMap({ UTType($0 as String) })
         else { throw .unreadable }
         let pixelLimit: Int
-        if subsampledTypes.contains(type) {
+        if type == .jpeg {
             pixelLimit = limits.subsampledPixels
+        } else if heicTypes.contains(type) {
+            pixelLimit = limits.heicPixels
         } else if otherTypes.contains(type) {
             pixelLimit = limits.fullDecodePixels
         } else {
@@ -134,21 +142,60 @@ public enum PhotoPreparer {
         return image
     }
 
-    /// JPEG: the last non-zero bytes are the end-of-image marker. PNG: the
+    /// JPEG: the main image's scan reaches its end-of-image marker (data
+    /// after it — a Motion Photo's video, padding — is fine). PNG: the
     /// file ends with the IEND chunk. Other formats rely on the decoder.
     static func hasCompleteEnding(_ source: URL, type: UTType) -> Bool {
         guard type == .jpeg || type == .png else { return true }
-        guard let handle = try? FileHandle(forReadingFrom: source) else { return false }
-        defer { try? handle.close() }
-        guard let end = try? handle.seekToEnd() else { return false }
-        try? handle.seek(toOffset: end - min(end, 4096))
-        guard let tail = try? handle.readToEnd() else { return false }
+        guard let data = try? Data(contentsOf: source, options: .alwaysMapped) else { return false }
         if type == .png {
-            return tail.suffix(12) == Data([0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82])
+            return data.suffix(12) == Data([0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82])
         }
-        // Some writers pad after the marker with zeros.
-        let trimmed = tail.reversed().drop { $0 == 0 }
-        return Array(trimmed.prefix(2)) == [0xD9, 0xFF]
+        return jpegReachesEnd(data)
+    }
+
+    /// Walks the JPEG's segments (skipping each by its length, so an
+    /// embedded thumbnail inside APP1 is never mistaken for the image) and
+    /// its entropy-coded scans until the end-of-image marker.
+    static func jpegReachesEnd(_ data: Data) -> Bool {
+        data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Bool in
+            let bytes = raw.bindMemory(to: UInt8.self)
+            let count = bytes.count
+            guard count >= 4, bytes[0] == 0xFF, bytes[1] == 0xD8 else { return false }
+            var index = 2
+            while index + 1 < count {
+                guard bytes[index] == 0xFF else { return false }
+                let marker = bytes[index + 1]
+                // Fill bytes before a marker.
+                if marker == 0xFF { index += 1; continue }
+                if marker == 0xD9 { return true }
+                // Markers without a length.
+                if marker == 0x01 || (0xD0 ... 0xD7).contains(marker) { index += 2; continue }
+                guard index + 3 < count else { return false }
+                let length = Int(bytes[index + 2]) << 8 | Int(bytes[index + 3])
+                guard length >= 2 else { return false }
+                index += 2 + length
+                guard marker == 0xDA else { continue }
+                // Scan data: an 0xFF is followed by 0x00 (a stuffed byte) or
+                // a restart marker until the next real marker.
+                while index + 1 < count {
+                    if bytes[index] == 0xFF, bytes[index + 1] != 0x00, !(0xD0 ... 0xD7).contains(bytes[index + 1]) { break }
+                    index += 1
+                }
+            }
+            return false
+        }
+    }
+
+    /// Deletes temporary files a crash left in `folder` mid-write (they
+    /// hold already-cleaned JPEG data). Call before preparing into it.
+    public static func removeLeftovers(in folder: URL) {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path(percentEncoded: false))) ?? []
+        for name in names where name.hasPrefix(".") && name.hasSuffix(".preparing") {
+            let url = folder.appending(path: name, directoryHint: .notDirectory)
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     /// The image redrawn as opaque 8-bit pixels in a standard color space:

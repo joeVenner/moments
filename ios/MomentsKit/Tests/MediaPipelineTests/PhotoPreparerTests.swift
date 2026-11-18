@@ -295,12 +295,36 @@ struct PhotoPreparerTests {
         #expect(!folder.files.contains("a.jpg"))
     }
 
+    @Test func acceptsDataAfterTheImage() throws {
+        let folder = try Folder()
+        // A Motion Photo appends a video after the JPEG; others pad.
+        let source = try fixture(800, 600, type: .jpeg, properties: everyKindOfMetadata, in: folder)
+        var motion = try Data(contentsOf: source)
+        motion += Data([0, 0, 0, 24]) + Data("ftypmp42".utf8) + Data((0 ..< 50_000).map { UInt8(truncatingIfNeeded: $0 &* 31) })
+        let motionURL = folder.url.appending(path: "motion.jpg")
+        try motion.write(to: motionURL)
+        _ = try PhotoPreparer.prepare(source: motionURL, destination: folder.url.appending(path: "a.jpg"))
+        var padded = try Data(contentsOf: source)
+        padded += Data(repeating: 0, count: 10_000)
+        let paddedURL = folder.url.appending(path: "padded.jpg")
+        try padded.write(to: paddedURL)
+        _ = try PhotoPreparer.prepare(source: paddedURL, destination: folder.url.appending(path: "b.jpg"))
+    }
+
+    @Test func removesLeftoversOfInterruptedWrites() throws {
+        let folder = try Folder()
+        try Data("x".utf8).write(to: folder.url.appending(path: ".\(UUID().uuidString).preparing"))
+        try Data("keep".utf8).write(to: folder.url.appending(path: "photo.jpg"))
+        PhotoPreparer.removeLeftovers(in: folder.url)
+        #expect(folder.files == ["photo.jpg"])
+    }
+
     @Test func refusesTooManyPixelsOrBytes() throws {
         let folder = try Folder()
         let png = try fixture(400, 300, type: .png, in: folder)
         let jpeg = try fixture(400, 300, type: .jpeg, in: folder)
         // Full-decode formats have the lower limit.
-        let limits = PhotoPreparer.Limits(subsampledPixels: 1_000_000, fullDecodePixels: 100_000)
+        let limits = PhotoPreparer.Limits(subsampledPixels: 1_000_000, heicPixels: 100_000, fullDecodePixels: 100_000)
         #expect(throws: PhotoPreparer.Problem.tooLarge) {
             try PhotoPreparer.prepare(source: png, destination: folder.url.appending(path: "a.jpg"), limits: limits)
         }
