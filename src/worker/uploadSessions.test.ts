@@ -8,9 +8,12 @@ import {
   partCount,
   presignPartUrls,
   startUpload,
+  abortUpload,
+  MAX_OPEN_UPLOADS_PER_EVENT,
+  type StartUploadHooks,
   type StartUploadInput,
 } from "./uploadSessions";
-import { MULTIPART_PART_BYTES } from "./multipartPresign";
+import { MULTIPART_PART_BYTES, R2RequestError } from "./multipartPresign";
 
 let sqlite: SqliteD1;
 
@@ -27,6 +30,8 @@ function fakeBackend() {
 }
 
 const CLIENT_ID = "6f1c2a7e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
+const cleanupErrors: unknown[] = [];
+const HOOKS: StartUploadHooks = { canStartNew: async () => "ok", onCleanupError: (err) => cleanupErrors.push(err) };
 
 function input(overrides: Partial<StartUploadInput> = {}): StartUploadInput {
   return {
@@ -43,6 +48,7 @@ function input(overrides: Partial<StartUploadInput> = {}): StartUploadInput {
 }
 
 beforeEach(() => {
+  cleanupErrors.length = 0;
   sqlite = createSqliteD1();
   sqlite.raw.prepare("INSERT INTO events (id, slug, title, type) VALUES ('event-1', 'party', 'Party', 'Party')").run();
   sqlite.raw.prepare("INSERT INTO events (id, slug, title, type) VALUES ('event-2', 'other', 'Other', 'Party')").run();
@@ -51,7 +57,7 @@ beforeEach(() => {
 describe("startUpload", () => {
   it("opens a session that stores the owner, caption and part size", async () => {
     const { backend, calls } = fakeBackend();
-    const result = await startUpload(sqlite.db, backend, input());
+    const result = await startUpload(sqlite.db, backend, input(), HOOKS);
     expect(result.kind).toBe("started");
     if (result.kind !== "started") return;
     expect(result.session).toMatchObject({
@@ -69,8 +75,8 @@ describe("startUpload", () => {
 
   it("returns the same session for a retried init without opening another", async () => {
     const { backend, calls } = fakeBackend();
-    const first = await startUpload(sqlite.db, backend, input());
-    const again = await startUpload(sqlite.db, backend, input({ caption: "ignored on retry" }));
+    const first = await startUpload(sqlite.db, backend, input(), HOOKS);
+    const again = await startUpload(sqlite.db, backend, input({ caption: "ignored on retry" }), HOOKS);
     expect(again.kind).toBe("existing");
     if (first.kind !== "started" || again.kind !== "existing") return;
     expect(again.session.id).toBe(first.session.id);
@@ -80,21 +86,21 @@ describe("startUpload", () => {
 
   it("refuses a reused client id for a different file", async () => {
     const { backend } = fakeBackend();
-    await startUpload(sqlite.db, backend, input());
-    expect((await startUpload(sqlite.db, backend, input({ size: 1234 }))).kind).toBe("conflict");
-    expect((await startUpload(sqlite.db, backend, input({ contentType: "video/mp4" }))).kind).toBe("conflict");
+    await startUpload(sqlite.db, backend, input(), HOOKS);
+    expect((await startUpload(sqlite.db, backend, input({ size: 1234 }), HOOKS)).kind).toBe("conflict");
+    expect((await startUpload(sqlite.db, backend, input({ contentType: "video/mp4" }), HOOKS)).kind).toBe("conflict");
   });
 
   it("scopes client ids to the guest and the event", async () => {
     const { backend } = fakeBackend();
-    await startUpload(sqlite.db, backend, input());
-    expect((await startUpload(sqlite.db, backend, input({ participantId: "p2" }))).kind).toBe("started");
-    expect((await startUpload(sqlite.db, backend, input({ eventId: "event-2" }))).kind).toBe("started");
+    await startUpload(sqlite.db, backend, input(), HOOKS);
+    expect((await startUpload(sqlite.db, backend, input({ participantId: "p2" }), HOOKS)).kind).toBe("started");
+    expect((await startUpload(sqlite.db, backend, input({ eventId: "event-2" }), HOOKS)).kind).toBe("started");
   });
 
   it("lets a concurrent duplicate lose cleanly and aborts its multipart", async () => {
     const { backend, calls } = fakeBackend();
-    const [a, b] = await Promise.all([startUpload(sqlite.db, backend, input()), startUpload(sqlite.db, backend, input())]);
+    const [a, b] = await Promise.all([startUpload(sqlite.db, backend, input(), HOOKS), startUpload(sqlite.db, backend, input(), HOOKS)]);
     expect([a.kind, b.kind].sort()).toEqual(["existing", "started"]);
     expect(calls.create).toHaveLength(2);
     expect(calls.abort).toHaveLength(1);
@@ -111,7 +117,7 @@ describe("startUpload", () => {
     [{ caption: "x".repeat(501) }, "Caption is too long"],
   ])("rejects %o before calling R2", async (overrides, message) => {
     const { backend, calls } = fakeBackend();
-    expect(await startUpload(sqlite.db, backend, input(overrides))).toEqual({ kind: "invalid", message });
+    expect(await startUpload(sqlite.db, backend, input(overrides), HOOKS)).toEqual({ kind: "invalid", message });
     expect(calls.create).toHaveLength(0);
   });
 
@@ -119,11 +125,11 @@ describe("startUpload", () => {
     const { backend } = fakeBackend();
     for (let i = 0; i < MAX_OPEN_UPLOADS_PER_GUEST; i++) {
       const id = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
-      expect((await startUpload(sqlite.db, backend, input({ clientUploadId: id }))).kind).toBe("started");
+      expect((await startUpload(sqlite.db, backend, input({ clientUploadId: id }), HOOKS)).kind).toBe("started");
     }
-    expect((await startUpload(sqlite.db, backend, input())).kind).toBe("too_many_open");
+    expect((await startUpload(sqlite.db, backend, input(), HOOKS)).kind).toBe("too_many_open");
     // A retry of an existing item still works at the cap.
-    const retry = await startUpload(sqlite.db, backend, input({ clientUploadId: "00000000-0000-4000-8000-000000000000" }));
+    const retry = await startUpload(sqlite.db, backend, input({ clientUploadId: "00000000-0000-4000-8000-000000000000" }), HOOKS);
     expect(retry.kind).toBe("existing");
   });
 
@@ -147,7 +153,7 @@ describe("startUpload", () => {
 describe("getOwnedUpload", () => {
   it("finds only the guest's own session in this event", async () => {
     const { backend } = fakeBackend();
-    const started = await startUpload(sqlite.db, backend, input());
+    const started = await startUpload(sqlite.db, backend, input(), HOOKS);
     if (started.kind !== "started") throw new Error("expected a session");
     const ref = { eventId: "event-1", participantId: "p1", uploadId: started.session.id };
     expect((await getOwnedUpload(sqlite.db, ref))?.id).toBe(started.session.id);
@@ -159,12 +165,12 @@ describe("getOwnedUpload", () => {
 describe("presignPartUrls", () => {
   async function session() {
     const { backend, calls } = fakeBackend();
-    const started = await startUpload(sqlite.db, backend, input());
+    const started = await startUpload(sqlite.db, backend, input(), HOOKS);
     if (started.kind !== "started") throw new Error("expected a session");
     return { backend, calls, session: started.session };
   }
 
-  it("signs every part for a day by default", async () => {
+  it("signs every part for the URL lifetime by default", async () => {
     const { backend, session: s } = await session();
     const now = new Date("2026-11-18T10:00:00Z");
     const result = await presignPartUrls(backend, s, undefined, now);
@@ -172,7 +178,13 @@ describe("presignPartUrls", () => {
     if (result.kind !== "ok") return;
     expect(result.parts.map((p) => p.part_number)).toEqual([1, 2, 3]);
     expect(result.parts[0].url).toContain(`ttl=${PART_URL_TTL_SECONDS}`);
-    expect(result.expiresAt.toISOString()).toBe("2026-11-19T10:00:00.000Z");
+    expect(result.expiresAt.toISOString()).toBe("2026-11-18T16:00:00.000Z");
+  });
+
+  it("refuses an empty list instead of signing everything", async () => {
+    const { backend, calls, session: s } = await session();
+    expect((await presignPartUrls(backend, s, [])).kind).toBe("invalid");
+    expect(calls.presign).toEqual([]);
   });
 
   it("signs only the named parts, once each", async () => {
@@ -187,3 +199,100 @@ describe("presignPartUrls", () => {
     expect((await presignPartUrls(backend, s, parts)).kind).toBe("invalid");
   });
 });
+
+describe("startUpload edge cases", () => {
+  it("returns an existing session even when new ones are refused", async () => {
+    const { backend } = fakeBackend();
+    await startUpload(sqlite.db, backend, input(), HOOKS);
+    const closed: StartUploadHooks = { ...HOOKS, canStartNew: async () => "closed" };
+    expect((await startUpload(sqlite.db, backend, input(), closed)).kind).toBe("existing");
+    const other = input({ clientUploadId: "00000000-0000-4000-8000-000000000009" });
+    expect((await startUpload(sqlite.db, backend, other, closed)).kind).toBe("closed");
+    const limited: StartUploadHooks = { ...HOOKS, canStartNew: async () => "rate_limited" };
+    expect((await startUpload(sqlite.db, backend, other, limited)).kind).toBe("rate_limited");
+  });
+
+  it("treats client ids case-insensitively", async () => {
+    const { backend } = fakeBackend();
+    await startUpload(sqlite.db, backend, input(), HOOKS);
+    expect((await startUpload(sqlite.db, backend, input({ clientUploadId: CLIENT_ID.toUpperCase() }), HOOKS)).kind).toBe("existing");
+    expect((await startUpload(sqlite.db, backend, input({ contentType: "IMAGE/JPEG" }), HOOKS)).kind).toBe("existing");
+  });
+
+  it("answers not_open for an aborted session's id", async () => {
+    const { backend } = fakeBackend();
+    await startUpload(sqlite.db, backend, input(), HOOKS);
+    sqlite.raw.prepare("UPDATE uploads SET status = 'aborted'").run();
+    expect((await startUpload(sqlite.db, backend, input(), HOOKS)).kind).toBe("not_open");
+  });
+
+  it("caps open sessions per event", async () => {
+    const insert = sqlite.raw.prepare(
+      `INSERT INTO uploads (id, event_id, uploader_name, key, upload_id, size_bytes, participant_id, client_upload_id)
+       VALUES (?, 'event-1', 'x', 'k', 'u', 1, ?, ?)`
+    );
+    for (let i = 0; i < MAX_OPEN_UPLOADS_PER_EVENT; i++) insert.run(`r${i}`, `guest-${i}`, `c${i}`);
+    const { backend, calls } = fakeBackend();
+    expect((await startUpload(sqlite.db, backend, input(), HOOKS)).kind).toBe("too_many_open");
+    expect(calls.create).toHaveLength(0);
+  });
+
+  it("aborts its multipart when the insert fails, and logs a failed cleanup", async () => {
+    const { backend, calls } = fakeBackend();
+    backend.abort = async () => { throw new Error("abort failed"); };
+    const brokenDb = {
+      prepare: (sql: string) => (sql.trimStart().startsWith("INSERT") ? { bind: () => ({ run: async () => { throw new Error("D1 down"); } }) } : sqlite.db.prepare(sql)),
+    } as unknown as D1Database;
+    await expect(startUpload(brokenDb, backend, input(), HOOKS)).rejects.toThrow("D1 down");
+    expect(calls.create).toHaveLength(1);
+    expect(cleanupErrors).toHaveLength(1);
+  });
+});
+
+describe("abortUpload", () => {
+  async function opened() {
+    const { backend, calls } = fakeBackend();
+    const started = await startUpload(sqlite.db, backend, input(), HOOKS);
+    if (started.kind !== "started") throw new Error("expected a session");
+    return { backend, calls, session: started.session };
+  }
+  const status = () => (sqlite.raw.prepare("SELECT status FROM uploads").get() as { status: string }).status;
+
+  it("aborts in R2 and frees the slot", async () => {
+    const { backend, calls, session } = await opened();
+    expect((await abortUpload(sqlite.db, backend, session)).kind).toBe("aborted");
+    expect(calls.abort).toEqual(["mp-1"]);
+    expect(status()).toBe("aborted");
+  });
+
+  it("counts an upload R2 no longer has as aborted", async () => {
+    const { backend, session } = await opened();
+    backend.abort = async () => { throw new R2RequestError("abortMultipartUpload", 404, "NoSuchUpload"); };
+    expect((await abortUpload(sqlite.db, backend, session)).kind).toBe("aborted");
+    expect(status()).toBe("aborted");
+  });
+
+  it("keeps the session open when R2 fails otherwise", async () => {
+    const { backend, session } = await opened();
+    backend.abort = async () => { throw new R2RequestError("abortMultipartUpload", 403, "AccessDenied"); };
+    await expect(abortUpload(sqlite.db, backend, session)).rejects.toBeInstanceOf(R2RequestError);
+    expect(status()).toBe("open");
+  });
+
+  it("refuses a completed session", async () => {
+    const { backend, session } = await opened();
+    expect((await abortUpload(sqlite.db, backend, { ...session, status: "completed" })).kind).toBe("completed");
+  });
+});
+
+describe("partCount", () => {
+  it.each([
+    [MULTIPART_PART_BYTES, 1],
+    [MULTIPART_PART_BYTES + 1, 2],
+    [512 * 1024 * 1024, 64],
+    [1, 1],
+  ])("splits %d bytes into %d parts", (size, parts) => {
+    expect(partCount({ size_bytes: size, part_size: MULTIPART_PART_BYTES })).toBe(parts);
+  });
+});
+

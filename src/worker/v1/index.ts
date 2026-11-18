@@ -3,7 +3,9 @@ import type { Context, MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { areUploadsOpen, canFinishUploads, getActiveEventBySlug, sqlTimestamp, toPublicEvent, UPLOADS_CLOSED } from "../events";
 import { isR2Configured } from "../presign";
+import { R2RequestError } from "../multipartPresign";
 import {
+  abortUpload,
   getOwnedUpload,
   partCount,
   presignPartUrls,
@@ -239,6 +241,8 @@ const startUploadRoute = createRoute({
   operationId: "startUpload",
   tags: ["Uploads"],
   summary: "Open an upload session (idempotent per client_upload_id)",
+  description:
+    "A retry with the same client_upload_id returns the existing session (200), even after uploads close, so a lost response is always recoverable. If that session was aborted the answer is 409 `upload_not_open`: queue the item again under a new client_upload_id.",
   request: {
     params: SlugParamSchema,
     headers: UploadHeadersSchema,
@@ -248,8 +252,23 @@ const startUploadRoute = createRoute({
     200: json(UploadSessionSchema, "This client_upload_id already has a session; here it is"),
     201: json(UploadSessionSchema, "Session opened"),
     400: json(ErrorSchema, "`invalid_upload`: unsupported type, size or caption"),
-    409: json(ErrorSchema, "`upload_conflict`: this client_upload_id was used for a different file"),
+    409: json(ErrorSchema, "`upload_conflict`: this client_upload_id was used for a different file; `upload_not_open`: its session was aborted"),
     ...uploadErrors,
+  },
+});
+
+const abortUploadRoute = createRoute({
+  method: "delete",
+  path: "/events/{slug}/uploads/{id}",
+  operationId: "abortUpload",
+  tags: ["Uploads"],
+  summary: "Cancel a session (idempotent): its part URLs stop working and its slot is freed",
+  request: { params: UploadParamSchema, headers: UploadHeadersSchema },
+  responses: {
+    200: json(UploadSessionSchema, "Aborted (or already was)"),
+    409: json(ErrorSchema, "`upload_not_open`: already completed"),
+    ...uploadErrors,
+    404: json(ErrorSchema, "No live event with this slug, or `upload_not_found`"),
   },
 });
 
@@ -272,7 +291,9 @@ const partUrlsRoute = createRoute({
   path: "/events/{slug}/uploads/{id}/part-urls",
   operationId: "getPartUrls",
   tags: ["Uploads"],
-  summary: "Presigned PUT URLs for a session's parts, valid for 24 h",
+  summary: "Presigned PUT URLs for a session's parts, valid for 6 h",
+  description:
+    "The URLs are bearer credentials: never log them. When they expire, ask again for the parts still missing (see getUpload).",
   request: {
     params: UploadParamSchema,
     headers: UploadHeadersSchema,
@@ -502,6 +523,7 @@ v1.openapi(removeReactionRoute, async (c) => {
 // session id from another guest or event is a 404.
 
 const UPLOAD_NOT_FOUND = { error: "upload not found", code: "upload_not_found" };
+const UPLOAD_NOT_OPEN = { error: "upload is not open; start a new one", code: "upload_not_open" };
 const UPLOADS_UNAVAILABLE = { error: "Direct uploads are not configured.", code: "uploads_unavailable" };
 const STORAGE_UNAVAILABLE = { error: "Storage is unavailable; try again.", code: "storage_unavailable" };
 
@@ -518,9 +540,13 @@ function toUploadSession(row: UploadSessionRow) {
   };
 }
 
+/** Ids, status and S3 error code only: R2 bodies can echo the key, and keys embed filenames. */
 function logUploadError(event: string, fields: Record<string, unknown>, err: unknown) {
-  // Never filenames, captions or nicknames (CLAUDE.md upload log rule).
-  console.error(JSON.stringify({ scope: "upload", event, ...fields, error: err instanceof Error ? err.message : String(err) }));
+  const detail =
+    err instanceof R2RequestError
+      ? { error: err.name, operation: err.operation, status: err.status, s3Code: err.code }
+      : { error: err instanceof Error ? err.name : "unknown" };
+  console.error(JSON.stringify({ scope: "upload", event, ...fields, ...detail }));
 }
 
 /** The calling guest, or null; resolved from X-Guest-Token. */
@@ -530,31 +556,41 @@ async function uploadGuest(c: Context<V1Env>) {
 
 const GUEST_REQUIRED = { error: "join the event first", code: "guest_required" };
 
-/** Per-guest limiter for the session routes that call R2 (status, part URLs). */
+/** Per-guest limiter for the session routes that call R2. */
 async function isUploadLimited(c: Context<V1Env>, sessionId: string): Promise<boolean> {
-  if (!c.env.GUEST_READ_LIMITER) return false;
-  return !(await c.env.GUEST_READ_LIMITER.limit({ key: `${c.get("event").id}:guest:${sessionId}` })).success;
+  if (!c.env.UPLOAD_LIMITER) return false;
+  return !(await c.env.UPLOAD_LIMITER.limit({ key: `${c.get("event").id}:guest:${sessionId}` })).success;
 }
 
 v1.openapi(startUploadRoute, async (c) => {
   const event = c.get("event");
-  if (!areUploadsOpen(event)) return c.json(UPLOADS_CLOSED, 403);
   const guest = await uploadGuest(c);
   if (!guest) return c.json(GUEST_REQUIRED, 403);
   if (!isR2Configured(c.env)) return c.json(UPLOADS_UNAVAILABLE, 501);
   const body = c.req.valid("json");
   let result;
   try {
-    result = await startUpload(c.env.DB, r2MultipartBackend(c.env), {
-      eventId: event.id,
-      participantId: guest.participant.id,
-      nickname: guest.participant.nickname,
-      clientUploadId: body.client_upload_id,
-      contentType: body.content_type,
-      size: body.size,
-      caption: body.caption || null,
-      filename: body.filename ?? null,
-    });
+    result = await startUpload(
+      c.env.DB,
+      r2MultipartBackend(c.env),
+      {
+        eventId: event.id,
+        participantId: guest.participant.id,
+        nickname: guest.participant.nickname,
+        clientUploadId: body.client_upload_id,
+        contentType: body.content_type,
+        size: body.size,
+        caption: body.caption || null,
+        filename: body.filename ?? null,
+      },
+      {
+        canStartNew: async () => {
+          if (!areUploadsOpen(event)) return "closed";
+          return (await isUploadLimited(c, guest.sessionId)) ? "rate_limited" : "ok";
+        },
+        onCleanupError: (err) => logUploadError("v1_upload_cleanup_failed", { eventId: event.id }, err),
+      }
+    );
   } catch (err) {
     logUploadError("v1_upload_start_failed", { eventId: event.id, sizeBytes: body.size }, err);
     return c.json(STORAGE_UNAVAILABLE, 502);
@@ -564,6 +600,12 @@ v1.openapi(startUploadRoute, async (c) => {
       return c.json({ error: result.message, code: "invalid_upload" }, 400);
     case "conflict":
       return c.json({ error: "client_upload_id was used for a different file", code: "upload_conflict" }, 409);
+    case "not_open":
+      return c.json(UPLOAD_NOT_OPEN, 409);
+    case "closed":
+      return c.json(UPLOADS_CLOSED, 403);
+    case "rate_limited":
+      return c.json(RATE_LIMITED, 429);
     case "too_many_open":
       return c.json({ error: "too many uploads in progress", code: "too_many_uploads" }, 429);
     case "existing":
@@ -597,7 +639,7 @@ v1.openapi(partUrlsRoute, async (c) => {
   if (!guest) return c.json(GUEST_REQUIRED, 403);
   const session = await getOwnedUpload(c.env.DB, { eventId: event.id, participantId: guest.participant.id, uploadId: c.req.valid("param").id });
   if (!session) return c.json(UPLOAD_NOT_FOUND, 404);
-  if (session.status !== "open") return c.json({ error: "upload is not open", code: "upload_not_open" }, 409);
+  if (session.status !== "open") return c.json(UPLOAD_NOT_OPEN, 409);
   // Sessions opened before the close may finish during the grace period.
   if (!canFinishUploads(event)) return c.json(UPLOADS_CLOSED, 403);
   if (!isR2Configured(c.env)) return c.json(UPLOADS_UNAVAILABLE, 501);
@@ -608,6 +650,26 @@ v1.openapi(partUrlsRoute, async (c) => {
     return c.json({ expires_at: sqlTimestamp(result.expiresAt), parts: result.parts }, 200);
   } catch (err) {
     logUploadError("v1_upload_part_urls_failed", { eventId: event.id, uploadRecordId: session.id }, err);
+    return c.json(STORAGE_UNAVAILABLE, 502);
+  }
+});
+
+v1.openapi(abortUploadRoute, async (c) => {
+  const event = c.get("event");
+  const guest = await uploadGuest(c);
+  if (!guest) return c.json(GUEST_REQUIRED, 403);
+  const session = await getOwnedUpload(c.env.DB, { eventId: event.id, participantId: guest.participant.id, uploadId: c.req.valid("param").id });
+  if (!session) return c.json(UPLOAD_NOT_FOUND, 404);
+  if (session.status === "completed") return c.json(UPLOAD_NOT_OPEN, 409);
+  if (session.status === "aborted") return c.json(toUploadSession(session), 200);
+  if (!isR2Configured(c.env)) return c.json(UPLOADS_UNAVAILABLE, 501);
+  if (await isUploadLimited(c, guest.sessionId)) return c.json(RATE_LIMITED, 429);
+  try {
+    const result = await abortUpload(c.env.DB, r2MultipartBackend(c.env), session);
+    if (result.kind === "completed") return c.json(UPLOAD_NOT_OPEN, 409);
+    return c.json(toUploadSession(result.session), 200);
+  } catch (err) {
+    logUploadError("v1_upload_abort_failed", { eventId: event.id, uploadRecordId: session.id }, err);
     return c.json(STORAGE_UNAVAILABLE, 502);
   }
 });

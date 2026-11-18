@@ -841,7 +841,7 @@ describe("upload sessions", () => {
     const body = exact(PartUrlsSchema, await all.json());
     expect(body.parts.map((p) => p.part_number)).toEqual([1, 2, 3]);
     const url = new URL(body.parts[0].url);
-    expect(url.searchParams.get("X-Amz-Expires")).toBe("86400");
+    expect(url.searchParams.get("X-Amz-Expires")).toBe("21600");
     expect(url.searchParams.get("uploadId")).toBe("mp-1");
     const some = await call(`/events/party/uploads/${id}/part-urls`, authed(token, { method: "POST", body: JSON.stringify({ part_numbers: [3] }) }));
     expect(((await some.json()) as { parts: unknown[] }).parts).toHaveLength(1);
@@ -894,11 +894,67 @@ describe("upload sessions", () => {
     expect(status).toMatchObject({ upload: { status: "aborted" }, uploaded_parts: [] });
   });
 
+  it("recovers a session after uploads close, but opens no new one", async () => {
+    const token = await guestToken();
+    const { id } = (await (await start(token)).json()) as { id: string };
+    sqlite.raw.prepare("UPDATE events SET uploads_close_at = datetime('now', '-1 minute') WHERE id = 'event-1'").run();
+    const retry = await start(token);
+    expect(retry.status).toBe(200);
+    expect(((await retry.json()) as { id: string }).id).toBe(id);
+    expect((await start(token, { client_upload_id: "00000000-0000-4000-8000-000000000002" })).status).toBe(403);
+  });
+
+  it("cancels a session idempotently and refuses its id afterwards", async () => {
+    s3.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      const url = new URL(request.url);
+      if (request.method === "POST" && url.searchParams.has("uploads")) {
+        return new Response("<InitiateMultipartUploadResult><UploadId>mp-9</UploadId></InitiateMultipartUploadResult>");
+      }
+      if (request.method === "DELETE" && url.searchParams.get("uploadId") === "mp-9") return new Response(null, { status: 204 });
+      return new Response("unexpected", { status: 500 });
+    });
+    const token = await guestToken();
+    const { id } = (await (await start(token)).json()) as { id: string };
+    const first = await call(`/events/party/uploads/${id}`, authed(token, { method: "DELETE" }));
+    expect(first.status).toBe(200);
+    expect(exact(UploadSessionSchema, await first.json()).status).toBe("aborted");
+    expect((await call(`/events/party/uploads/${id}`, authed(token, { method: "DELETE" }))).status).toBe(200);
+    const reused = await start(token);
+    expect(reused.status).toBe(409);
+    expect(await reused.json()).toMatchObject({ code: "upload_not_open" });
+    const lea = await guestToken("party", "Lea");
+    expect((await call(`/events/party/uploads/${id}`, authed(lea, { method: "DELETE" }))).status).toBe(404);
+  });
+
+  it("rejects an empty part list and control characters in captions", async () => {
+    const token = await guestToken();
+    const { id } = (await (await start(token)).json()) as { id: string };
+    const empty = await call(`/events/party/uploads/${id}/part-urls`, authed(token, { method: "POST", body: JSON.stringify({ part_numbers: [] }) }));
+    expect(empty.status).toBe(400);
+    const caption = await start(token, { client_upload_id: "00000000-0000-4000-8000-000000000003", caption: "hi\u0007" });
+    expect(caption.status).toBe(400);
+    expect((await start(token, { client_upload_id: "00000000-0000-4000-8000-000000000004", caption: "line one\nline two" })).status).toBe(201);
+  });
+
+  it("logs R2 failures without the response body", async () => {
+    const token = await guestToken();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    s3.mockResolvedValueOnce(
+      new Response("<Error><Code>AccessDenied</Code><Key>events/event-1/moments/x-secret_name.jpg</Key></Error>", { status: 403 })
+    );
+    expect((await start(token, { filename: "secret name.jpg" })).status).toBe(502);
+    const logged = errors.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logged).toContain("AccessDenied");
+    expect(logged).not.toContain("secret");
+    errors.mockRestore();
+  });
+
   it("rate-limits the R2-backed session routes per guest", async () => {
     const token = await guestToken();
     const { id } = (await (await start(token)).json()) as { id: string };
     const limit = vi.fn().mockResolvedValue({ success: false });
-    extraEnv = { ...R2_ENV, GUEST_READ_LIMITER: { limit } };
+    extraEnv = { ...R2_ENV, UPLOAD_LIMITER: { limit } };
     const res = await call(`/events/party/uploads/${id}`, authed(token));
     expect(res.status).toBe(429);
     expect(limit.mock.calls[0][0].key).toMatch(/^event-1:guest:/);

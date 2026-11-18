@@ -1,11 +1,13 @@
-import { isAllowedContentType, sanitizeFilename } from "./storage";
+import { isAllowedContentType, momentKey } from "./storage";
 import { MAX_DIRECT_UPLOAD_BYTES } from "./presign";
 import {
   abortMultipartUpload,
   createMultipartUpload,
   listParts,
   MULTIPART_PART_BYTES,
+  partCountForSize,
   presignPartUrl,
+  R2RequestError,
   type R2Part,
 } from "./multipartPresign";
 import type { Env } from "./types";
@@ -16,7 +18,9 @@ import type { Env } from "./types";
  * for hours, so:
  * - init is idempotent per (guest, client_upload_id): a retry after a lost
  *   response returns the same session;
- * - all part URLs come in one call and live for a day (R2 allows 7);
+ * - all part URLs come in one call and live for hours (R2 allows 7 days;
+ *   shorter keeps a leaked URL useful for less time, and the app can ask
+ *   for fresh URLs for the parts still missing);
  * - caption and owner are stored at init, so the server can finalize later
  *   without the app (next step: nudge + sweeper).
  * R2's ListParts stays the source of truth for which parts arrived.
@@ -40,12 +44,14 @@ export function r2MultipartBackend(env: Env): MultipartBackend {
   };
 }
 
-/** Part URLs live this long: long enough for a background upload to finish. */
-export const PART_URL_TTL_SECONDS = 24 * 60 * 60;
+/** Part URLs live this long; the app re-requests the missing parts after. */
+export const PART_URL_TTL_SECONDS = 6 * 60 * 60;
 /** Open sessions one guest may hold; a full queue of 8 MiB-part uploads fits. */
 export const MAX_OPEN_UPLOADS_PER_GUEST = 50;
+/** Open sessions per event, so new guests can't multiply the guest cap. */
+export const MAX_OPEN_UPLOADS_PER_EVENT = 2000;
 export const MAX_CAPTION_LENGTH = 500;
-/** The app's id for one queued item: a UUID. */
+/** The app's id for one queued item: a UUID (compared lowercased). */
 export const CLIENT_UPLOAD_ID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 export interface UploadSessionRow {
@@ -74,18 +80,33 @@ export interface StartUploadInput {
   filename: string | null;
 }
 
+export interface StartUploadHooks {
+  /**
+   * Asked only before opening a NEW session (a retry of an existing one
+   * skips it, so a lost response can always be recovered): uploads still
+   * open, rate limit.
+   */
+  canStartNew: () => Promise<"ok" | "closed" | "rate_limited">;
+  /** Best-effort R2 cleanup failed (logged by the caller; ids only). */
+  onCleanupError: (err: unknown) => void;
+}
+
 export type StartUploadResult =
   | { kind: "started" | "existing"; session: UploadSessionRow }
   | { kind: "invalid"; message: string }
   /** The client id is already used for a different file. */
   | { kind: "conflict" }
-  | { kind: "too_many_open" };
+  /** The client id's session was aborted; the app must use a new id. */
+  | { kind: "not_open"; session: UploadSessionRow }
+  | { kind: "too_many_open" }
+  | { kind: "closed" }
+  | { kind: "rate_limited" };
 
 const SESSION_COLUMNS = `id, event_id, participant_id, client_upload_id, key, upload_id, content_type,
   size_bytes, part_size, caption, status, created_at`;
 
 export function partCount(session: Pick<UploadSessionRow, "size_bytes" | "part_size">): number {
-  return Math.max(1, Math.ceil(session.size_bytes / session.part_size));
+  return partCountForSize(session.size_bytes, session.part_size);
 }
 
 /** Checks the file before any R2 call; returns an error message or null. */
@@ -105,57 +126,86 @@ async function findByClientId(db: D1Database, input: StartUploadInput): Promise<
       `SELECT ${SESSION_COLUMNS} FROM uploads
         WHERE event_id = ? AND participant_id = ? AND client_upload_id = ?`
     )
-    .bind(input.eventId, input.participantId, input.clientUploadId)
+    .bind(input.eventId, input.participantId, input.clientUploadId.toLowerCase())
     .first<UploadSessionRow>();
 }
 
-/** The same file as the existing session (a retried init). */
-function sameFile(session: UploadSessionRow, input: StartUploadInput): boolean {
-  return session.size_bytes === input.size && session.content_type === input.contentType.toLowerCase();
+/** What a retried init gets for an existing session. */
+function existingResult(session: UploadSessionRow, input: StartUploadInput): StartUploadResult {
+  const sameFile = session.size_bytes === input.size && session.content_type === input.contentType.toLowerCase();
+  if (!sameFile) return { kind: "conflict" };
+  if (session.status === "aborted") return { kind: "not_open", session };
+  return { kind: "existing", session };
+}
+
+async function openCounts(db: D1Database, input: StartUploadInput): Promise<{ guest: number; event: number }> {
+  const row = await db
+    .prepare(
+      `SELECT (SELECT COUNT(*) FROM uploads WHERE participant_id = ? AND status = 'open') AS guest,
+              (SELECT COUNT(*) FROM uploads WHERE event_id = ? AND status = 'open') AS event`
+    )
+    .bind(input.participantId, input.eventId)
+    .first<{ guest: number; event: number }>();
+  return { guest: row?.guest ?? 0, event: row?.event ?? 0 };
 }
 
 /**
- * Opens (or returns) the guest's session for one queued item. A concurrent
- * duplicate init loses the unique-index race, aborts its own R2 multipart
- * and returns the winner.
+ * Opens (or returns) the guest's session for one queued item. The caps are
+ * enforced atomically by the insert itself (the count before it only saves
+ * R2 calls in the common case); a concurrent duplicate loses on the unique
+ * index, aborts its own R2 multipart and returns the winner.
  */
 export async function startUpload(
   db: D1Database,
   backend: MultipartBackend,
-  input: StartUploadInput
+  input: StartUploadInput,
+  hooks: StartUploadHooks
 ): Promise<StartUploadResult> {
   const message = validateUploadInput(input);
   if (message) return { kind: "invalid", message };
   const existing = await findByClientId(db, input);
-  if (existing) return sameFile(existing, input) ? { kind: "existing", session: existing } : { kind: "conflict" };
+  if (existing) return existingResult(existing, input);
 
-  const open = await db
-    .prepare("SELECT COUNT(*) AS n FROM uploads WHERE participant_id = ? AND status = 'open'")
-    .bind(input.participantId)
-    .first<{ n: number }>();
-  if ((open?.n ?? 0) >= MAX_OPEN_UPLOADS_PER_GUEST) return { kind: "too_many_open" };
+  const gate = await hooks.canStartNew();
+  if (gate !== "ok") return { kind: gate };
+  const counts = await openCounts(db, input);
+  if (counts.guest >= MAX_OPEN_UPLOADS_PER_GUEST || counts.event >= MAX_OPEN_UPLOADS_PER_EVENT) {
+    return { kind: "too_many_open" };
+  }
 
   const contentType = input.contentType.toLowerCase();
-  const key = `events/${input.eventId}/moments/${crypto.randomUUID()}-${sanitizeFilename(input.filename || "upload")}`;
+  const key = momentKey(input.eventId, input.filename || "upload");
   const uploadId = await backend.create(key, contentType);
+  const abortOwn = () => backend.abort(key, uploadId).catch(hooks.onCleanupError);
   const id = crypto.randomUUID();
-  const inserted = await db
-    .prepare(
-      `INSERT OR IGNORE INTO uploads
-         (id, event_id, uploader_name, key, upload_id, content_type, size_bytes, status,
-          client_upload_id, participant_id, caption, part_size)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)`
-    )
-    .bind(
-      id, input.eventId, input.nickname, key, uploadId, contentType, input.size,
-      input.clientUploadId, input.participantId, input.caption, MULTIPART_PART_BYTES
-    )
-    .run();
-  if (inserted.meta.changes === 0) {
-    await backend.abort(key, uploadId).catch(() => undefined);
+  let changes: number;
+  try {
+    const result = await db
+      .prepare(
+        `INSERT INTO uploads
+           (id, event_id, uploader_name, key, upload_id, content_type, size_bytes, status,
+            client_upload_id, participant_id, caption, part_size)
+         SELECT ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?
+          WHERE (SELECT COUNT(*) FROM uploads WHERE participant_id = ? AND status = 'open') < ?
+            AND (SELECT COUNT(*) FROM uploads WHERE event_id = ? AND status = 'open') < ?
+         ON CONFLICT (event_id, participant_id, client_upload_id) WHERE client_upload_id IS NOT NULL DO NOTHING`
+      )
+      .bind(
+        id, input.eventId, input.nickname, key, uploadId, contentType, input.size,
+        input.clientUploadId.toLowerCase(), input.participantId, input.caption, MULTIPART_PART_BYTES,
+        input.participantId, MAX_OPEN_UPLOADS_PER_GUEST, input.eventId, MAX_OPEN_UPLOADS_PER_EVENT
+      )
+      .run();
+    changes = result.meta.changes;
+  } catch (err) {
+    // No row points at the multipart, so the sweeper could never find it.
+    await abortOwn();
+    throw err;
+  }
+  if (changes === 0) {
+    await abortOwn();
     const winner = await findByClientId(db, input);
-    if (!winner) throw new Error("upload session vanished after a duplicate init");
-    return sameFile(winner, input) ? { kind: "existing", session: winner } : { kind: "conflict" };
+    return winner ? existingResult(winner, input) : { kind: "too_many_open" };
   }
   const session = await db.prepare(`SELECT ${SESSION_COLUMNS} FROM uploads WHERE id = ?`).bind(id).first<UploadSessionRow>();
   if (!session) throw new Error("upload session missing after insert");
@@ -181,8 +231,9 @@ export type PartUrlsResult =
   | { kind: "invalid"; message: string };
 
 /**
- * Presigned PUT URLs for the requested parts (all parts when none are
- * named). The session must be open; the caller checks ownership.
+ * Presigned PUT URLs for the requested parts (all parts when the list is
+ * omitted; an empty list is a client bug, not "all"). The session must be
+ * open; the caller checks ownership.
  */
 export async function presignPartUrls(
   backend: MultipartBackend,
@@ -191,7 +242,8 @@ export async function presignPartUrls(
   now: Date = new Date()
 ): Promise<PartUrlsResult> {
   const total = partCount(session);
-  const numbers = requested?.length ? [...new Set(requested)].sort((a, b) => a - b) : Array.from({ length: total }, (_, i) => i + 1);
+  if (requested !== undefined && requested.length === 0) return { kind: "invalid", message: "part_numbers is empty" };
+  const numbers = requested ? [...new Set(requested)].sort((a, b) => a - b) : Array.from({ length: total }, (_, i) => i + 1);
   if (numbers.some((n) => !Number.isInteger(n) || n < 1 || n > total)) {
     return { kind: "invalid", message: `part numbers must be between 1 and ${total}` };
   }
@@ -202,4 +254,28 @@ export async function presignPartUrls(
     }))
   );
   return { kind: "ok", expiresAt: new Date(now.getTime() + PART_URL_TTL_SECONDS * 1000), parts };
+}
+
+export type AbortUploadResult = { kind: "aborted"; session: UploadSessionRow } | { kind: "completed" };
+
+/**
+ * Cancels the guest's session: aborts it in R2 (which also kills its part
+ * URLs) and frees its slot under the open-session cap. Idempotent; R2
+ * already having no such upload counts as done.
+ */
+export async function abortUpload(
+  db: D1Database,
+  backend: MultipartBackend,
+  session: UploadSessionRow
+): Promise<AbortUploadResult> {
+  if (session.status === "completed") return { kind: "completed" };
+  if (session.status === "open") {
+    try {
+      await backend.abort(session.key, session.upload_id);
+    } catch (err) {
+      if (!(err instanceof R2RequestError && err.code === "NoSuchUpload")) throw err;
+    }
+    await db.prepare("UPDATE uploads SET status = 'aborted' WHERE id = ? AND status = 'open'").bind(session.id).run();
+  }
+  return { kind: "aborted", session: { ...session, status: "aborted" } };
 }

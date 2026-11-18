@@ -243,7 +243,13 @@ export const StartUploadRequestSchema = z
       .openapi({ description: "The app's UUID for this queued item; a retried init with it returns the same session" }),
     content_type: z.string().min(1).max(100).openapi({ example: "image/jpeg" }),
     size: z.number().int().positive().openapi({ description: "Exact file size in bytes (max 512 MB)" }),
-    caption: z.string().trim().max(MAX_CAPTION_LENGTH).optional(),
+    caption: z
+      .string()
+      .trim()
+      .max(MAX_CAPTION_LENGTH)
+      // Plain text: no control characters other than line breaks.
+      .refine((value) => !/[\u0000-\u0009\u000B-\u001F\u007F]/.test(value), "caption has control characters")
+      .optional(),
     filename: z.string().max(255).optional().openapi({ description: "Original name; only sanitized letters survive in the key" }),
   })
   .openapi("StartUploadRequest");
@@ -275,9 +281,10 @@ export const PartUrlsRequestSchema = z
   .object({
     part_numbers: z
       .array(z.number().int().min(1))
-      .max(10_000)
+      .min(1)
+      .max(1000)
       .optional()
-      .openapi({ description: "Parts to sign; omit for all of them" }),
+      .openapi({ description: "Parts to sign; omit for all of them (an empty list is an error)" }),
   })
   .openapi("PartUrlsRequest");
 

@@ -18,6 +18,8 @@ export interface Env {
   /** Highlights and leaderboard, which read the whole event: per event and
    * IP. Optional like REACTION_LIMITER. */
   GUEST_READ_LIMITER?: RateLimit;
+  /** v1 upload session routes, per guest (new sessions, part URLs, status, abort). */
+  UPLOAD_LIMITER?: RateLimit;
   // Optional: AI banner generation is inert (returns 501) when unset.
   OPENAI_API_KEY?: string;
   // Optional: presigned large direct-to-R2 uploads are inert (returns 501)

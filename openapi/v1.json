@@ -654,8 +654,9 @@
               "type": "integer",
               "minimum": 1
             },
-            "maxItems": 10000,
-            "description": "Parts to sign; omit for all of them"
+            "minItems": 1,
+            "maxItems": 1000,
+            "description": "Parts to sign; omit for all of them (an empty list is an error)"
           }
         }
       },
@@ -1677,6 +1678,7 @@
           "Uploads"
         ],
         "summary": "Open an upload session (idempotent per client_upload_id)",
+        "description": "A retry with the same client_upload_id returns the existing session (200), even after uploads close, so a lost response is always recoverable. If that session was aborted the answer is 409 `upload_not_open`: queue the item again under a new client_upload_id.",
         "parameters": [
           {
             "schema": {
@@ -1783,7 +1785,7 @@
             }
           },
           "409": {
-            "description": "`upload_conflict`: this client_upload_id was used for a different file",
+            "description": "`upload_conflict`: this client_upload_id was used for a different file; `upload_not_open`: its session was aborted",
             "content": {
               "application/json": {
                 "schema": {
@@ -1988,6 +1990,159 @@
             }
           }
         }
+      },
+      "delete": {
+        "operationId": "abortUpload",
+        "tags": [
+          "Uploads"
+        ],
+        "summary": "Cancel a session (idempotent): its part URLs stop working and its slot is freed",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "slug",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "Access grant; required for private events only"
+            },
+            "required": false,
+            "description": "Access grant; required for private events only",
+            "name": "x-event-access",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "This device's guest token (required: uploads belong to a joined guest)"
+            },
+            "required": false,
+            "description": "This device's guest token (required: uploads belong to a joined guest)",
+            "name": "x-guest-token",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aborted (or already was)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Private event; send a grant from the access endpoint in X-Event-Access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`guest_required`: join first and send X-Guest-Token; or `uploads_closed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live event with this slug, or `upload_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`upload_not_open`: already completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_uploads` (open sessions) or `rate_limited`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "`uploads_unavailable`: direct uploads are not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`storage_unavailable`: R2 failed; retry later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error (415, 5xx, ...)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/events/{slug}/uploads/{id}/part-urls": {
@@ -1996,7 +2151,8 @@
         "tags": [
           "Uploads"
         ],
-        "summary": "Presigned PUT URLs for a session's parts, valid for 24 h",
+        "summary": "Presigned PUT URLs for a session's parts, valid for 6 h",
+        "description": "The URLs are bearer credentials: never log them. When they expire, ask again for the parts still missing (see getUpload).",
         "parameters": [
           {
             "schema": {
