@@ -19,6 +19,8 @@ private final class VideoFolder {
 private let locationSentinel = "+48.8584+002.2945+035.000/"
 private let modelSentinel = "SENTINEL-VIDEO-MODEL"
 private let softwareSentinel = "SENTINEL-VIDEO-SOFTWARE"
+private let trackSentinel = "+12.3456-065.4321+010.000/"
+private let creationSentinel = "2019-03-01T12:00:00+0100"
 
 private func item(_ key: String, _ value: String) -> AVMetadataItem {
     let item = AVMutableMetadataItem()
@@ -40,11 +42,18 @@ private func fixture(
         item("com.apple.quicktime.location.ISO6709", locationSentinel),
         item("com.apple.quicktime.model", modelSentinel),
         item("com.apple.quicktime.software", softwareSentinel),
+        item("com.apple.quicktime.creationdate", creationSentinel),
     ]
     let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
         AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: width, AVVideoHeightKey: height,
     ])
     input.transform = transform
+    // Track-level location too, and an old-style user-data ©xyz.
+    let userData = AVMutableMetadataItem()
+    userData.keySpace = .quickTimeUserData
+    userData.key = AVMetadataKey.quickTimeUserDataKeyLocationISO6709.rawValue as NSString
+    userData.value = trackSentinel as NSString
+    input.metadata = [item("com.apple.quicktime.location.ISO6709", trackSentinel), userData]
     input.expectsMediaDataInRealTime = false
     let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
         kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
@@ -71,6 +80,26 @@ private func fixture(
     return url
 }
 
+/// The creation and modification times of every `mvhd`, `tkhd` and `mdhd`
+/// box (found by name; good enough for the small files written here).
+private func headerTimes(_ url: URL) throws -> [UInt64] {
+    let data = try Data(contentsOf: url)
+    var times: [UInt64] = []
+    for name in ["mvhd", "tkhd", "mdhd"] {
+        var start = data.startIndex
+        while let range = data.range(of: Data(name.utf8), in: start ..< data.endIndex) {
+            let version = data[range.upperBound]
+            let width = version == 1 ? 8 : 4
+            for field in 0 ..< 2 {
+                let first = range.upperBound + 4 + field * width
+                times.append(data[first ..< first + width].reduce(0) { $0 << 8 | UInt64($1) })
+            }
+            start = range.upperBound
+        }
+    }
+    return times
+}
+
 private func contains(_ url: URL, _ text: String) throws -> Bool {
     try Data(contentsOf: url).range(of: Data(text.utf8)) != nil
 }
@@ -80,19 +109,31 @@ struct VideoPreparerTests {
         let folder = try VideoFolder()
         let source = try await fixture(640, 360, in: folder)
         // Positive control: the fixture carries each field.
-        for sentinel in [locationSentinel, modelSentinel, softwareSentinel] {
+        for sentinel in [locationSentinel, modelSentinel, softwareSentinel, trackSentinel, creationSentinel] {
             #expect(try contains(source, sentinel), "fixture lacks \(sentinel)")
         }
+        #expect(try headerTimes(source).contains { $0 != 0 })
         let output = folder.url.appending(path: "video.mp4")
         let prepared = try await VideoPreparer.prepare(source: source, destination: output)
         #expect(prepared.width == 640 && prepared.height == 360)
         #expect(abs(prepared.duration - 1) < 0.2)
         #expect(prepared.byteCount == Int64(try output.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? -1))
-        for sentinel in [locationSentinel, modelSentinel, softwareSentinel, "ISO6709", "com.apple.quicktime"] {
+        for sentinel in [
+            locationSentinel, modelSentinel, softwareSentinel, trackSentinel, creationSentinel,
+            "ISO6709", "com.apple.quicktime", "\u{A9}xyz", "udta", "mebx", "keys",
+        ] {
             #expect(try !contains(output, sentinel), "\(sentinel) survived")
         }
+        // No times in the headers.
+        let times = try headerTimes(output)
+        #expect(!times.isEmpty && times.allSatisfy { $0 == 0 })
         let asset = AVURLAsset(url: output)
         #expect(try await asset.load(.metadata).isEmpty)
+        #expect(try await asset.load(.creationDate) == nil)
+        for track in try await asset.load(.tracks) {
+            #expect([.video, .audio].contains(track.mediaType))
+            #expect(try await track.load(.metadata).isEmpty)
+        }
         let track = try #require(try await asset.loadTracks(withMediaType: .video).first)
         let format = try #require(try await track.load(.formatDescriptions).first)
         #expect(CMFormatDescriptionGetMediaSubType(format) == kCMVideoCodecType_H264)
@@ -108,10 +149,28 @@ struct VideoPreparerTests {
 
     @Test func keepsPortraitVideosUpright() async throws {
         let folder = try VideoFolder()
-        // Stored landscape, shown portrait (as phones record).
-        let source = try await fixture(1920, 1080, transform: CGAffineTransform(rotationAngle: .pi / 2), in: folder)
+        // Stored landscape 4K, shown portrait (as phones record).
+        let source = try await fixture(3840, 2160, transform: CGAffineTransform(rotationAngle: .pi / 2), in: folder)
         let prepared = try await VideoPreparer.prepare(source: source, destination: folder.url.appending(path: "video.mp4"))
         #expect(prepared.width == 1080 && prepared.height == 1920)
+    }
+
+    @Test func cancellingLeavesNothingBehind() async throws {
+        let folder = try VideoFolder()
+        let source = try await fixture(1920, 1080, seconds: 4, in: folder)
+        let output = folder.url.appending(path: "video.mp4")
+        let task = Task { try await VideoPreparer.prepare(source: source, destination: output) }
+        task.cancel()
+        await #expect(throws: VideoPreparer.Problem.cancelled) { try await task.value }
+        #expect(folder.files == [source.lastPathComponent])
+    }
+
+    @Test func leftoversOfACrashAreSwept() throws {
+        // Video temp files share the photo naming, so one sweep covers both.
+        let folder = try VideoFolder()
+        try Data("partial".utf8).write(to: folder.url.appending(path: ".\(UUID().uuidString).preparing"))
+        PhotoPreparer.removeLeftovers(in: folder.url)
+        #expect(folder.files.isEmpty)
     }
 
     @Test func refusesWhatIsNotAVideo() async throws {
