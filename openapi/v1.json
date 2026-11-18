@@ -1804,8 +1804,8 @@
         "tags": [
           "Guest"
         ],
-        "summary": "Leave the event and delete what this guest shared from the app",
-        "description": "Cancels this guest's open upload sessions, deletes the moments made from their sessions (not web uploads under the same name), then revokes the guest token and frees the nickname. Resumable: repeat while `done` is false. After the last call the token no longer works, so a `guest_required` answer to a retry means it already finished.",
+        "summary": "Leave the event and delete what this guest shared",
+        "description": "Cancels this guest's open uploads, deletes every moment shared with this guest token (not moments under the same name shared without it), then revokes the guest token and frees the nickname. Resumable: repeat while `done` is false. After the last call the token no longer works, so a `guest_required` answer to a retry means it already finished.",
         "parameters": [
           {
             "schema": {
@@ -1902,7 +1902,7 @@
             }
           },
           "502": {
-            "description": "`storage_unavailable`: R2 failed; retry later",
+            "description": "`storage_unavailable`: R2 or Stream failed; retry later",
             "content": {
               "application/json": {
                 "schema": {

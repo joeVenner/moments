@@ -10,6 +10,12 @@ export async function deleteMomentMedia(env: Env, mediaUrl: string): Promise<voi
   if (!isStreamConfigured(env) || !mediaUrl.includes("cloudflarestream.com/")) return;
   const uid = new URL(mediaUrl).pathname.split("/").filter(Boolean)[0];
   if (!uid) return;
+  await deleteStreamVideo(env, uid);
+}
+
+/** Deletes a Stream video; one already gone counts as deleted. A no-op without Stream. */
+export async function deleteStreamVideo(env: Env, uid: string): Promise<void> {
+  if (!isStreamConfigured(env)) return;
   const response = await fetch(streamApiUrl(env, `/${encodeURIComponent(uid)}`), {
     method: "DELETE",
     headers: streamAuthHeaders(env),
