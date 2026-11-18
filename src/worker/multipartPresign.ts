@@ -143,6 +143,8 @@ export async function presignPartUrl(
 export interface R2Part {
   partNumber: number;
   etag: string;
+  /** Bytes R2 holds for the part (ListParts only; absent when a client sends parts). */
+  size?: number;
 }
 
 /**
@@ -224,11 +226,14 @@ export async function listParts(
       throw await r2Error("listParts", res);
     }
     const xml = await res.text();
-    // Each <Part><PartNumber>N</PartNumber><ETag>"..."</ETag>...</Part>
-    const partRe = /<Part>\s*<PartNumber>(\d+)<\/PartNumber>\s*<ETag>([^<]*)<\/ETag>/g;
-    let m: RegExpExecArray | null;
-    while ((m = partRe.exec(xml)) !== null) {
-      parts.push({ partNumber: parseInt(m[1], 10), etag: m[2] });
+    // Each <Part> holds PartNumber, ETag and Size (any order, maybe LastModified too).
+    for (const block of xml.matchAll(/<Part>([\s\S]*?)<\/Part>/g)) {
+      const field = (name: string) => new RegExp(`<${name}>([^<]*)</${name}>`).exec(block[1])?.[1];
+      const partNumber = Number(field("PartNumber"));
+      const etag = field("ETag");
+      if (!Number.isInteger(partNumber) || etag === undefined) continue;
+      const size = field("Size");
+      parts.push(size === undefined ? { partNumber, etag } : { partNumber, etag, size: Number(size) });
     }
     const truncated = /<IsTruncated>true<\/IsTruncated>/.test(xml);
     if (!truncated) break;
