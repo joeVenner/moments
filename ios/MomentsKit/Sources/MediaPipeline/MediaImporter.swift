@@ -14,7 +14,9 @@ public struct PickedMedia: Sendable, Equatable {
     public let url: URL
     public let kind: Kind
 
-    public init(url: URL, kind: Kind) {
+    /// Internal: the importer deletes the file it is handed, so only files
+    /// the app copied (`adopt`) may become picked media.
+    init(url: URL, kind: Kind) {
         self.url = url
         self.kind = kind
     }
@@ -25,21 +27,61 @@ public struct PickedMedia: Sendable, Equatable {
         URL.cachesDirectory.appending(path: "PickedMedia", directoryHint: .isDirectory)
     }
 
-    /// Deletes everything in the inbox. Call at launch, before any import
-    /// starts: copies left there belong to imports a crash interrupted.
+    /// Deletes everything in the inbox. Call at launch, before the picker
+    /// can be shown (it would delete live imports' files): copies left there
+    /// belong to imports a crash interrupted or that failed for a reason
+    /// worth retrying, and still carry their location data.
     public static func clearInbox(_ folder: URL = inbox) {
         try? FileManager.default.removeItem(at: folder)
     }
 
+    /// Largest file accepted from the picker (the video preparer's source
+    /// limit; photos are capped lower by their own preparer).
+    static let maxReceivedBytes: Int64 = 4_000_000_000
+
+    public enum AdoptError: Error, Equatable {
+        /// A link, a folder, or anything but a plain file.
+        case notAFile
+        case tooLarge
+        case noSpace
+    }
+
     /// Copies a file the picker handed over into `folder` under a fresh
     /// name (keeping only a short, plain extension, which tells AVFoundation
-    /// and ImageIO the format).
+    /// and ImageIO the format). The copy still carries the original's
+    /// metadata, so the folder is out of backups and the copy protected.
     static func adopt(_ received: URL, kind: Kind, into folder: URL = inbox) throws -> PickedMedia {
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let values = try received.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+        guard values.isRegularFile == true, values.isSymbolicLink != true, let size = values.fileSize else { throw AdoptError.notAFile }
+        guard Int64(size) <= maxReceivedBytes else { throw AdoptError.tooLarge }
+        try FileManager.default.createDirectory(
+            at: folder, withIntermediateDirectories: true,
+            attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+        )
+        var exclusion = URLResourceValues()
+        exclusion.isExcludedFromBackup = true
+        var excluded = folder
+        try excluded.setResourceValues(exclusion)
+        // Room for the copy and the prepared file next to it.
+        if let free = try? folder.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+            .volumeAvailableCapacityForImportantUsage, free < Int64(size) * 2 {
+            throw AdoptError.noSpace
+        }
         let ext = received.pathExtension.lowercased()
         let safeExt = ext.count <= 5 && !ext.isEmpty && ext.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) ? ext : "bin"
         let copy = folder.appending(path: "\(UUID().uuidString).\(safeExt)", directoryHint: .notDirectory)
-        try FileManager.default.copyItem(at: received, to: copy)
+        do {
+            // Never move: the picker may hand over the user's own file.
+            try FileManager.default.copyItem(at: received, to: copy)
+            try FileManager.default.setAttributes(
+                [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                ofItemAtPath: copy.path(percentEncoded: false)
+            )
+        } catch {
+            try? FileManager.default.removeItem(at: copy)
+            if (error as? CocoaError)?.code == .fileWriteOutOfSpace { throw AdoptError.noSpace }
+            throw error
+        }
         return PickedMedia(url: copy, kind: kind)
     }
 }
@@ -81,25 +123,60 @@ public enum MediaImporter {
         /// Preparing failed (often: the app went to the background during
         /// a video); worth trying again.
         case failed
+        /// Videos only (photos are prepared in one go).
         case cancelled
+        /// The phone is out of storage.
+        case noSpace
+        /// Another import into the same folder is running (a programming
+        /// error: each item has its own folder and one import).
+        case busy
     }
 
     public static let photoName = "photo.jpg"
     public static let videoName = "video.mp4"
 
-    /// Prepares `picked` into `folder` (created if needed, leftovers of an
-    /// interrupted attempt swept first) and deletes the picked copy, whatever
-    /// the outcome. A file already in the folder from an earlier attempt is
-    /// replaced.
+    /// Prepares `picked` into `folder` (the item's staging folder, created
+    /// if needed and kept out of backups; leftovers of an interrupted
+    /// attempt swept first). A file already there from an earlier attempt
+    /// is replaced.
+    ///
+    /// The picked copy is deleted on success and when it can never work
+    /// (`unsupported`, `tooLarge`); after `failed`, `cancelled` or `noSpace`
+    /// it is kept so the same `picked` can be retried, and the caller
+    /// deletes it (`discard`) when giving up — `clearInbox` at launch
+    /// catches the rest. Only one import per folder may run at a time.
     public static func importMedia(
         _ picked: PickedMedia, into folder: URL,
         videoLimits: VideoPreparer.Limits = VideoPreparer.Limits()
     ) async throws(Problem) -> PreparedMedia {
-        defer { try? FileManager.default.removeItem(at: picked.url) }
+        guard ActiveFolders.shared.claim(folder) else { throw .busy }
+        defer { ActiveFolders.shared.release(folder) }
+        do {
+            let media = try await prepare(picked, into: folder, videoLimits: videoLimits)
+            discard(picked)
+            return media
+        } catch {
+            if error == .unsupported || error == .tooLarge { discard(picked) }
+            throw error
+        }
+    }
+
+    /// Deletes a picked copy that won't be imported.
+    public static func discard(_ picked: PickedMedia) {
+        try? FileManager.default.removeItem(at: picked.url)
+    }
+
+    private static func prepare(
+        _ picked: PickedMedia, into folder: URL, videoLimits: VideoPreparer.Limits
+    ) async throws(Problem) -> PreparedMedia {
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            var exclusion = URLResourceValues()
+            exclusion.isExcludedFromBackup = true
+            var excluded = folder
+            try excluded.setResourceValues(exclusion)
         } catch {
-            throw .failed
+            throw (error as? CocoaError)?.code == .fileWriteOutOfSpace ? .noSpace : .failed
         }
         PhotoPreparer.removeLeftovers(in: folder)
         switch picked.kind {
@@ -137,14 +214,33 @@ public enum MediaImporter {
         }
     }
 
-    /// `url`, with whatever an earlier attempt left there removed.
+    /// `url`, with whatever an earlier attempt left there removed (a link
+    /// is removed itself, never followed).
     private static func fresh(_ url: URL) throws(Problem) -> URL {
+        let path = url.path(percentEncoded: false)
+        var info = stat()
+        guard lstat(path, &info) == 0 else { return url }
         do {
             try FileManager.default.removeItem(at: url)
-        } catch CocoaError.fileNoSuchFile {
         } catch {
             throw .failed
         }
         return url
+    }
+}
+
+/// Folders with an import running, so two imports can't sweep or replace
+/// each other's files.
+final class ActiveFolders: @unchecked Sendable {
+    static let shared = ActiveFolders()
+    private let lock = NSLock()
+    private var paths: Set<String> = []
+
+    func claim(_ folder: URL) -> Bool {
+        lock.withLock { paths.insert(folder.standardizedFileURL.path(percentEncoded: false)).inserted }
+    }
+
+    func release(_ folder: URL) {
+        lock.withLock { _ = paths.remove(folder.standardizedFileURL.path(percentEncoded: false)) }
     }
 }

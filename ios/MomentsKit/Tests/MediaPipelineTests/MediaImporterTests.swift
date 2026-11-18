@@ -77,6 +77,58 @@ struct MediaImporterTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: item.path()).isEmpty)
     }
 
+    @Test func keepsThePickedCopyWhenWorthRetrying() async throws {
+        let folder = try VideoFolder()
+        let picked = folder.url.appending(path: "picked.jpg")
+        try writeJPEG(50, 50, to: picked)
+        // The item folder can't be made: a file is in its way.
+        let blocker = folder.url.appending(path: "blocker")
+        try Data("x".utf8).write(to: blocker)
+        let media = PickedMedia(url: picked, kind: .photo)
+        await #expect(throws: MediaImporter.Problem.failed) {
+            try await MediaImporter.importMedia(media, into: blocker.appending(path: "item"))
+        }
+        #expect(FileManager.default.fileExists(atPath: picked.path()))
+        // Retrying the same picked media works, then deletes it.
+        _ = try await MediaImporter.importMedia(media, into: folder.url.appending(path: "item"))
+        #expect(!FileManager.default.fileExists(atPath: picked.path()))
+    }
+
+    @Test func refusesASecondImportIntoTheSameFolder() async throws {
+        let folder = try VideoFolder()
+        let item = folder.url.appending(path: "item")
+        let picked = folder.url.appending(path: "picked.jpg")
+        try writeJPEG(50, 50, to: picked)
+        // An import is running for this folder (spelled differently).
+        #expect(ActiveFolders.shared.claim(folder.url.appending(path: "x/../item")))
+        await #expect(throws: MediaImporter.Problem.busy) {
+            try await MediaImporter.importMedia(PickedMedia(url: picked, kind: .photo), into: item)
+        }
+        #expect(FileManager.default.fileExists(atPath: picked.path()))
+        ActiveFolders.shared.release(item)
+        _ = try await MediaImporter.importMedia(PickedMedia(url: picked, kind: .photo), into: item)
+        // Released after the import too.
+        #expect(ActiveFolders.shared.claim(item))
+        ActiveFolders.shared.release(item)
+    }
+
+    @Test func refusesLinksAndFolders() throws {
+        let folder = try VideoFolder()
+        let inbox = folder.url.appending(path: "inbox")
+        let target = folder.url.appending(path: "target.jpg")
+        try Data("x".utf8).write(to: target)
+        let link = folder.url.appending(path: "link.jpg")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        #expect(throws: PickedMedia.AdoptError.notAFile) { try PickedMedia.adopt(link, kind: .photo, into: inbox) }
+        #expect(throws: PickedMedia.AdoptError.notAFile) { try PickedMedia.adopt(folder.url, kind: .photo, into: inbox) }
+        let long = folder.url.appending(path: "a.toolongext")
+        try Data("x".utf8).write(to: long)
+        #expect(try PickedMedia.adopt(long, kind: .photo, into: inbox).url.pathExtension == "bin")
+        let copied = try PickedMedia.adopt(target, kind: .photo, into: inbox)
+        #expect(try inbox.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+        #expect(FileManager.default.fileExists(atPath: copied.url.path()))
+    }
+
     @Test func adoptsPickerFilesUnderFreshPlainNames() throws {
         let folder = try VideoFolder()
         let inbox = folder.url.appending(path: "inbox")
