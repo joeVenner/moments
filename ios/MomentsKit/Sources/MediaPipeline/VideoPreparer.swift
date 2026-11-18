@@ -89,6 +89,11 @@ public enum VideoPreparer {
         defer { try? FileManager.default.removeItem(at: temporary) }
         try await export(asset, to: temporary, limit: limits.outputBytes)
 
+        do {
+            try MP4Scrub.scrub(temporary)
+        } catch {
+            throw .exportFailed
+        }
         let prepared: PreparedVideo
         do {
             // The temporary name has no extension to tell the type by.
@@ -109,7 +114,6 @@ public enum VideoPreparer {
         // The length limit cuts the export short rather than failing it.
         guard prepared.byteCount < limits.outputBytes, prepared.duration >= duration.seconds - 0.5 else { throw .tooLarge }
         do {
-            try MP4Scrub.scrub(temporary)
             try FileManager.default.setAttributes(
                 [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
                 ofItemAtPath: temporary.path(percentEncoded: false)
@@ -166,13 +170,22 @@ private final class SessionBox: @unchecked Sendable {
     init(_ session: AVAssetExportSession) { self.session = session }
 }
 
-/// Removes what an export leaves behind in an MP4's movie box: every
-/// metadata box (`udta`, `meta`) at movie or track level becomes a zeroed
+/// Removes what an export leaves behind in an MP4: every metadata box
+/// (`udta`, `meta`, `uuid`, ...) at the top level or anywhere in the
+/// movie's track, media and sample-table boxes becomes a zeroed
 /// `free` box (same size, so nothing else moves), and the creation and
 /// modification times in the movie, track and media headers (`mvhd`,
 /// `tkhd`, `mdhd`) are zeroed.
 enum MP4Scrub {
     enum Problem: Error { case malformed }
+
+    /// Boxes that only hold metadata (user data, item lists, XMP in a
+    /// `uuid` box), blanked wherever they are found.
+    static let metadataBoxes: Set<String> = ["udta", "meta", "uuid", "ilst", "keys", "XMP_"]
+    /// Boxes whose children are boxes, walked to reach nested metadata
+    /// and headers. Sample tables (`stsd` and below) aren't box lists.
+    static let containers: Set<String> = ["trak", "mdia", "minf", "stbl", "edts", "dinf", "mvex", "tref"]
+    static let maxDepth = 8
 
     static func scrub(_ url: URL) throws {
         let handle = try FileHandle(forUpdating: url)
@@ -194,7 +207,7 @@ enum MP4Scrub {
                 size = end - offset
             }
             guard size >= headerLength, size <= end - offset else { throw Problem.malformed }
-            if type == "udta" || type == "meta" {
+            if metadataBoxes.contains(type) {
                 // Top-level metadata, outside the movie box.
                 try blank(handle, at: offset, size: size, headerLength: headerLength)
             } else if type == "moov" {
@@ -202,7 +215,7 @@ enum MP4Scrub {
                 guard size <= 64 * 1024 * 1024 else { throw Problem.malformed }
                 try handle.seek(toOffset: offset)
                 guard var movie = try handle.read(upToCount: Int(size)), movie.count == Int(size) else { throw Problem.malformed }
-                try scrubBoxes(in: &movie, from: Int(headerLength), to: movie.count)
+                try scrubBoxes(in: &movie, from: Int(headerLength), to: movie.count, depth: 1)
                 try handle.seek(toOffset: offset)
                 try handle.write(contentsOf: movie)
                 found = true
@@ -215,7 +228,8 @@ enum MP4Scrub {
 
     /// Walks the boxes in `data[start..<end]`, descending into the ones
     /// that hold tracks and headers.
-    static func scrubBoxes(in data: inout Data, from start: Int, to end: Int) throws {
+    static func scrubBoxes(in data: inout Data, from start: Int, to end: Int, depth: Int) throws {
+        guard depth <= maxDepth else { throw Problem.malformed }
         var offset = start
         while offset + 8 <= end {
             let size = Int(data.bigEndian(at: offset, count: 4))
@@ -225,9 +239,9 @@ enum MP4Scrub {
             guard size >= 8, size <= end - offset else { throw Problem.malformed }
             let first = data.startIndex + offset
             switch type {
-            case "trak", "mdia":
-                try scrubBoxes(in: &data, from: offset + 8, to: offset + size)
-            case "udta", "meta":
+            case _ where containers.contains(type):
+                try scrubBoxes(in: &data, from: offset + 8, to: offset + size, depth: depth + 1)
+            case _ where metadataBoxes.contains(type):
                 data.replaceSubrange(first + 4 ..< first + size, with: Data("free".utf8) + Data(count: size - 8))
             case "mvhd", "tkhd", "mdhd":
                 // Full box: version (1 byte), flags (3), then creation and

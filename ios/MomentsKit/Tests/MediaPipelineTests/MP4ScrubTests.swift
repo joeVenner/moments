@@ -51,6 +51,27 @@ struct MP4ScrubTests {
         #expect(text.range(of: Data(box("hdlr", [9, 9]))) != nil)
     }
 
+    @Test func blanksMetadataNestedDeeperAndXMP() throws {
+        let secret = Array("SECRET".utf8)
+        let file = box("uuid", secret)
+            + box("moov", [
+                header("mvhd", version: 0),
+                box("trak", [box("mdia", [box("minf", [box("udta", secret), box("stbl", [box("meta", secret)])])])]),
+            ])
+        let output = Data(try scrubbed(file))
+        #expect(output.count == file.count)
+        for gone in ["SECRET", "uuid", "udta", "meta"] {
+            #expect(output.range(of: Data(gone.utf8)) == nil, "\(gone) survived")
+        }
+        #expect(output.range(of: Data("minf".utf8)) != nil && output.range(of: Data("stbl".utf8)) != nil)
+    }
+
+    @Test func refusesTooDeepNesting() {
+        var nested = box("mdia", [UInt8]())
+        for _ in 0 ..< 20 { nested = box("mdia", nested) }
+        #expect(throws: MP4Scrub.Problem.malformed) { try scrubbed(box("moov", nested)) }
+    }
+
     @Test(arguments: [
         // No movie box.
         box("ftyp", Array("isom".utf8)) + box("mdat", [1]),
