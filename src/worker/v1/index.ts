@@ -32,6 +32,7 @@ import {
 import { getLeaderboard } from "../leaderboard";
 import { GUEST_TOKEN_HEADER, joinEventAsGuest, resolveGuestSession, toPublicParticipant } from "../guestIdentity";
 import { isJoinLimited, JOIN_RATE_LIMITED, JOIN_RETRY_AFTER_SECONDS } from "../joinLimit";
+import { leaveEvent } from "../guestLeave";
 import { type ReactionState, setReaction } from "../reactions";
 import { signMomentsForEvent, STREAM_SIGNING_UNAVAILABLE, StreamSigningError } from "../streamSigning";
 import { withGuestMediaGrant, withGuestMediaGrants } from "../mediaAccess";
@@ -50,6 +51,7 @@ import {
   HighlightsSchema,
   JoinHeadersSchema,
   LeaderboardSchema,
+  LeaveResponseSchema,
   MomentParamSchema,
   PartUrlsRequestSchema,
   PartUrlsSchema,
@@ -244,6 +246,24 @@ const uploadErrors = {
   502: json(ErrorSchema, "`storage_unavailable`: R2 failed; retry later"),
 };
 
+const leaveEventRoute = createRoute({
+  method: "delete",
+  path: "/events/{slug}/participants/me",
+  operationId: "leaveEvent",
+  tags: ["Guest"],
+  summary: "Leave the event and delete what this guest shared from the app",
+  description:
+    "Cancels this guest's open upload sessions, deletes the moments made from their sessions (not web uploads under the same name), then revokes the guest token and frees the nickname. Resumable: repeat while `done` is false. After the last call the token no longer works, so a `guest_required` answer to a retry means it already finished.",
+  request: { params: SlugParamSchema, headers: UploadHeadersSchema },
+  responses: {
+    200: json(LeaveResponseSchema, "Progress; repeat while `done` is false"),
+    403: json(ErrorSchema, "`guest_required`: no valid guest token (already left, or never joined)"),
+    429: json(ErrorSchema, "`rate_limited`"),
+    502: json(ErrorSchema, "`storage_unavailable`: R2 failed; retry later"),
+    ...commonErrors,
+  },
+});
+
 const startUploadRoute = createRoute({
   method: "post",
   path: "/events/{slug}/uploads",
@@ -377,6 +397,7 @@ const clientVersionGate: MiddlewareHandler<V1Env> = async (c, next) => {
 /** The one route the event gate lets through without a grant. Anchored: a
  * future route that merely ends in /access must not inherit the exemption. */
 const ACCESS_PATH = /^\/api\/v1\/events\/[^/]+\/access$/;
+const LEAVE_PATH = /^\/api\/v1\/events\/[^/]+\/participants\/me$/;
 
 const eventGate: MiddlewareHandler<V1Env> = async (c, next) => {
   // Every event response is per-guest; covers the gate's own 401/404 too.
@@ -385,6 +406,13 @@ const eventGate: MiddlewareHandler<V1Env> = async (c, next) => {
   if (!event) return c.json({ error: "event not found", code: "event_not_found" }, 404);
   // The unlock endpoint is the one way in, so it can't require access itself.
   if (c.req.method === "POST" && ACCESS_PATH.test(c.req.path)) {
+    c.set("event", event);
+    return next();
+  }
+  // Leaving needs only the guest's own token: a guest whose access lapsed
+  // (new PIN) must still be able to delete what they shared. It reveals
+  // nothing and touches only that guest's data.
+  if (c.req.method === "DELETE" && LEAVE_PATH.test(c.req.path)) {
     c.set("event", event);
     return next();
   }
@@ -596,6 +624,24 @@ async function isUploadLimited(c: Context<V1Env>, sessionId: string): Promise<bo
   return !(await c.env.UPLOAD_LIMITER.limit({ key: `${c.get("event").id}:guest:${sessionId}` })).success;
 }
 
+v1.openapi(leaveEventRoute, async (c) => {
+  const event = c.get("event");
+  const guest = await uploadGuest(c);
+  if (!guest) return c.json(GUEST_REQUIRED, 403);
+  if (await isUploadLimited(c, guest.sessionId)) return c.json(RATE_LIMITED, 429);
+  c.header("Cache-Control", "no-store");
+  try {
+    const result = await leaveEvent(c.env.DB, c.env.BUCKET, r2MultipartBackend(c.env), {
+      eventId: event.id,
+      participantId: guest.participant.id,
+    });
+    return c.json(result, 200);
+  } catch (err) {
+    logUploadError("v1_leave_failed", { eventId: event.id }, err);
+    return c.json(STORAGE_UNAVAILABLE, 502);
+  }
+});
+
 v1.openapi(startUploadRoute, async (c) => {
   const event = c.get("event");
   const guest = await uploadGuest(c);
@@ -642,6 +688,8 @@ v1.openapi(startUploadRoute, async (c) => {
       return c.json(RATE_LIMITED, 429);
     case "too_many_open":
       return c.json({ error: "too many uploads in progress", code: "too_many_uploads" }, 429);
+    case "guest_gone":
+      return c.json(GUEST_REQUIRED, 403);
     case "existing":
       return c.json(toUploadSession(result.session), 200);
     case "started":

@@ -131,6 +131,21 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
         ])
     }
 
+    @Test func leavesWithTheGuestToken() async throws {
+        let stub = StubTransport(json: #"{"done":false}"#)
+        let done = try await client(stub).leaveEvent(slug: "party", credentials: EventCredentials(guestToken: "gt_me"))
+        #expect(done == false)
+        let request = try #require(stub.requests.first)
+        #expect(request.request.method == .delete)
+        #expect(request.request.path == "/events/party/participants/me")
+        #expect(request.request.headerFields[HTTPField.Name("X-Guest-Token")!] == "gt_me")
+
+        let gone = StubTransport(status: 403, json: #"{"error":"x","code":"guest_required"}"#)
+        await #expect(throws: MomentsAPIError.guestRequired) {
+            _ = try await client(gone).leaveEvent(slug: "party", credentials: EventCredentials(guestToken: "gt_me"))
+        }
+    }
+
     @Test(arguments: [
         (401, "access_required", MomentsAPIError.accessRequired),
         (404, "event_not_found", .eventNotFound),

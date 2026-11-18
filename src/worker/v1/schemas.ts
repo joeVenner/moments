@@ -186,6 +186,14 @@ export const JoinResponseSchema = z
   })
   .openapi("JoinResponse");
 
+export const LeaveResponseSchema = z
+  .object({
+    done: z.boolean().openapi({
+      description: "True once everything is deleted and the guest token is revoked; false: call again with the same token",
+    }),
+  })
+  .openapi("LeaveResponse");
+
 export const AccessRequestSchema = z
   .object({
     // Trimmed before the length check, like the web route.
