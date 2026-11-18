@@ -62,11 +62,13 @@ import {
   MAX_NICKNAME_LENGTH,
   PUBLIC_PARTICIPANT_COLUMNS,
   joinEventAsGuest,
+  resolveGuestSession,
   toPublicParticipant,
   type PublicParticipant,
 } from "./guestIdentity";
+import { leaveEvent, leaveStorage } from "./guestLeave";
 import { isJoinLimited, JOIN_RATE_LIMITED, JOIN_RETRY_AFTER_SECONDS } from "./joinLimit";
-import { gateReaction, REACTOR_ID_PATTERN, setReaction, viewerReactorId } from "./reactions";
+import { gateReaction, GUEST_REQUIRED, REACTOR_ID_PATTERN, setReaction, viewerReactorId } from "./reactions";
 import { guestMoment, mayFinishUpload, mayUseUpload, resolveWebUploader } from "./webUploader";
 import { cleanWebCaption } from "./captionText";
 import {
@@ -911,11 +913,21 @@ app.post("/api/events/:slug/moments/stream/tus", async (c) => {
   }
 
   try {
-    await c.env.DB.prepare(
+    const recorded = await c.env.DB.prepare(
       "UPDATE uploads SET key = ?, upload_id = ? WHERE id = ? AND event_id = ? AND status = 'open'"
     )
       .bind(`stream/${streamUid}`, streamUid, session.id, event.id)
       .run();
+    if (recorded.meta.changes !== 1) {
+      // The session was aborted meanwhile (the guest cancelled or left): no
+      // row would ever point at this video, so it goes now.
+      await fetch(streamApiUrl(c.env, `/${streamUid}`), {
+        method: "DELETE",
+        headers: streamAuthHeaders(c.env),
+      }).catch(() => {});
+      logUpload("warn", "stream_tus_session_closed", { eventId: event.id, uploadRecordId: session.id });
+      return c.json({ error: "upload not found" }, 409);
+    }
   } catch (error) {
     await fetch(streamApiUrl(c.env, `/${streamUid}`), {
       method: "DELETE",
@@ -1468,6 +1480,35 @@ app.post("/api/events/:slug/moments/multipart/abort", async (c) => {
     .run();
   logUpload("info", "multipart_aborted", { eventId: event.id });
   return c.json({ aborted: true });
+});
+
+// "Leave and delete my uploads" from the web; the same work as the app's
+// v1 route (guestLeave.ts). Only the token's guest can leave, enforced or not:
+// there is nothing to own without one. Call again until `done`.
+app.post("/api/events/:slug/leave", async (c) => {
+  const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  const session = await resolveGuestSession(c.env.DB, event.id, c.req.header(GUEST_TOKEN_HEADER));
+  if (!session) return c.json(GUEST_REQUIRED, 403);
+  c.header("Cache-Control", "no-store");
+  if (c.env.UPLOAD_LIMITER) {
+    // Same key as the app's leave: one budget per guest across both.
+    const { success } = await c.env.UPLOAD_LIMITER.limit({ key: `${event.id}:guest:${session.sessionId}` });
+    if (!success) return c.json({ error: "too many requests", code: "rate_limited" }, 429);
+  }
+  try {
+    const result = await leaveEvent(c.env.DB, leaveStorage(c.env), {
+      eventId: event.id,
+      participantId: session.participant.id,
+    });
+    return c.json(result);
+  } catch (error) {
+    logUpload("error", "web_leave_failed", {
+      eventId: event.id,
+      error: error instanceof Error ? error.name : "unknown",
+    });
+    return c.json({ error: "Storage is unavailable; try again.", code: "storage_unavailable" }, 502);
+  }
 });
 
 app.get("/api/events/:slug/participants", async (c) => {

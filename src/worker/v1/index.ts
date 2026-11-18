@@ -32,7 +32,7 @@ import {
 import { getLeaderboard } from "../leaderboard";
 import { GUEST_TOKEN_HEADER, joinEventAsGuest, resolveGuestSession, toPublicParticipant } from "../guestIdentity";
 import { isJoinLimited, JOIN_RATE_LIMITED, JOIN_RETRY_AFTER_SECONDS } from "../joinLimit";
-import { leaveEvent } from "../guestLeave";
+import { leaveEvent, leaveStorage } from "../guestLeave";
 import { gateReaction, type ReactionState, setReaction, viewerReactorId } from "../reactions";
 import { signMomentsForEvent, STREAM_SIGNING_UNAVAILABLE, StreamSigningError } from "../streamSigning";
 import { withGuestMediaGrant, withGuestMediaGrants } from "../mediaAccess";
@@ -252,15 +252,15 @@ const leaveEventRoute = createRoute({
   path: "/events/{slug}/participants/me",
   operationId: "leaveEvent",
   tags: ["Guest"],
-  summary: "Leave the event and delete what this guest shared from the app",
+  summary: "Leave the event and delete what this guest shared",
   description:
-    "Cancels this guest's open upload sessions, deletes the moments made from their sessions (not web uploads under the same name), then revokes the guest token and frees the nickname. Resumable: repeat while `done` is false. After the last call the token no longer works, so a `guest_required` answer to a retry means it already finished.",
+    "Cancels this guest's open uploads, deletes every moment shared with this guest token (not moments under the same name shared without it), then revokes the guest token and frees the nickname. Resumable: repeat while `done` is false. After the last call the token no longer works, so a `guest_required` answer to a retry means it already finished.",
   request: { params: SlugParamSchema, headers: UploadHeadersSchema },
   responses: {
     200: json(LeaveResponseSchema, "Progress; repeat while `done` is false"),
     403: json(ErrorSchema, "`guest_required`: no valid guest token (already left, or never joined)"),
     429: json(ErrorSchema, "`rate_limited`"),
-    502: json(ErrorSchema, "`storage_unavailable`: R2 failed; retry later"),
+    502: json(ErrorSchema, "`storage_unavailable`: R2 or Stream failed; retry later"),
     ...commonErrors,
   },
 });
@@ -642,7 +642,7 @@ v1.openapi(leaveEventRoute, async (c) => {
   if (await isUploadLimited(c, guest.sessionId)) return c.json(RATE_LIMITED, 429);
   c.header("Cache-Control", "no-store");
   try {
-    const result = await leaveEvent(c.env.DB, c.env.BUCKET, r2MultipartBackend(c.env), {
+    const result = await leaveEvent(c.env.DB, leaveStorage(c.env), {
       eventId: event.id,
       participantId: guest.participant.id,
     });

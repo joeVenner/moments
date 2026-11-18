@@ -351,6 +351,15 @@ export async function markAborted(db: D1Database, id: string): Promise<boolean> 
  * URLs) and frees its slot under the open-session cap. Idempotent; R2
  * already having no such upload counts as done.
  */
+/** Aborts an R2 multipart upload; one R2 no longer has counts as aborted. */
+export async function abortR2Multipart(backend: MultipartBackend, key: string, uploadId: string): Promise<void> {
+  try {
+    await backend.abort(key, uploadId);
+  } catch (err) {
+    if (!(err instanceof R2RequestError && err.code === "NoSuchUpload")) throw err;
+  }
+}
+
 export async function abortUpload(
   db: D1Database,
   backend: MultipartBackend,
@@ -358,11 +367,7 @@ export async function abortUpload(
 ): Promise<AbortUploadResult> {
   if (session.status === "completed") return { kind: "completed" };
   if (session.status === "open") {
-    try {
-      await backend.abort(session.key, session.upload_id);
-    } catch (err) {
-      if (!(err instanceof R2RequestError && err.code === "NoSuchUpload")) throw err;
-    }
+    await abortR2Multipart(backend, session.key, session.upload_id);
     if (!(await markAborted(db, session.id))) {
       // Finalize completed it meanwhile (its multipart was already gone).
       const current = await getUploadById(db, session.id);
