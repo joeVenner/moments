@@ -4,7 +4,7 @@ import Testing
 @testable import MediaPipeline
 
 /// A fresh folder per test, removed afterwards.
-private final class VideoFolder {
+final class VideoFolder {
     let url: URL
     init() throws {
         url = FileManager.default.temporaryDirectory.appending(path: "VideoPreparerTests-\(UUID().uuidString)")
@@ -33,7 +33,7 @@ private func item(_ key: String, _ value: String) -> AVMetadataItem {
 
 /// A `seconds`-long `width`×`height` H.264 movie of solid frames, with
 /// location, model and software metadata, rotated by `transform`.
-private func fixture(
+func fixture(
     _ width: Int, _ height: Int, seconds: Int = 1, transform: CGAffineTransform = .identity, in folder: VideoFolder
 ) async throws -> URL {
     let url = folder.url.appending(path: "source-\(UUID().uuidString).mov")
