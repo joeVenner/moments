@@ -95,7 +95,8 @@ public final class UploadModel {
     }
 
     public private(set) var items: [Item] = []
-    /// Locked while sharing; a batch uses the caption as it was on Share.
+    /// A batch uses the caption as it was on Share (the screen also locks
+    /// the field while sharing).
     public var caption = ""
     public private(set) var isSharing = false
     public private(set) var shareProblem: ShareProblem?
@@ -167,8 +168,7 @@ public final class UploadModel {
         let wasPreparing = items[index].state == .preparing
         items.remove(at: index)
         pending.removeAll { $0 == id }
-        // `current` can outlive the job by a moment: only a pick still
-        // preparing is left to its job to clean up.
+        // Only a pick its job is still preparing is left to the job.
         if wasPreparing, current?.id == id {
             // Stops a video export; the job cleans up when it ends.
             current?.task.cancel()
@@ -248,10 +248,13 @@ public final class UploadModel {
         worker = Task { [weak self] in
             while let self, !self.isDiscarded, !self.pending.isEmpty {
                 let id = self.pending.removeFirst()
-                let job = Task { await self.prepare(id) }
+                // `current` is cleared inside the job, so it never outlives it.
+                let job = Task {
+                    await self.prepare(id)
+                    self.current = nil
+                }
                 self.current = (id, job)
                 await job.value
-                self.current = nil
             }
             self?.worker = nil
         }

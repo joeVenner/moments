@@ -17,6 +17,9 @@ public struct GuestEventView: View {
     @State private var viewerImages: ThumbnailLoader?
     /// The open upload screen's model (fresh each time it opens).
     @State private var upload: UploadModel?
+    /// The same model, kept until the sheet's dismissal is handled (the
+    /// sheet binding is already nil by then).
+    @State private var presentedUpload: UploadModel?
     /// Bumped when a batch is queued (for the haptic, played here because
     /// the sheet is already closing).
     @State private var sharedBatches = 0
@@ -55,10 +58,13 @@ public struct GuestEventView: View {
                 JoinView(model: join)
             }
         }
-        .sheet(item: $upload) { model in
-            // However the sheet closes, unshared picks and files are dropped.
+        // However the sheet closes, unshared picks and files are dropped;
+        // on real dismissal only (a picker shown over it must not count).
+        .sheet(item: $upload, onDismiss: {
+            presentedUpload?.discardAll()
+            presentedUpload = nil
+        }) { model in
             UploadView(model: model) { sharedBatches += 1 }
-                .onDisappear { model.discardAll() }
         }
         // The event ended for this guest: every tab stops; lost access also
         // drops cached images of the private event.
@@ -118,9 +124,11 @@ public struct GuestEventView: View {
 
     private func shareButton(_ uploads: UploadDependencies) -> some View {
         Button {
-            upload = UploadModel(
+            let model = UploadModel(
                 eventSlug: join.slug.value, staging: uploads.staging, importer: uploads.importer, submitter: uploads.submitter
             )
+            presentedUpload = model
+            upload = model
         } label: {
             Image(systemName: "plus")
                 .font(.title2.bold())
