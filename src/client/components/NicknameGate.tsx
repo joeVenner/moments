@@ -4,6 +4,9 @@ import { useI18n } from "../lib/i18n";
 import { prefersReducedMotion } from "../lib/motion";
 import { AvatarPicker } from "./AvatarPicker";
 
+/** Mirrors the worker's `MAX_NICKNAME_LENGTH` (guestIdentity.ts). */
+const MAX_NICKNAME_LENGTH = 60;
+
 function randomSeed(): string {
   return Math.random().toString(36).slice(2, 10);
 }
@@ -14,15 +17,20 @@ function randomSeed(): string {
  * dimmed, blurred backdrop so the guest sees what they're joining. The modal
  * is non-dismissable — a nickname is required to participate.
  */
+/** Why the join didn't go through; null when the guest is in. */
+export type JoinProblem = "rate_limited" | "nickname_taken";
+
 export function NicknameGate({
   event,
   onSubmit,
 }: {
   event: EventData;
-  onSubmit: (nickname: string, avatarSeed: string) => void;
+  onSubmit: (nickname: string, avatarSeed: string) => Promise<JoinProblem | null>;
 }) {
   const { t, eventTypeLabel } = useI18n();
   const [name, setName] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
+  const [problem, setProblem] = useState<JoinProblem | null>(null);
   const [avatarSeed, setAvatarSeed] = useState(randomSeed);
   const reduced = prefersReducedMotion();
 
@@ -53,23 +61,44 @@ export function NicknameGate({
         </div>
 
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            if (name.trim()) onSubmit(name.trim(), avatarSeed);
+            if (!name.trim() || isJoining) return;
+            setIsJoining(true);
+            setProblem(null);
+            try {
+              setProblem(await onSubmit(name.trim(), avatarSeed));
+            } finally {
+              // On success the gate unmounts and React drops this update.
+              setIsJoining(false);
+            }
           }}
           className="mt-5 flex w-full flex-col gap-3"
         >
           <input
             autoFocus
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (problem === "nickname_taken") setProblem(null);
+            }}
             placeholder={t("enterNameToJoin")}
+            aria-label={t("enterNameToJoin")}
+            maxLength={MAX_NICKNAME_LENGTH}
+            readOnly={isJoining}
+            aria-invalid={problem === "nickname_taken"}
+            aria-describedby={problem ? "nickname-gate-problem" : undefined}
             className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-3 text-center text-base outline-none focus:border-[var(--color-accent)]"
           />
+          {problem && (
+            <p id="nickname-gate-problem" role="alert" className="text-center text-sm text-[var(--color-accent)]">
+              {t(problem === "rate_limited" ? "joinRateLimited" : "joinNicknameTaken")}
+            </p>
+          )}
           <button
             type="submit"
             data-spark
-            disabled={!name.trim()}
+            disabled={!name.trim() || isJoining}
             className="rounded-lg bg-[var(--color-accent)] px-4 py-2.5 font-mono text-sm font-medium text-white transition hover:bg-[var(--color-accent-dark)] disabled:opacity-50"
           >
             {t("joinTheFeed")}
