@@ -44,22 +44,7 @@ public struct FeedState: Sendable, Equatable {
     public private(set) var cursor: Int?
 
     private var removedIDs: Set<String> = []
-    /// Reaction state last reported by the server, for ids with a pending toggle.
-    private var pendingReactions: [String: PendingReaction] = [:]
-    /// Ids that were already confirmed when the previous sync finished.
-    private var confirmedAtLastSync: Set<String> = []
-
-    private struct ReactionSnapshot: Sendable, Equatable {
-        var hasReacted: Bool
-        var reactionCount: Int
-    }
-
-    private struct PendingReaction: Sendable, Equatable {
-        /// What the server last reported, restored by a rollback.
-        var server: ReactionSnapshot
-        /// False while the request is in flight; true once confirmed.
-        var isConfirmed = false
-    }
+    private var reactions = ReactionLedger()
 
     public init() {}
 
@@ -69,22 +54,21 @@ public struct FeedState: Sendable, Equatable {
     /// First page or pull-to-refresh: replaces everything, including the
     /// cursor. Pending reactions survive so a refresh mid-request keeps them.
     public mutating func replace(withFirstPage page: [Moment], nextBefore: Int?, cursor: Int) {
-        startSync()
-        let pending = pendingReactions
-        let confirmed = confirmedAtLastSync
+        reactions.startSync()
+        var ledger = reactions
+        // Only moments still on the new page keep their pending toggle.
+        let pageIDs = Set(page.map(\.id))
         let localReactions = Dictionary(
-            moments.filter { pending[$0.id] != nil }.map { ($0.id, ReactionSnapshot(hasReacted: $0.hasReacted, reactionCount: $0.reactionCount)) },
+            moments.filter { ledger.isPending($0.id) && pageIDs.contains($0.id) }.map { ($0.id, ReactionLedger.Snapshot($0)) },
             uniquingKeysWith: { first, _ in first }
         )
+        ledger.keepOnly(Set(localReactions.keys))
         self = FeedState()
         self.nextBefore = nextBefore
         self.cursor = cursor
-        // Only moments still on the new page keep their pending toggle.
-        let pageIDs = Set(page.map(\.id))
-        pendingReactions = pending.filter { localReactions[$0.key] != nil && pageIDs.contains($0.key) }
-        confirmedAtLastSync = confirmed.intersection(pageIDs)
+        reactions = ledger
         merge(page, isAuthoritative: true, localReactions: localReactions)
-        finishSync()
+        reactions.finishSync()
     }
 
     /// An older page (`getFeed(before:)`). Never moves the sync cursor, and
@@ -109,18 +93,18 @@ public struct FeedState: Sendable, Equatable {
             cursor = nil
             return .needsReload
         }
-        startSync()
+        reactions.startSync()
         if !removed.isEmpty {
             let gone = Set(removed)
             moments.removeAll { gone.contains($0.id) }
             removedIDs.formUnion(gone)
-            for id in gone { pendingReactions[id] = nil }
+            reactions.forget(gone)
         }
         // Changes are newer than anything a page could hold.
         removedIDs.subtract(upserts.map(\.id))
         merge(upserts, isAuthoritative: true)
         cursor = newCursor
-        finishSync()
+        reactions.finishSync()
         return hasMore ? .moreAvailable : .upToDate
     }
 
@@ -130,21 +114,12 @@ public struct FeedState: Sendable, Equatable {
     /// current intent again when `confirmReaction` says it hasn't settled.
     @discardableResult
     public mutating func setReacted(_ hasReacted: Bool, forMomentID id: String) -> Bool {
-        guard let index = moments.firstIndex(where: { $0.id == id }),
-              moments[index].hasReacted != hasReacted else { return false }
-        let server = pendingReactions[id]?.server
-            ?? ReactionSnapshot(hasReacted: moments[index].hasReacted, reactionCount: moments[index].reactionCount)
-        pendingReactions[id] = PendingReaction(server: server)
-        // A new intent restarts the "outlive one sync" clock.
-        confirmedAtLastSync.remove(id)
-        moments[index].hasReacted = hasReacted
-        moments[index].reactionCount = max(0, moments[index].reactionCount + (hasReacted ? 1 : -1))
-        return true
+        reactions.setReacted(hasReacted, id: id, in: &moments)
     }
 
     /// Whether the moment has a reaction the server hasn't answered yet.
     public func hasUnsentReaction(forMomentID id: String) -> Bool {
-        pendingReactions[id]?.isConfirmed == false
+        reactions.hasUnsent(id)
     }
 
     /// Before sending: when the guest's intent is back to what the server
@@ -152,12 +127,7 @@ public struct FeedState: Sendable, Equatable {
     /// nothing to send. Clears the pending toggle and returns true.
     @discardableResult
     public mutating func discardUnsentReactionIfUnchanged(forMomentID id: String) -> Bool {
-        guard let pending = pendingReactions[id], !pending.isConfirmed,
-              let index = moments.firstIndex(where: { $0.id == id }),
-              moments[index].hasReacted == pending.server.hasReacted else { return false }
-        pendingReactions[id] = nil
-        moments[index].reactionCount = pending.server.reactionCount
-        return true
+        reactions.discardUnsentIfUnchanged(id, in: &moments)
     }
 
     /// The server answered a reaction request with its state for this device.
@@ -169,32 +139,25 @@ public struct FeedState: Sendable, Equatable {
     /// then server rows take over again.
     @discardableResult
     public mutating func confirmReaction(forMomentID id: String, reacted: Bool, reactionCount: Int) -> Bool {
-        guard pendingReactions[id] != nil, let index = moments.firstIndex(where: { $0.id == id }) else { return true }
-        pendingReactions[id]?.server = ReactionSnapshot(hasReacted: reacted, reactionCount: reactionCount)
-        guard moments[index].hasReacted == reacted else {
-            // Shown relative to the server's count, toggled the guest's way.
-            moments[index].reactionCount = max(0, reactionCount + (moments[index].hasReacted ? 1 : -1))
-            return false
-        }
-        moments[index].reactionCount = reactionCount
-        pendingReactions[id]?.isConfirmed = true
-        confirmedAtLastSync.remove(id)
-        return true
+        reactions.confirm(id, reacted: reacted, reactionCount: reactionCount, in: &moments)
     }
 
     /// The reaction request failed: restore what the server last reported.
     public mutating func rollbackReaction(forMomentID id: String) {
-        guard let snapshot = pendingReactions.removeValue(forKey: id)?.server,
-              let index = moments.firstIndex(where: { $0.id == id }) else { return }
-        moments[index].hasReacted = snapshot.hasReacted
-        moments[index].reactionCount = snapshot.reactionCount
+        reactions.rollback(id, in: &moments)
+    }
+
+    /// The server's state for this device learned elsewhere (e.g. hearted
+    /// from highlights). Ignored while this list has its own pending toggle.
+    public mutating func applyServerReaction(forMomentID id: String, reacted: Bool, reactionCount: Int) {
+        reactions.applyServerState(id, reacted: reacted, reactionCount: reactionCount, in: &moments)
     }
 
     /// - Parameter isAuthoritative: first-page and changes rows replace what we
     ///   hold; older-page rows only fill gaps or carry a newer `changeSeq`.
     ///   `localReactions` carries pending toggles across a `replace`.
     private mutating func merge(
-        _ incoming: [Moment], isAuthoritative: Bool, localReactions: [String: ReactionSnapshot] = [:]
+        _ incoming: [Moment], isAuthoritative: Bool, localReactions: [String: ReactionLedger.Snapshot] = [:]
     ) {
         guard !incoming.isEmpty else { return }
         var byID = Dictionary(moments.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -204,31 +167,10 @@ public struct FeedState: Sendable, Equatable {
                 if !isAuthoritative && !isNewer { continue }
                 if isAuthoritative && moment.changeSeq < existing.changeSeq { continue }
             }
-            let local = localReactions[moment.id]
-                ?? byID[moment.id].map { ReactionSnapshot(hasReacted: $0.hasReacted, reactionCount: $0.reactionCount) }
-            if pendingReactions[moment.id] != nil, let local {
-                // Remember the server's view for a rollback, keep the local toggle.
-                pendingReactions[moment.id]?.server = ReactionSnapshot(
-                    hasReacted: moment.hasReacted, reactionCount: moment.reactionCount
-                )
-                moment.hasReacted = local.hasReacted
-                moment.reactionCount = local.reactionCount
-            }
+            reactions.overlay(&moment, local: localReactions[moment.id] ?? byID[moment.id].map(ReactionLedger.Snapshot.init))
             byID[moment.id] = moment
         }
         // seq is unique per event; id breaks ties so the order is deterministic.
         moments = byID.values.sorted { ($0.seq, $0.id) > ($1.seq, $1.id) }
-    }
-
-    /// Toggles confirmed before the previous sync have outlived one sync, so
-    /// this sync's server values apply to them.
-    private mutating func startSync() {
-        for id in confirmedAtLastSync where pendingReactions[id]?.isConfirmed == true {
-            pendingReactions[id] = nil
-        }
-    }
-
-    private mutating func finishSync() {
-        confirmedAtLastSync = Set(pendingReactions.filter(\.value.isConfirmed).keys)
     }
 }
