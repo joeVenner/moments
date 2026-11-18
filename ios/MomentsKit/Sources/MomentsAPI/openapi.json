@@ -537,6 +537,21 @@
             "type": "string",
             "description": "UTC, `YYYY-MM-DD HH:MM:SS`",
             "example": "2026-11-17 18:30:00"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "UTC, `YYYY-MM-DD HH:MM:SS`",
+            "example": "2026-11-17 18:30:00"
+          },
+          "moment_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The moment this upload became, once completed"
           }
         },
         "required": [
@@ -547,7 +562,9 @@
           "size",
           "part_size",
           "part_count",
-          "created_at"
+          "created_at",
+          "completed_at",
+          "moment_id"
         ]
       },
       "StartUploadRequest": {
@@ -651,6 +668,50 @@
             "description": "Parts to sign; omit for all of them (an empty list is an error)"
           }
         }
+      },
+      "UploadCompleteConflict": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "description": "`upload_incomplete` or `upload_not_open`"
+          },
+          "uploaded_parts": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "With `upload_incomplete`: parts R2 has; upload the rest, then complete again"
+          }
+        },
+        "required": [
+          "error",
+          "code"
+        ]
+      },
+      "UploadRejected": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "description": "`upload_rejected`"
+          },
+          "reason": {
+            "type": "string",
+            "description": "`part_size_mismatch`, `object_mismatch` or `signature_mismatch`; more may be added"
+          }
+        },
+        "required": [
+          "error",
+          "code",
+          "reason"
+        ]
       },
       "AccessResponse": {
         "type": "object",
@@ -2256,6 +2317,172 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_uploads` (open sessions) or `rate_limited`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "`uploads_unavailable`: direct uploads are not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`storage_unavailable`: R2 failed; retry later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error (415, 5xx, ...)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{slug}/uploads/{id}/complete": {
+      "post": {
+        "operationId": "completeUpload",
+        "tags": [
+          "Uploads"
+        ],
+        "summary": "Finish a session on the server once its parts are uploaded (idempotent)",
+        "description": "Call after the last part (from the background, one call is enough). The server checks every part's size, assembles the file, checks its type and creates the moment. A daily sweep finishes sessions nobody nudged. Safe to retry: a completed session returns 200 again.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "slug",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "Access grant; required for private events only"
+            },
+            "required": false,
+            "description": "Access grant; required for private events only",
+            "name": "x-event-access",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "This device's guest token (required: uploads belong to a joined guest)"
+            },
+            "required": false,
+            "description": "This device's guest token (required: uploads belong to a joined guest)",
+            "name": "x-guest-token",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Completed; moment_id is the new moment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Private event; send a grant from the access endpoint in X-Event-Access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`guest_required`: join first and send X-Guest-Token; or `uploads_closed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live event with this slug, or `upload_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`upload_incomplete`: parts missing (see uploaded_parts); `upload_not_open`: aborted, queue the item again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadCompleteConflict"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`upload_rejected`: the bytes don't match the session; it was aborted, queue the item again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadRejected"
                 }
               }
             }
