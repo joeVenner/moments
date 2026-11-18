@@ -20,9 +20,10 @@ enum FileReader {
 
     enum Read {
         case data(Data)
-        /// A link, not a plain file, or too large.
+        /// A link (soft or hard), not a plain file, or too large.
         case unusable
         case notNow
+        case gone
     }
 
     static func open(_ url: URL) -> Opened {
@@ -48,7 +49,7 @@ enum FileReader {
     static func read(_ url: URL, maxBytes: Int) -> Read {
         switch open(url) {
         case let .opened(handle, info):
-            guard info.isRegular, info.size <= maxBytes else { return .unusable }
+            guard info.isRegular, info.linkCount == 1, info.size <= maxBytes else { return .unusable }
             do {
                 // Bounded even if the file grew after fstat.
                 let data = try handle.read(upToCount: maxBytes + 1) ?? Data()
@@ -56,7 +57,8 @@ enum FileReader {
             } catch {
                 return .notNow
             }
-        case .missing, .unreadable: return .notNow
+        case .missing: return .gone
+        case .unreadable: return .notNow
         case .notAFile: return .unusable
         }
     }

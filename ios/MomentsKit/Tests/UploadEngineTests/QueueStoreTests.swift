@@ -138,11 +138,44 @@ private func item(_ name: String = "a.jpg", at seconds: TimeInterval = 0) -> Que
     @Test func refusesNonCanonicalNamesAndSharedStagedFiles() throws {
         let folder = try TempFolder()
         let store = QueueStore(directory: folder.url)
-        let first = item("a.jpg", at: 0), second = item("a.jpg", at: 5), lower = item("b.jpg")
-        try store.save(first)
-        try store.save(second)
+        let first = item("ev/a.jpg", at: 0), second = item("ev/a.jpg", at: 5), variant = item("EV/A.jpg", at: 6)
+        let lower = item("b.jpg")
+        for upload in [first, second, variant] { try store.save(upload) }
         try JSONEncoder().encode(lower).write(to: folder.url.appending(path: "\(lower.id.uuidString.lowercased()).json"))
-        #expect(try store.load() == .init(items: [first], quarantined: 2))
+        // Duplicates stay on disk (deferred), the misnamed record is set aside.
+        #expect(try store.load() == .init(items: [first], quarantined: 1, deferred: 2))
+        #expect(FileManager.default.fileExists(atPath: store.recordURL(for: second.id).path()))
+    }
+
+    @Test func refusesAHardLinkedRecord() throws {
+        let folder = try TempFolder()
+        let store = QueueStore(directory: folder.url.appending(path: "queue"))
+        let upload = item()
+        try store.save(upload)
+        try FileManager.default.linkItem(at: store.recordURL(for: upload.id), to: folder.url.appending(path: "other"))
+        #expect(try store.load() == .init(items: [], quarantined: 1))
+    }
+
+    @Test func junkDoesNotTakeTheSlotsOfRealRecords() throws {
+        let folder = try TempFolder()
+        let store = QueueStore(directory: folder.url, maxItems: 1)
+        let upload = item()
+        try store.save(upload)
+        for index in 0 ..< 3 { try Data("x".utf8).write(to: folder.url.appending(path: "junk\(index).json")) }
+        #expect(try store.load() == .init(items: [upload], quarantined: 3))
+    }
+
+    @Test func reappliesTheBackupExclusionOnLoad() throws {
+        let folder = try TempFolder()
+        var directory = folder.url.appending(path: "queue")
+        let store = QueueStore(directory: directory)
+        try store.save(item())
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = false
+        try directory.setResourceValues(values)
+        _ = try store.load()
+        directory.removeAllCachedResourceValues()
+        #expect(try directory.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
     }
 
     @Test func sweepsLeftoversFromInterruptedWrites() throws {
@@ -151,8 +184,14 @@ private func item(_ name: String = "a.jpg", at seconds: TimeInterval = 0) -> Que
         try store.save(item())
         let leftover = folder.url.appending(path: "\(UUID().uuidString).json.sb-1234")
         try Data("partial".utf8).write(to: leftover)
+        let keep = ["notes.json.bak", "\(UUID().uuidString)"]
+        for name in keep { try Data("x".utf8).write(to: folder.url.appending(path: name)) }
+        let folderLike = folder.url.appending(path: "\(UUID().uuidString).json.dir")
+        try FileManager.default.createDirectory(at: folderLike, withIntermediateDirectories: true)
         _ = try store.load()
         #expect(!FileManager.default.fileExists(atPath: leftover.path()))
+        for name in keep { #expect(FileManager.default.fileExists(atPath: folder.url.appending(path: name).path())) }
+        #expect(FileManager.default.fileExists(atPath: folderLike.path()))
     }
 
     @Test func deletesBadRecordsOnceTheQuarantineIsFull() throws {

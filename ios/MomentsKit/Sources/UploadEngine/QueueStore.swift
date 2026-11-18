@@ -72,7 +72,7 @@ public struct QueueStore: Sendable {
     }
 
     /// Reads the records. Ones that can never be used (oversized, not a
-    /// plain file, undecodable, misnamed) move to the quarantine folder, or
+    /// plain file or hard-linked, undecodable, misnamed) move to the quarantine folder, or
     /// are deleted when it is full, so they don't fail every launch. Ones
     /// that merely can't be read now stay in place: a read error is never
     /// taken for corruption, or a wake before first unlock would wipe the
@@ -80,40 +80,60 @@ public struct QueueStore: Sendable {
     public func load() throws -> Loaded {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: directory.path(percentEncoded: false)) else { return Loaded(items: []) }
-        try prepareDirectory()
-        let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey, .creationDateKey]
-        let urls = try fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles])
+        // Best effort: failing to refresh the folder's attributes (it may be
+        // locked) must not hold back the whole queue.
+        try? prepareDirectory()
+        let urls = try fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
         sweepLeftovers(urls)
-        // Capped before reading, oldest files first, so a flood of records
-        // costs at most `maxItems` reads.
-        let records = urls.filter { $0.pathExtension == "json" }
-            .map { (url: $0, created: (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast) }
-            .sorted { ($0.created, $0.url.lastPathComponent) < ($1.created, $1.url.lastPathComponent) }
-        var found: [(item: QueuedUpload, url: URL)] = []
         var quarantined = 0, deferred = 0
-        for record in records.prefix(maxItems) {
-            switch read(record.url) {
-            case let .item(item): found.append((item, record.url))
-            case .unusable:
-                setAside(record.url)
-                quarantined += 1
-            case .notNow: deferred += 1
-            }
-        }
-        found.sort { ($0.item.createdAt, $0.item.id.uuidString) < ($1.item.createdAt, $1.item.id.uuidString) }
-        // Each staged file belongs to one item; a later record naming the
-        // same file (tampering or a bug) would upload it twice or elsewhere.
-        var items: [QueuedUpload] = []
-        var paths: Set<String> = []
-        for (item, url) in found {
-            if paths.insert(item.file.relativePath).inserted {
-                items.append(item)
+        // Misnamed records are set aside without reading, so junk can't
+        // take the slots of real records under the cap.
+        var records: [URL] = []
+        for url in urls where url.pathExtension == "json" {
+            if Self.isCanonicalRecordName(url.lastPathComponent) {
+                records.append(url)
             } else {
                 setAside(url)
                 quarantined += 1
             }
         }
+        // Capped before reading, so a flood of records costs at most
+        // `maxItems` reads. Sorted by name for a stable choice (file dates
+        // change on every atomic save).
+        records.sort { $0.lastPathComponent < $1.lastPathComponent }
+        var found: [(item: QueuedUpload, url: URL)] = []
+        for url in records.prefix(maxItems) {
+            switch read(url) {
+            case let .item(item): found.append((item, url))
+            case .unusable:
+                setAside(url)
+                quarantined += 1
+            case .notNow: deferred += 1
+            case .gone: break
+            }
+        }
+        found.sort { ($0.item.createdAt, $0.item.id.uuidString) < ($1.item.createdAt, $1.item.id.uuidString) }
+        // Each staged file belongs to one item; a later record naming the
+        // same file (tampering or a bug) would upload it twice or elsewhere.
+        // It is left in place rather than deleted (it may be the valid one
+        // if an older record is only deferred), but not loaded. The key is
+        // normalized because APFS ignores case and Unicode form.
+        var items: [QueuedUpload] = []
+        var paths: Set<String> = []
+        for (item, _) in found {
+            if paths.insert(item.file.relativePath.precomposedStringWithCanonicalMapping.lowercased()).inserted {
+                items.append(item)
+            } else {
+                deferred += 1
+            }
+        }
         return Loaded(items: items, quarantined: quarantined, deferred: deferred, overflow: max(records.count - maxItems, 0))
+    }
+
+    /// `<UPPERCASE-UUID>.json`, as `save` writes it.
+    static func isCanonicalRecordName(_ name: String) -> Bool {
+        guard name.hasSuffix(".json"), let id = UUID(uuidString: String(name.dropLast(5))) else { return false }
+        return name == "\(id.uuidString).json"
     }
 
     func recordURL(for id: UUID) -> URL {
@@ -126,6 +146,8 @@ public struct QueueStore: Sendable {
         case unusable
         /// Can't be read now, or needs a newer app: leave it.
         case notNow
+        /// Vanished since the listing.
+        case gone
     }
 
     /// The record, if it is a plain, small file holding a valid item whose
@@ -134,14 +156,13 @@ public struct QueueStore: Sendable {
     /// checked with `fstat`, so a file swapped after listing can't make it
     /// read something else or something huge.
     private func read(_ url: URL) -> ReadResult {
-        guard let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent),
-              url.lastPathComponent == recordURL(for: id).lastPathComponent
-        else { return .unusable }
+        guard let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent) else { return .unusable }
         let data: Data
         switch FileReader.read(url, maxBytes: Self.maxRecordBytes) {
         case let .data(read): data = read
         case .unusable: return .unusable
         case .notNow: return .notNow
+        case .gone: return .gone
         }
         guard let version = try? JSONDecoder().decode(Version.self, from: data) else { return .unusable }
         if let found = version.schemaVersion, found > QueuedUpload.schemaVersion { return .notNow }
