@@ -23,7 +23,7 @@ private func item(_ name: String = "a.jpg", at seconds: TimeInterval = 0) -> Que
         let store = QueueStore(directory: folder.url.appending(path: "queue"))
         #expect(try store.load() == .init(items: [], quarantined: 0))
 
-        let newer = item(at: 10), older = item(at: 0)
+        let newer = item("n.jpg", at: 10), older = item("o.jpg", at: 0)
         try store.save(newer)
         try store.save(older)
         #expect(try store.load() == .init(items: [older, newer], quarantined: 0))
@@ -91,6 +91,70 @@ private func item(_ name: String = "a.jpg", at seconds: TimeInterval = 0) -> Que
         #expect(FileManager.default.fileExists(atPath: outside.path()))
     }
 
+    @Test func leavesUnreadableAndNewerRecordsInPlace() throws {
+        let folder = try TempFolder()
+        let store = QueueStore(directory: folder.url)
+        let locked = item("a.jpg"), newer = item("b.jpg")
+        try store.save(locked)
+        // Unreadable right now, like a record before first unlock.
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: store.recordURL(for: locked.id).path())
+        let json = String(decoding: try JSONEncoder().encode(newer), as: UTF8.self)
+        #expect(json.contains("\"schemaVersion\":1"))
+        try Data(json.replacingOccurrences(of: "\"schemaVersion\":1", with: "\"schemaVersion\":2").utf8)
+            .write(to: store.recordURL(for: newer.id))
+
+        #expect(try store.load() == .init(items: [], deferred: 2))
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: store.recordURL(for: locked.id).path())
+        #expect(try store.load() == .init(items: [locked], deferred: 1))
+    }
+
+    @Test func readsAtMostMaxItemsAndReportsTheRest() throws {
+        let folder = try TempFolder()
+        let store = QueueStore(directory: folder.url, maxItems: 2)
+        for index in 0 ..< 3 { try store.save(item("\(index).jpg", at: Double(index))) }
+        let loaded = try store.load()
+        #expect(loaded.items.count == 2 && loaded.overflow == 1 && loaded.quarantined == 0)
+    }
+
+    @Test func ordersItemsCreatedAtTheSameTimeByID() throws {
+        let folder = try TempFolder()
+        let store = QueueStore(directory: folder.url)
+        let items = (0 ..< 4).map { item("\($0).jpg") }
+        for upload in items { try store.save(upload) }
+        #expect(try store.load().items == items.sorted { $0.id.uuidString < $1.id.uuidString })
+    }
+
+    @Test func keepsTheBackupExclusionAcrossSaves() throws {
+        let folder = try TempFolder()
+        let store = QueueStore(directory: folder.url.appending(path: "queue"))
+        var upload = item()
+        try store.save(upload)
+        upload.apply(.requestFailed(.storageUnavailable, clientUploadID: upload.clientUploadID), now: Date())
+        try store.save(upload)
+        _ = try store.load()
+        #expect(try store.directory.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+    }
+
+    @Test func refusesNonCanonicalNamesAndSharedStagedFiles() throws {
+        let folder = try TempFolder()
+        let store = QueueStore(directory: folder.url)
+        let first = item("a.jpg", at: 0), second = item("a.jpg", at: 5), lower = item("b.jpg")
+        try store.save(first)
+        try store.save(second)
+        try JSONEncoder().encode(lower).write(to: folder.url.appending(path: "\(lower.id.uuidString.lowercased()).json"))
+        #expect(try store.load() == .init(items: [first], quarantined: 2))
+    }
+
+    @Test func sweepsLeftoversFromInterruptedWrites() throws {
+        let folder = try TempFolder()
+        let store = QueueStore(directory: folder.url)
+        try store.save(item())
+        let leftover = folder.url.appending(path: "\(UUID().uuidString).json.sb-1234")
+        try Data("partial".utf8).write(to: leftover)
+        _ = try store.load()
+        #expect(!FileManager.default.fileExists(atPath: leftover.path()))
+    }
+
     @Test func deletesBadRecordsOnceTheQuarantineIsFull() throws {
         let folder = try TempFolder()
         let store = QueueStore(directory: folder.url)
@@ -113,8 +177,8 @@ private func item(_ name: String = "a.jpg", at seconds: TimeInterval = 0) -> Que
         let root = folder.url.appending(path: "staging")
         try FileManager.default.createDirectory(at: root.appending(path: "ev"), withIntermediateDirectories: true)
         try Data("abcd".utf8).write(to: root.appending(path: "ev/a.jpg"))
-        let url = try StagingArea(root: root).url(for: staged("ev/a.jpg"))
-        #expect(try Data(contentsOf: url) == Data("abcd".utf8))
+        let handle = try StagingArea(root: root).open(staged("ev/a.jpg"))
+        #expect(try handle.readToEnd() == Data("abcd".utf8))
     }
 
     @Test func refusesMissingChangedAndNonFiles() throws {
@@ -122,9 +186,26 @@ private func item(_ name: String = "a.jpg", at seconds: TimeInterval = 0) -> Que
         let area = StagingArea(root: folder.url)
         try Data("abcd".utf8).write(to: folder.url.appending(path: "a.jpg"))
         try FileManager.default.createDirectory(at: folder.url.appending(path: "dir"), withIntermediateDirectories: true)
-        #expect(throws: StagingArea.Problem.missing) { try area.url(for: staged("b.jpg")) }
-        #expect(throws: StagingArea.Problem.sizeChanged) { try area.url(for: staged("a.jpg", size: 5)) }
-        #expect(throws: StagingArea.Problem.notAFile) { try area.url(for: staged("dir")) }
+        #expect(throws: StagingArea.Problem.missing) { try area.open(staged("b.jpg")) }
+        #expect(throws: StagingArea.Problem.sizeChanged) { try area.open(staged("a.jpg", size: 5)) }
+        #expect(throws: StagingArea.Problem.notAFile) { try area.open(staged("dir")) }
+    }
+
+    @Test func refusesHardLinksFifosAndUnreadableFiles() throws {
+        let folder = try TempFolder()
+        let area = StagingArea(root: folder.url)
+        let file = folder.url.appending(path: "a.jpg")
+        try Data("abcd".utf8).write(to: file)
+        try FileManager.default.linkItem(at: file, to: folder.url.appending(path: "b.jpg"))
+        #expect(throws: StagingArea.Problem.notAFile) { try area.open(staged("b.jpg")) }
+
+        #expect(mkfifo(folder.url.appending(path: "f.jpg").path(), 0o600) == 0)
+        #expect(throws: StagingArea.Problem.notAFile) { try area.open(staged("f.jpg")) }
+
+        let locked = folder.url.appending(path: "c.jpg")
+        try Data("abcd".utf8).write(to: locked)
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: locked.path())
+        #expect(throws: StagingArea.Problem.unreadable) { try area.open(staged("c.jpg")) }
     }
 
     @Test func refusesSymlinksThatLeaveTheFolder() throws {
@@ -136,8 +217,8 @@ private func item(_ name: String = "a.jpg", at seconds: TimeInterval = 0) -> Que
         try FileManager.default.createSymbolicLink(at: root.appending(path: "a.jpg"), withDestinationURL: secret)
         try FileManager.default.createSymbolicLink(at: root.appending(path: "up"), withDestinationURL: folder.url)
         let area = StagingArea(root: root)
-        #expect(throws: StagingArea.Problem.outsideStaging) { try area.url(for: staged("a.jpg")) }
-        #expect(throws: StagingArea.Problem.outsideStaging) { try area.url(for: staged("up/secret.jpg")) }
+        #expect(throws: StagingArea.Problem.outsideStaging) { try area.open(staged("a.jpg")) }
+        #expect(throws: StagingArea.Problem.outsideStaging) { try area.open(staged("up/secret.jpg")) }
     }
 
     @Test func refusesAPrefixLookalikeFolder() throws {
@@ -148,6 +229,6 @@ private func item(_ name: String = "a.jpg", at seconds: TimeInterval = 0) -> Que
         try FileManager.default.createDirectory(at: sibling, withIntermediateDirectories: true)
         try Data("abcd".utf8).write(to: sibling.appending(path: "a.jpg"))
         try FileManager.default.createSymbolicLink(at: root.appending(path: "s"), withDestinationURL: sibling)
-        #expect(throws: StagingArea.Problem.outsideStaging) { try StagingArea(root: root).url(for: staged("s/a.jpg")) }
+        #expect(throws: StagingArea.Problem.outsideStaging) { try StagingArea(root: root).open(staged("s/a.jpg")) }
     }
 }

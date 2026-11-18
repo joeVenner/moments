@@ -13,8 +13,8 @@ import Foundation
 public struct QueueStore: Sendable {
     /// Records larger than this are not read (a valid one is ~1 KB).
     public static let maxRecordBytes = 64 * 1024
-    /// At most this many items are loaded, oldest first.
-    public static let maxItems = 1000
+    /// The default cap on queued items.
+    public static let defaultMaxItems = 1000
     /// Invalid records kept for diagnosis; beyond this they are deleted.
     public static let maxQuarantined = 20
 
@@ -24,13 +24,29 @@ public struct QueueStore: Sendable {
         public let items: [QueuedUpload]
         /// Records that couldn't be used and were set aside.
         public let quarantined: Int
+        /// Records left in place for a later launch: unreadable right now
+        /// (before first unlock after a reboot) or written by a newer app.
+        public let deferred: Int
+        /// Records beyond `maxItems`, left on disk and not loaded. The
+        /// engine refuses new items while the queue is full.
+        public let overflow: Int
+
+        public init(items: [QueuedUpload], quarantined: Int = 0, deferred: Int = 0, overflow: Int = 0) {
+            self.items = items
+            self.quarantined = quarantined
+            self.deferred = deferred
+            self.overflow = overflow
+        }
     }
 
     public let directory: URL
+    /// At most this many records are read per load, oldest files first.
+    public let maxItems: Int
     var quarantine: URL { directory.appending(path: "quarantine", directoryHint: .isDirectory) }
 
-    public init(directory: URL) {
+    public init(directory: URL, maxItems: Int = QueueStore.defaultMaxItems) {
         self.directory = directory
+        self.maxItems = maxItems
     }
 
     /// `Application Support/UploadQueue` in the app's own container.
@@ -41,7 +57,7 @@ public struct QueueStore: Sendable {
 
     /// Writes the item atomically, replacing its previous record.
     public func save(_ item: QueuedUpload) throws {
-        try prepareDirectory()
+        if !FileManager.default.fileExists(atPath: directory.path(percentEncoded: false)) { try prepareDirectory() }
         let data = try JSONEncoder().encode(item)
         try data.write(to: recordURL(for: item.id), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
@@ -55,47 +71,99 @@ public struct QueueStore: Sendable {
         }
     }
 
-    /// Reads every record. Unreadable, oversized, undecodable or misnamed
-    /// ones are moved to the quarantine folder (or deleted when it is full)
-    /// so they don't fail every later launch.
+    /// Reads the records. Ones that can never be used (oversized, not a
+    /// plain file, undecodable, misnamed) move to the quarantine folder, or
+    /// are deleted when it is full, so they don't fail every launch. Ones
+    /// that merely can't be read now stay in place: a read error is never
+    /// taken for corruption, or a wake before first unlock would wipe the
+    /// queue. Throws when the folder itself can't be listed.
     public func load() throws -> Loaded {
         let fileManager = FileManager.default
-        guard fileManager.fileExists(atPath: directory.path(percentEncoded: false)) else {
-            return Loaded(items: [], quarantined: 0)
+        guard fileManager.fileExists(atPath: directory.path(percentEncoded: false)) else { return Loaded(items: []) }
+        try prepareDirectory()
+        let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey, .creationDateKey]
+        let urls = try fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles])
+        sweepLeftovers(urls)
+        // Capped before reading, oldest files first, so a flood of records
+        // costs at most `maxItems` reads.
+        let records = urls.filter { $0.pathExtension == "json" }
+            .map { (url: $0, created: (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast) }
+            .sorted { ($0.created, $0.url.lastPathComponent) < ($1.created, $1.url.lastPathComponent) }
+        var found: [(item: QueuedUpload, url: URL)] = []
+        var quarantined = 0, deferred = 0
+        for record in records.prefix(maxItems) {
+            switch read(record.url) {
+            case let .item(item): found.append((item, record.url))
+            case .unusable:
+                setAside(record.url)
+                quarantined += 1
+            case .notNow: deferred += 1
+            }
         }
-        let urls = try fileManager.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey], options: [.skipsHiddenFiles]
-        )
+        found.sort { ($0.item.createdAt, $0.item.id.uuidString) < ($1.item.createdAt, $1.item.id.uuidString) }
+        // Each staged file belongs to one item; a later record naming the
+        // same file (tampering or a bug) would upload it twice or elsewhere.
         var items: [QueuedUpload] = []
-        var quarantined = 0
-        for url in urls where url.pathExtension == "json" {
-            if let item = read(url) {
+        var paths: Set<String> = []
+        for (item, url) in found {
+            if paths.insert(item.file.relativePath).inserted {
                 items.append(item)
             } else {
                 setAside(url)
                 quarantined += 1
             }
         }
-        items.sort { ($0.createdAt, $0.id.uuidString) < ($1.createdAt, $1.id.uuidString) }
-        return Loaded(items: Array(items.prefix(Self.maxItems)), quarantined: quarantined)
+        return Loaded(items: items, quarantined: quarantined, deferred: deferred, overflow: max(records.count - maxItems, 0))
     }
 
     func recordURL(for id: UUID) -> URL {
         directory.appending(path: "\(id.uuidString).json", directoryHint: .notDirectory)
     }
 
+    private enum ReadResult {
+        case item(QueuedUpload)
+        /// Can never be used: set it aside.
+        case unusable
+        /// Can't be read now, or needs a newer app: leave it.
+        case notNow
+    }
+
     /// The record, if it is a plain, small file holding a valid item whose
-    /// id matches its name (so one record can't shadow another).
-    private func read(_ url: URL) -> QueuedUpload? {
-        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]),
-              values.isRegularFile == true, values.isSymbolicLink != true,
-              let size = values.fileSize, size <= Self.maxRecordBytes,
-              let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent),
-              let data = try? Data(contentsOf: url),
-              let item = try? JSONDecoder().decode(QueuedUpload.self, from: data),
-              item.id == id
-        else { return nil }
-        return item
+    /// id matches its canonical name (so one record can't shadow another).
+    /// Read through one descriptor opened without following links and
+    /// checked with `fstat`, so a file swapped after listing can't make it
+    /// read something else or something huge.
+    private func read(_ url: URL) -> ReadResult {
+        guard let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent),
+              url.lastPathComponent == recordURL(for: id).lastPathComponent
+        else { return .unusable }
+        let data: Data
+        switch FileReader.read(url, maxBytes: Self.maxRecordBytes) {
+        case let .data(read): data = read
+        case .unusable: return .unusable
+        case .notNow: return .notNow
+        }
+        guard let version = try? JSONDecoder().decode(Version.self, from: data) else { return .unusable }
+        if let found = version.schemaVersion, found > QueuedUpload.schemaVersion { return .notNow }
+        guard let item = try? JSONDecoder().decode(QueuedUpload.self, from: data), item.id == id else { return .unusable }
+        return .item(item)
+    }
+
+    /// Just the version, to tell "written by a newer app" from "corrupt".
+    private struct Version: Decodable {
+        let schemaVersion: Int?
+    }
+
+    /// Temporary files an interrupted atomic write left behind
+    /// (`<id>.json.<suffix>`); nothing writes while the queue loads.
+    private func sweepLeftovers(_ urls: [URL]) {
+        for url in urls {
+            let name = url.lastPathComponent
+            guard let dot = name.range(of: ".json."), UUID(uuidString: String(name[..<dot.lowerBound])) != nil,
+                  (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+            else { continue }
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     private func setAside(_ url: URL) {
@@ -108,8 +176,15 @@ public struct QueueStore: Sendable {
         try? fileManager.removeItem(at: url)
     }
 
+    /// Creates the folder if needed and (re)applies its protection class
+    /// and backup exclusion, which `createDirectory` skips for an existing
+    /// folder.
     private func prepareDirectory() throws {
         try createDirectory(directory)
+        try FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: directory.path(percentEncoded: false)
+        )
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         var url = directory
