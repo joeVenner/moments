@@ -2,9 +2,10 @@ import Foundation
 import MomentsAPI
 import MomentsDomain
 
-/// Which hosts storage URLs may point at. The app passes its storage
-/// domains; nothing else is accepted, so even a compromised API can't send
-/// photo bytes to a host of its choosing.
+/// Which hosts storage URLs may point at. The app passes its own storage
+/// account's host; nothing else is accepted, so even a compromised API
+/// can't send photo bytes to a host of its choosing. Never allow the shared
+/// `r2.cloudflarestorage.com` parent: every R2 customer has a host under it.
 public struct StorageHostPolicy: Sendable {
     /// Hosts allowed as is or as a parent domain (`r2.cloudflarestorage.com`
     /// allows `acct.r2.cloudflarestorage.com`), compared on a label boundary.
@@ -14,8 +15,13 @@ public struct StorageHostPolicy: Sendable {
         self.domains = domains.map { $0.lowercased() }
     }
 
-    /// Cloudflare R2's S3 endpoints.
-    public static let cloudflareR2 = StorageHostPolicy(domains: ["r2.cloudflarestorage.com"])
+    /// Exactly one R2 account's S3 host, `<account id>.r2.cloudflarestorage.com`.
+    /// Nil when the id isn't a 32-character hex account id.
+    public static func r2Account(_ accountID: String) -> StorageHostPolicy? {
+        let id = accountID.lowercased()
+        guard id.count == 32, id.allSatisfy(\.isHexDigit) else { return nil }
+        return StorageHostPolicy(domains: ["\(id).r2.cloudflarestorage.com"])
+    }
 
     func allows(_ host: String) -> Bool {
         domains.contains { host == $0 || host.hasSuffix("." + $0) }

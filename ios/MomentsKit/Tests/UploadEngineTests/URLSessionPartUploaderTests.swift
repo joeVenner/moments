@@ -4,6 +4,8 @@ import MomentsDomain
 import Testing
 @testable import UploadEngine
 
+private let accountID = "0123456789abcdef0123456789abcdef"
+
 /// Answers storage requests in tests and records what was sent.
 final class StorageStub: URLProtocol, @unchecked Sendable {
     struct Sent: Sendable {
@@ -55,7 +57,7 @@ final class StorageStub: URLProtocol, @unchecked Sendable {
 
 /// Hands out part URLs on a chosen host.
 final class PartURLService: UploadService, @unchecked Sendable {
-    var host = "acct.r2.cloudflarestorage.com"
+    var host = "\(accountID).r2.cloudflarestorage.com"
     /// Per-part host overrides.
     var hosts: [Int: String] = [:]
     private(set) var requested: [[Int]?] = []
@@ -101,7 +103,7 @@ private struct Setup {
     func uploader() -> URLSessionPartUploader {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StorageStub.self]
-        return URLSessionPartUploader(service: service, staging: staging, hosts: .cloudflareR2, configuration: configuration)
+        return URLSessionPartUploader(service: service, staging: staging, hosts: .r2Account(accountID)!, configuration: configuration)
     }
 
     func upload(_ parts: [Int], with uploader: URLSessionPartUploader? = nil) async throws -> Set<Int> {
@@ -177,16 +179,23 @@ private struct Setup {
         ("https://0177.0.0.1/b", nil), ("https://1.2.3.0x4/b", nil),
         ("https://localhost/b", nil), ("https://a.localhost/b", nil), ("https://user:pw@s.example.com/b", nil),
         ("https://10.0.0.1./b", nil), ("https://nas/b", nil), ("https://printer.local/b", nil),
-        ("https://metadata.internal/b", nil), ("https://s.example.com./b", nil),
+        ("https://metadata.internal/b", nil), ("https://s.example.com./b", nil), ("https://nas.home/b", nil),
+        ("https://box.lan/b", nil), ("https://s.example.com%2eevil.com/b", "s.example.com.evil.com"),
+        ("https://%61cct.example.com/b", "acct.example.com"),
     ])
     func acceptsOnlyNamedHttpsHosts(url: String, host: String?) {
         #expect(URLSessionPartUploader.storageHost(of: URL(string: url)!) == host)
     }
 
-    @Test func allowsOnlyTheConfiguredStorageDomains() {
-        let policy = StorageHostPolicy.cloudflareR2
-        #expect(policy.allows("acct.r2.cloudflarestorage.com") && policy.allows("r2.cloudflarestorage.com"))
-        #expect(!policy.allows("evilr2.cloudflarestorage.com.example.com") && !policy.allows("xr2.cloudflarestorage.com"))
+    @Test func allowsOnlyOurStorageAccount() throws {
+        let policy = try #require(StorageHostPolicy.r2Account(accountID.uppercased()))
+        #expect(policy.allows("\(accountID).r2.cloudflarestorage.com"))
+        // Another R2 customer's account, the shared parent, lookalikes.
+        #expect(!policy.allows("ffffffffffffffffffffffffffffffff.r2.cloudflarestorage.com"))
+        #expect(!policy.allows("r2.cloudflarestorage.com"))
+        #expect(!policy.allows("x\(accountID).r2.cloudflarestorage.com"))
+        #expect(!policy.allows("\(accountID).r2.cloudflarestorage.com.example.com"))
+        #expect(StorageHostPolicy.r2Account("not-an-account") == nil)
     }
 
     @Test func refusesURLsForAnotherPartOrHost() async throws {
@@ -195,6 +204,8 @@ private struct Setup {
         await #expect(throws: MomentsAPIError.unexpectedResponse) { try await setup.upload([1]) }
         #expect(URLSessionPartUploader.partNumber(in: URL(string: "https://s.example.com/k?partNumber=2&partNumber=3")!) == nil)
         #expect(URLSessionPartUploader.partNumber(in: URL(string: "https://s.example.com/k?partNumber=2")!) == 2)
+        #expect(URLSessionPartUploader.partNumber(in: URL(string: "https://s.example.com/partNumber=2/k")!) == nil)
+        #expect(URLSessionPartUploader.partNumber(in: URL(string: "https://s.example.com/k#partNumber=2")!) == nil)
         #expect(StorageStub.sent.isEmpty)
     }
 
@@ -216,6 +227,17 @@ private struct Setup {
         try setup.staging.clearPartFiles()
     }
 
+    @Test func clearingRemovesALinkedPartsFolderNotItsTarget() throws {
+        let setup = try Setup()
+        let target = setup.folder.url.appending(path: "elsewhere")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        try Data("keep".utf8).write(to: target.appending(path: "f"))
+        try FileManager.default.createSymbolicLink(at: setup.staging.root.appending(path: ".parts"), withDestinationURL: target)
+        try setup.staging.clearPartFiles()
+        #expect(FileManager.default.fileExists(atPath: target.appending(path: "f").path()))
+        #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: setup.staging.root.appending(path: ".parts").path())) == nil)
+    }
+
     @Test func refusesAPartsFolderThatIsALink() throws {
         let setup = try Setup()
         try FileManager.default.createSymbolicLink(
@@ -229,11 +251,11 @@ private struct Setup {
         let setup = try Setup()
         let uploader = setup.uploader()
         #expect(try await setup.upload([1], with: uploader) == [1])
-        setup.service.host = "other.r2.cloudflarestorage.com"
+        setup.service.host = "other.\(accountID).r2.cloudflarestorage.com"
         await #expect(throws: MomentsAPIError.unexpectedResponse) { try await setup.upload([2], with: uploader) }
         // Nor within one batch.
-        setup.service.host = "acct.r2.cloudflarestorage.com"
-        setup.service.hosts = [3: "other.r2.cloudflarestorage.com"]
+        setup.service.host = "\(accountID).r2.cloudflarestorage.com"
+        setup.service.hosts = [3: "other.\(accountID).r2.cloudflarestorage.com"]
         await #expect(throws: MomentsAPIError.unexpectedResponse) { try await setup.upload([2, 3], with: uploader) }
         #expect(StorageStub.sent.count == 1)
     }

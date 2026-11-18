@@ -101,6 +101,10 @@ public struct StagingArea: Sendable {
                 at: folder, withIntermediateDirectories: true,
                 attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
             )
+            // createDirectory skips attributes for an existing folder.
+            try FileManager.default.setAttributes(
+                [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: path
+            )
             var values = URLResourceValues()
             values.isExcludedFromBackup = true
             var url = folder
@@ -113,8 +117,10 @@ public struct StagingArea: Sendable {
         return folder
     }
 
-    /// Deletes every part file (call at launch, before uploading). Removes
-    /// a link in the folder's place without following it.
+    /// Deletes every part file. Call only at launch, before anything
+    /// uploads, from the one process that owns the queue (a background
+    /// session in another process must not be running then). Removes a link
+    /// in the folder's place without following it.
     public func clearPartFiles() throws {
         let folder = root.appending(path: ".parts", directoryHint: .isDirectory)
         do {
