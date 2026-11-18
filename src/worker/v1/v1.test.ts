@@ -10,7 +10,9 @@ import {
   EventSchema,
   FeedChangesSchema,
   FeedPageSchema,
+  HighlightsSchema,
   JoinResponseSchema,
+  LeaderboardSchema,
   ReactionSchema,
   TooManyAttemptsSchema,
 } from "./schemas";
@@ -298,6 +300,115 @@ describe("POST /events/{slug}/participants", () => {
     const res = await call("/events/party/participants", { method: "POST", body: "nickname=Sara" });
     expect(res.status).toBe(415);
     expect(await res.json()).toEqual({ error: "invalid request", code: "invalid_request" });
+  });
+});
+
+describe("highlights and leaderboard", () => {
+  function heart(momentId: string, reactorId: string) {
+    sqlite.raw
+      .prepare("INSERT INTO moment_reactions (id, moment_id, event_id, reactor_id) VALUES (?, ?, 'event-1', ?)")
+      .run(`${momentId}-${reactorId}`, momentId, reactorId);
+  }
+
+  function addGuest(id: string, nickname: string, joinedAt: string, eventId = "event-1") {
+    sqlite.raw
+      .prepare("INSERT INTO participants (id, event_id, nickname, avatar_seed, joined_at) VALUES (?, ?, ?, 'seed', ?)")
+      .run(id, eventId, nickname, joinedAt);
+  }
+
+  function addMomentBy(id: string, uploader: string, points: number, eventId = "event-1") {
+    sqlite.raw
+      .prepare(
+        "INSERT INTO moments (id, event_id, uploader_name, media_url, mime_type, points_awarded) VALUES (?, ?, ?, ?, 'image/jpeg', ?)"
+      )
+      .run(id, eventId, uploader, `/media/events/${eventId}/moments/${id}.jpg`, points);
+  }
+
+  it("ranks visible moments by hearts, newest first among ties, with this device's state", async () => {
+    for (const id of ["m1", "m2", "m3", "m4"]) addMoment(id);
+    heart("m1", "aaaaaaaa1");
+    heart("m3", "aaaaaaaa1");
+    heart("m3", "bbbbbbbb2");
+    heart("m4", "bbbbbbbb2");
+    sqlite.raw.prepare("UPDATE moments SET moderation_status = 'hidden' WHERE id = 'm4'").run();
+    const res = await call("/events/party/highlights?reactor_id=aaaaaaaa1&limit=3");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    const body = exact(HighlightsSchema, await res.json());
+    expect(body.moments.map((m) => [m.id, m.reaction_count, m.reacted])).toEqual([
+      ["m3", 2, true],
+      ["m1", 1, true],
+      ["m2", 0, false],
+    ]);
+  });
+
+  it("signs private-event media for the grant holder", async () => {
+    seedEvent("event-p", "secret", "private");
+    addMoment("mp", "event-p");
+    expect((await call("/events/secret/highlights")).status).toBe(401);
+    expect((await call("/events/secret/leaderboard")).status).toBe(401);
+    const grant = await signAccessGrant(SECRET, {
+      eventId: "event-p",
+      accessVersion: 1,
+      expiresAt: Math.floor(Date.now() / 1000) + 600,
+    });
+    const res = await call("/events/secret/highlights", { headers: { "X-Event-Access": grant } });
+    const body = (await res.json()) as { moments: { media: { url: string } }[] };
+    expect(body.moments[0].media.url).toMatch(/[?&]at=/);
+  });
+
+  it("rejects a bad limit and clamps big ones", async () => {
+    expect((await call("/events/party/highlights?limit=lots")).status).toBe(400);
+    for (let i = 0; i < 52; i += 1) addMoment(`bulk-${i}`);
+    const body = (await (await call("/events/party/highlights?limit=500")).json()) as { moments: unknown[] };
+    expect(body.moments).toHaveLength(50);
+  });
+
+  it("ranks guests by points from visible moments, sharing ranks on ties", async () => {
+    addGuest("p-sara", "Sara", "2026-11-18 10:00:00");
+    addGuest("p-omar", "Omar", "2026-11-18 10:05:00");
+    addGuest("p-lina", "Lina", "2026-11-18 10:01:00");
+    addGuest("p-zed", "Zed", "2026-11-18 10:10:00");
+    addGuest("p-ali", "Ali", "2026-11-18 10:02:00");
+    addMomentBy("ali-hidden", "Ali", 30);
+    sqlite.raw.prepare("UPDATE moments SET moderation_status = 'hidden' WHERE id = 'ali-hidden'").run();
+    addMomentBy("a", "Sara", 10);
+    addMomentBy("b", "Omar", 7);
+    addMomentBy("c", "Omar", 3);
+    addMomentBy("d", "Lina", 4);
+    addMomentBy("hidden", "Lina", 50);
+    sqlite.raw.prepare("UPDATE moments SET moderation_status = 'hidden' WHERE id = 'hidden'").run();
+    // Same nickname in another event doesn't count here.
+    seedEvent("event-2", "other");
+    addMomentBy("x", "Zed", 99, "event-2");
+    const res = await call("/events/party/leaderboard");
+    expect(res.status).toBe(200);
+    const body = exact(LeaderboardSchema, await res.json());
+    expect(body.entries.map((e) => [e.nickname, e.total_points, e.moment_count, e.rank])).toEqual([
+      ["Sara", 10, 1, 1],
+      ["Omar", 10, 2, 1],
+      ["Lina", 4, 1, 3],
+      // Equal points: the earlier joiner first.
+      ["Ali", 0, 0, 4],
+      ["Zed", 0, 0, 4],
+    ]);
+    expect(body.entries[0]).toMatchObject({ participant_id: "p-sara", avatar_seed: "seed" });
+  });
+
+  it("rate limits both per event and IP before reading", async () => {
+    const limit = vi.fn().mockResolvedValue({ success: false });
+    extraEnv = { GUEST_READ_LIMITER: { limit } };
+    for (const path of ["highlights", "leaderboard"]) {
+      const res = await call(`/events/party/${path}`, { headers: { "CF-Connecting-IP": "198.51.100.4" } });
+      expect(res.status).toBe(429);
+      expect(await res.json()).toMatchObject({ code: "rate_limited" });
+    }
+    expect(limit).toHaveBeenCalledWith({ key: "event-1:ip:198.51.100.4" });
+  });
+
+  it("is empty for an event nobody joined", async () => {
+    expect(await (await call("/events/party/leaderboard")).json()).toEqual({ entries: [] });
+    expect(await (await call("/events/party/highlights")).json()).toEqual({ moments: [] });
   });
 });
 

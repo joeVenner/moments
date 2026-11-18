@@ -13,6 +13,8 @@ import type { MomentRow } from "./types";
 export const FEED_DEFAULT_LIMIT = 30;
 export const FEED_MAX_LIMIT = 100;
 export const CHANGES_MAX_LIMIT = 200;
+export const HIGHLIGHTS_DEFAULT_LIMIT = 30;
+export const HIGHLIGHTS_MAX_LIMIT = 50;
 
 type RawMediaColumn =
   | "width"
@@ -123,6 +125,25 @@ export async function getFeedPage(
     next_before: hasOlder ? moments[moments.length - 1].seq : null,
     cursor: Number(counter.results[0]?.value ?? 0),
   };
+}
+
+/**
+ * Most-hearted visible moments, newest first among ties (the web's
+ * highlights order, with seq as the tiebreak).
+ */
+export async function getHighlights(
+  db: D1Database,
+  input: { eventId: string; limit: number; reactorId: string }
+): Promise<FeedMoment[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ${MOMENT_COLUMNS} FROM moments m
+        WHERE m.event_id = ? AND m.moderation_status = 'approved'
+        ORDER BY reaction_count DESC, m.seq DESC LIMIT ?`
+    )
+    .bind(input.reactorId, input.eventId, input.limit)
+    .all<FeedRow>();
+  return results.map(toFeedMoment);
 }
 
 /** Everything that changed in an event after `since`, oldest change first. */

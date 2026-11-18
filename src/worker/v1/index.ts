@@ -11,9 +11,13 @@ import {
   FEED_MAX_LIMIT,
   getFeedChanges,
   getFeedPage,
+  getHighlights,
+  HIGHLIGHTS_DEFAULT_LIMIT,
+  HIGHLIGHTS_MAX_LIMIT,
   parseCursor,
   type FeedMoment,
 } from "../feed";
+import { getLeaderboard } from "../leaderboard";
 import { GUEST_TOKEN_HEADER, joinEventAsGuest, resolveGuestSession, toPublicParticipant } from "../guestIdentity";
 import { type ReactionState, setReaction } from "../reactions";
 import { signMomentsForEvent, STREAM_SIGNING_UNAVAILABLE, StreamSigningError } from "../streamSigning";
@@ -29,7 +33,10 @@ import {
   FeedChangesSchema,
   FeedPageSchema,
   FeedQuerySchema,
+  HighlightsQuerySchema,
+  HighlightsSchema,
   JoinHeadersSchema,
+  LeaderboardSchema,
   MomentParamSchema,
   ReactionHeadersSchema,
   ReactionRequestSchema,
@@ -102,6 +109,33 @@ const getFeedRoute = createRoute({
   responses: {
     200: json(FeedPageSchema, "Newest-first page of visible moments"),
     400: json(ErrorSchema, "Invalid query"),
+    ...commonErrors,
+  },
+});
+
+const getHighlightsRoute = createRoute({
+  method: "get",
+  path: "/events/{slug}/highlights",
+  operationId: "getHighlights",
+  tags: ["Guest"],
+  request: { params: SlugParamSchema, query: HighlightsQuerySchema, headers: EventHeadersSchema },
+  responses: {
+    200: json(HighlightsSchema, "The event's most-hearted visible moments"),
+    400: json(ErrorSchema, "Invalid query"),
+    429: json(ErrorSchema, "`rate_limited`: too many requests from this network; slow down"),
+    ...commonErrors,
+  },
+});
+
+const getLeaderboardRoute = createRoute({
+  method: "get",
+  path: "/events/{slug}/leaderboard",
+  operationId: "getLeaderboard",
+  tags: ["Guest"],
+  request: { params: SlugParamSchema, headers: EventHeadersSchema },
+  responses: {
+    200: json(LeaderboardSchema, "Guests ranked by points from visible moments"),
+    429: json(ErrorSchema, "`rate_limited`: too many requests from this network; slow down"),
     ...commonErrors,
   },
 });
@@ -284,6 +318,36 @@ v1.openapi(getFeedRoute, async (c) => {
   });
   c.header("Cache-Control", "no-store");
   return c.json({ ...page, moments: await signFeedMedia(c.env, c.get("event"), page.moments) }, 200);
+});
+
+/**
+ * Highlights and the leaderboard read the whole event on every call, so they
+ * are limited per event and IP (no session lookup: reads stay one query).
+ */
+async function isReadLimited(c: Context<V1Env>): Promise<boolean> {
+  if (!c.env.GUEST_READ_LIMITER) return false;
+  const key = `${c.get("event").id}:ip:${c.req.header("CF-Connecting-IP") ?? "unknown"}`;
+  return !(await c.env.GUEST_READ_LIMITER.limit({ key })).success;
+}
+
+const RATE_LIMITED = { error: "too many requests", code: "rate_limited" };
+
+v1.openapi(getHighlightsRoute, async (c) => {
+  if (await isReadLimited(c)) return c.json(RATE_LIMITED, 429);
+  const query = c.req.valid("query");
+  const moments = await getHighlights(c.env.DB, {
+    eventId: c.get("event").id,
+    limit: clampLimit(query.limit, HIGHLIGHTS_DEFAULT_LIMIT, HIGHLIGHTS_MAX_LIMIT),
+    reactorId: query.reactor_id ?? "",
+  });
+  c.header("Cache-Control", "no-store");
+  return c.json({ moments: await signFeedMedia(c.env, c.get("event"), moments) }, 200);
+});
+
+v1.openapi(getLeaderboardRoute, async (c) => {
+  if (await isReadLimited(c)) return c.json(RATE_LIMITED, 429);
+  c.header("Cache-Control", "no-store");
+  return c.json({ entries: await getLeaderboard(c.env.DB, c.get("event").id) }, 200);
 });
 
 v1.openapi(getFeedChangesRoute, async (c) => {

@@ -109,6 +109,30 @@ export const FeedChangesSchema = z
   })
   .openapi("FeedChanges");
 
+export const HighlightsSchema = z
+  .object({ moments: z.array(MomentSchema).openapi({ description: "Most-hearted first, newest first among ties" }) })
+  .openapi("Highlights");
+
+export const HighlightsQuerySchema = z.object({
+  limit: limit.optional(),
+  reactor_id: z.string().max(100).optional(),
+});
+
+export const LeaderboardEntrySchema = z
+  .object({
+    participant_id: z.string(),
+    nickname: z.string(),
+    avatar_seed: z.string().nullable(),
+    total_points: z.number().int(),
+    moment_count: z.number().int(),
+    rank: z.number().int().openapi({ description: "1-based; equal points share a rank (1, 1, 3)" }),
+  })
+  .openapi("LeaderboardEntry");
+
+export const LeaderboardSchema = z
+  .object({ entries: z.array(LeaderboardEntrySchema).openapi({ description: "Best first; earlier joiners first among ties. At most 500 guests" }) })
+  .openapi("Leaderboard");
+
 export const SlugParamSchema = z.object({
   slug: z.string().min(1).max(200).openapi({ param: { name: "slug", in: "path" } }),
 });
