@@ -61,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New event PINs must be 6 to 20 characters. Existing shorter PINs keep working.
 - Setting a new PIN, or making a public event private again, revokes all previously issued access and rotates the invitation link.
 
+- Hearts now belong to the guest, not the device. A guest who joined reacts as themselves on the website and in the app: the server decides whose heart it is, so a client can no longer send hearts on another guest's behalf, and a guest sees their hearts on every device where they joined. Leaving an event takes back that guest's hearts. Clients without a guest identity keep their device id only until guest identities are required.
 ### Fixed
 
 - Website: going from one event straight to another no longer carries over the first event's screen state ("not found", the PIN prompt, the open tab, an upload or a join in progress).
