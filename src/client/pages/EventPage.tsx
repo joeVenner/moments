@@ -33,6 +33,7 @@ import { useI18n } from "../lib/i18n";
 import { EmptyCamera } from "../components/EmptyCamera";
 import { PAGE_RESUME_EVENT } from "../lib/uploadSync";
 import { UploadManager } from "../components/UploadManager";
+import { LeaveEventButton } from "../components/LeaveEventButton";
 import { EventAccessGate } from "../components/EventAccessGate";
 import { Highlights } from "../components/Highlights";
 
@@ -80,6 +81,9 @@ function EventPageForSlug() {
   const [event, setEvent] = useState<EventData | null>(null);
   const [moments, setMoments] = useState<PendingMoment[]>([]);
   const [nickname, setNicknameState] = useState<string | null>(null);
+  // Whether this browser holds the guest's token (what "Leave" needs). State,
+  // not a render-time read: a background rejoin can issue it later.
+  const [hasGuestToken, setHasGuestToken] = useState(false);
   // Why the nickname prompt is back (another device owns the saved name).
   const [gateProblem, setGateProblem] = useState<JoinProblem | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,6 +122,7 @@ function EventPageForSlug() {
     let isCurrent = true;
     const name = getNickname(slug);
     setNicknameState(name);
+    setHasGuestToken(getGuestToken(slug) !== null);
     setGateProblem(null);
     setMoments([]);
     setPage(1);
@@ -145,6 +150,7 @@ function EventPageForSlug() {
         // nickname without a guest token joins again in the background.
         if (!name) return;
         void rejoinIfTokenless(slug, name, { getGuestToken, join: joinEvent, ...sessionRejoinFlags }).then((problem) => {
+          if (isCurrent) setHasGuestToken(getGuestToken(slug) !== null);
           if (problem !== "nickname_taken") return;
           // Cleared even if this effect is stale: the "tried" flag is spent, so
           // the next run must find no nickname and show the prompt.
@@ -492,10 +498,34 @@ function EventPageForSlug() {
             <p className="truncate font-mono text-xs text-[var(--color-text-muted)]">
               {t("greetingName", { name: nickname })}
             </p>
-            <p className="font-mono text-xs">
-              <span className="text-[var(--color-text-muted)]">{t("yourPoints")} </span>
-              <span className="font-semibold text-[var(--color-accent-dark)]">{myPoints}</span>
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="font-mono text-xs">
+                <span className="text-[var(--color-text-muted)]">{t("yourPoints")} </span>
+                <span className="font-semibold text-[var(--color-accent-dark)]">{myPoints}</span>
+              </p>
+              {/* Only a guest with a token owns anything to delete. */}
+              {hasGuestToken && (
+                <LeaveEventButton
+                  slug={slug!}
+                  disabled={uploading}
+                  onLeft={() => {
+                    setNicknameState(null);
+                    setHasGuestToken(false);
+                    setGateProblem(null);
+                    setMyPoints(0);
+                    setParticipantVersion((v) => v + 1);
+                    // Their moments are gone: show the feed without them.
+                    listMoments(slug!, { limit: PAGE_SIZE, offset: 0 })
+                      .then((res) => {
+                        setMoments(res.moments);
+                        setTotal(res.total ?? 0);
+                        setPage(1);
+                      })
+                      .catch(() => {});
+                  }}
+                />
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -636,6 +666,7 @@ function EventPageForSlug() {
             if (outcome === "rate_limited" || outcome === "nickname_taken") return outcome;
             saveNickname(slug!, name);
             setNicknameState(name);
+            setHasGuestToken(getGuestToken(slug!) !== null);
             setGateProblem(null);
             // Bump the strip so the new guest (and their avatar) show up
             // immediately without a page refresh. Also refetch page 1 with the
