@@ -136,6 +136,15 @@ struct UploadModelTests {
         #expect(UploadModel.cleanCaption(" hi\nthere ") == "hi\nthere")
         #expect(UploadModel.cleanCaption("tab\there") == nil)
         #expect(UploadModel.cleanCaption("bell\u{7}") == nil)
+        for value in Array(0x202A ... 0x202E) + Array(0x2066 ... 0x2069) {
+            let hidden = String(UnicodeScalar(UInt32(value))!)
+            #expect(UploadModel.cleanCaption("gift\(hidden)txt.exe") == nil)
+        }
+        for value: UInt32 in [0x2029, 0x202F, 0x2065, 0x206A] {
+            #expect(UploadModel.cleanCaption("a\(String(UnicodeScalar(value)!))b") != nil)
+        }
+        // Joiners and direction marks are ordinary text (emoji, RTL scripts).
+        #expect(UploadModel.cleanCaption("👩\u{200D}👧 مرحبا\u{200F} می\u{200C}خواهم") != nil)
         #expect(UploadModel.cleanCaption(String(repeating: "a", count: 500)) != nil)
         #expect(UploadModel.cleanCaption(String(repeating: "a", count: 501)) == nil)
         // Counted like the server (UTF-16): 250 emoji are 500 units.

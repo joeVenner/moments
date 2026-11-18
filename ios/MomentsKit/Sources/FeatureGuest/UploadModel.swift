@@ -109,7 +109,8 @@ public final class UploadModel {
     public var remainingSlots: Int { max(0, Self.maxPicks - items.filter { $0.state != .shared }.count) }
     public var canShare: Bool { readyCount > 0 && !isPreparing && !isSharing && Self.cleanCaption(caption) != nil }
     public var isCaptionTooLong: Bool { caption.trimmingCharacters(in: .whitespacesAndNewlines).utf16.count > Self.maxCaptionLength }
-    /// Holds characters the server refuses (tabs and other controls).
+    /// Holds characters the server refuses (tabs, other controls, and
+    /// text-direction overrides).
     public var captionHasInvalidCharacters: Bool { !isCaptionTooLong && Self.cleanCaption(caption) == nil }
 
     /// Picks loaded but not yet prepared (or kept to retry).
@@ -235,8 +236,15 @@ public final class UploadModel {
     nonisolated static func cleanCaption(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.utf16.count <= maxCaptionLength else { return nil }
+        // Same rule as the server: no controls but line breaks, and no bidi
+        // embeddings, overrides or isolates. Joiners and direction marks
+        // (U+200B-200F) are fine: emoji and RTL text need them.
         let allowed = trimmed.unicodeScalars.allSatisfy { scalar in
-            scalar == "\n" || scalar == "\r" || !(scalar.value < 0x20 || scalar.value == 0x7F)
+            if scalar == "\n" || scalar == "\r" { return true }
+            switch scalar.value {
+            case 0 ..< 0x20, 0x7F, 0x202A ... 0x202E, 0x2066 ... 0x2069: return false
+            default: return true
+            }
         }
         return allowed ? trimmed : nil
     }
