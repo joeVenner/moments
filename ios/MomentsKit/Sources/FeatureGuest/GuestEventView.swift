@@ -15,6 +15,8 @@ public struct GuestEventView: View {
     @State private var leaderboard: LeaderboardModel?
     @State private var thumbnails: ThumbnailLoader?
     @State private var viewerImages: ThumbnailLoader?
+    /// The open upload screen's model (fresh each time it opens).
+    @State private var upload: UploadModel?
 
     public init(join: JoinModel, dependencies: GuestDependencies, rejoin: @escaping () -> Void) {
         self.join = join
@@ -36,6 +38,11 @@ public struct GuestEventView: View {
                             .tabItem { Label("Leaderboard", systemImage: "trophy") }
                     }
                     .tint(MomentsColor.accent)
+                    .overlay(alignment: .bottomTrailing) {
+                        if let uploads = dependencies.uploads, feed.phase != .accessLost, feed.phase != .failed(.eventGone) {
+                            shareButton(uploads)
+                        }
+                    }
                     if feed.phase == .accessLost {
                         Button("Join again", action: rejoin)
                             .buttonStyle(.momentsPrimary)
@@ -46,6 +53,11 @@ public struct GuestEventView: View {
             } else {
                 JoinView(model: join)
             }
+        }
+        .sheet(item: $upload) { model in
+            // However the sheet closes, unshared picks and files are dropped.
+            UploadView(model: model)
+                .onDisappear { model.discardAll() }
         }
         // The event ended for this guest: every tab stops; lost access also
         // drops cached images of the private event.
@@ -90,6 +102,24 @@ public struct GuestEventView: View {
             leaderboard = leaderboardModel
             feed = feedModel
         }
+    }
+
+    private func shareButton(_ uploads: UploadDependencies) -> some View {
+        Button {
+            upload = UploadModel(
+                eventSlug: join.slug.value, staging: uploads.staging, importer: uploads.importer, submitter: uploads.submitter
+            )
+        } label: {
+            Image(systemName: "plus")
+                .font(.title2.bold())
+                .foregroundStyle(MomentsColor.onAccent)
+                .frame(width: 56, height: 56)
+                .background(MomentsColor.accent, in: Circle())
+        }
+        .accessibilityLabel(Text("Share photos and videos"))
+        // Above the tab bar.
+        .padding(.trailing, Spacing.md)
+        .padding(.bottom, 64)
     }
 
     private var unsavedBanner: some View {

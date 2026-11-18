@@ -2,6 +2,20 @@ import CredentialStore
 import Foundation
 import MomentsAPI
 import MomentsDomain
+import UploadEngine
+
+/// What the upload screen needs: where prepared files go, and the queue.
+public struct UploadDependencies: Sendable {
+    public let staging: StagingArea
+    public let submitter: any UploadSubmitting
+    public let importer: any MediaImporting
+
+    public init(staging: StagingArea, submitter: any UploadSubmitting, importer: any MediaImporting = LiveMediaImporter()) {
+        self.staging = staging
+        self.submitter = submitter
+        self.importer = importer
+    }
+}
 
 /// What the guest screens need from the app, injected once.
 public struct GuestDependencies: Sendable {
@@ -11,11 +25,14 @@ public struct GuestDependencies: Sendable {
     /// Marks this device's reactions in one event (like the web's reactor
     /// id), derived per event so events can't be linked to one device.
     public let reactorID: @Sendable (_ eventID: String) -> String
+    /// Nil until uploads are wired in the app: the share button is hidden.
+    public let uploads: UploadDependencies?
 
     public init(
         service: any MomentsService, store: any EventCredentialStore, mediaFetcher: MediaFetcher,
-        reactorID: @escaping @Sendable (_ eventID: String) -> String
+        reactorID: @escaping @Sendable (_ eventID: String) -> String, uploads: UploadDependencies? = nil
     ) {
+        self.uploads = uploads
         self.service = service
         self.store = store
         self.mediaFetcher = mediaFetcher

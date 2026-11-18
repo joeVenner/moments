@@ -34,6 +34,9 @@ struct AppEnvironment {
             // Status only; never the item contents.
             Logger(subsystem: "moments", category: "credentials").error("fresh-install reset failed: \(String(describing: error), privacy: .public)")
         }
+        // Before any screen can open the photo picker: picked originals
+        // (with their location data) left by an earlier run go.
+        GuestUploadsLaunch.clearLeftovers()
         return make(credentials: credentials, defaults: .standard)
     }
 
