@@ -911,11 +911,21 @@ app.post("/api/events/:slug/moments/stream/tus", async (c) => {
   }
 
   try {
-    await c.env.DB.prepare(
+    const recorded = await c.env.DB.prepare(
       "UPDATE uploads SET key = ?, upload_id = ? WHERE id = ? AND event_id = ? AND status = 'open'"
     )
       .bind(`stream/${streamUid}`, streamUid, session.id, event.id)
       .run();
+    if (recorded.meta.changes !== 1) {
+      // The session was aborted meanwhile (the guest cancelled or left): no
+      // row would ever point at this video, so it goes now.
+      await fetch(streamApiUrl(c.env, `/${streamUid}`), {
+        method: "DELETE",
+        headers: streamAuthHeaders(c.env),
+      }).catch(() => {});
+      logUpload("warn", "stream_tus_session_closed", { eventId: event.id, uploadRecordId: session.id });
+      return c.json({ error: "upload not found" }, 409);
+    }
   } catch (error) {
     await fetch(streamApiUrl(c.env, `/${streamUid}`), {
       method: "DELETE",
