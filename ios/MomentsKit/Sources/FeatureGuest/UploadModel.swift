@@ -3,9 +3,24 @@ import MediaPipeline
 import Observation
 import UploadEngine
 
-/// Hands a prepared upload to the queue (the app wraps `UploadQueue`).
+/// What the queue said to one upload.
+public enum SubmitResult: Equatable, Sendable {
+    /// Queued; the queue now owns the item's staging folder.
+    case accepted
+    /// Already queued (an earlier attempt got through): same as accepted.
+    case duplicate
+    /// The queue is full; try again later.
+    case full
+    /// The queue can't use this file; it never will.
+    case invalid
+    /// Anything else; worth trying again.
+    case failed
+}
+
+/// Hands a prepared upload to the queue (the app adapts `UploadQueue`,
+/// mapping its errors to `SubmitResult`).
 public protocol UploadSubmitting: Sendable {
-    func submit(_ upload: QueuedUpload) async throws
+    func submit(_ upload: QueuedUpload) async -> SubmitResult
 }
 
 /// Prepares picked files (`MediaImporter` in the app; a fake in tests).
@@ -30,15 +45,13 @@ public struct LiveMediaImporter: MediaImporting {
 /// Nil or a thrown error means the picker couldn't hand it over.
 public typealias PickLoader = @Sendable () async throws -> PickedMedia?
 
-/// Cleans up what earlier runs left: picked originals (which still carry
-/// location data) and half-written prepared files. Call once at launch,
-/// before the upload screen can open.
+/// Cleans up what earlier runs left: picked originals, which still carry
+/// location data. Call once at launch, before the upload screen can open.
+/// (Prepared files of items never queued are swept with the queue's ids
+/// once uploads are wired.)
 public enum GuestUploadsLaunch {
-    public static func clearLeftovers(staging: StagingArea? = nil) {
+    public static func clearLeftovers() {
         PickedMedia.clearInbox()
-        guard let staging else { return }
-        let folders = (try? FileManager.default.contentsOfDirectory(at: staging.root, includingPropertiesForKeys: nil)) ?? []
-        for folder in folders { PhotoPreparer.removeLeftovers(in: folder) }
     }
 }
 
@@ -49,13 +62,15 @@ public final class UploadModel {
     public nonisolated static let maxCaptionLength = 500
     /// Picks per batch (the picker's selection limit).
     public static let maxPicks = 30
+    /// Problems worth "Try again" (the pick, or how to load it, is kept).
+    public nonisolated static let retryable: Set<MediaImporter.Problem> = [.failed, .cancelled, .noSpace]
 
     public enum ItemState: Equatable, Sendable {
         /// Waiting for the picker or being prepared.
         case preparing
         case ready(PreparedMedia)
         case failed(MediaImporter.Problem)
-        /// Handed to the queue.
+        /// Handed to the queue, which now owns its files.
         case shared
     }
 
@@ -65,35 +80,47 @@ public final class UploadModel {
         public fileprivate(set) var kind: PickedMedia.Kind?
         public fileprivate(set) var state: ItemState
 
-        /// Worth offering "Try again" (the pick is still held).
+        /// Worth offering "Try again".
         public var canRetry: Bool {
             guard case let .failed(problem) = state else { return false }
-            return [.failed, .cancelled, .noSpace].contains(problem)
+            return UploadModel.retryable.contains(problem)
         }
     }
 
     public enum ShareProblem: Error, Equatable, Sendable {
-        /// The queue is full; some items weren't shared.
+        /// The queue is full; the rest weren't shared.
         case queueFull
-        /// Something else went wrong; the items stay to try again.
+        /// Something else went wrong; the rest stay to try again.
         case failed
     }
 
     public private(set) var items: [Item] = []
+    /// Locked while sharing; a batch uses the caption as it was on Share.
     public var caption = ""
     public private(set) var isSharing = false
     public private(set) var shareProblem: ShareProblem?
 
-    /// Any ready item is a video (its sound is uploaded too).
+    /// A video that will be shared (its sound is uploaded too).
     public var hasVideo: Bool { items.contains { $0.kind == .video && $0.state != .shared } }
     public var readyCount: Int { items.filter { if case .ready = $0.state { true } else { false } }.count }
     public var isPreparing: Bool { items.contains { $0.state == .preparing } }
+    /// Picks that can still be added.
+    public var remainingSlots: Int { max(0, Self.maxPicks - items.filter { $0.state != .shared }.count) }
     public var canShare: Bool { readyCount > 0 && !isPreparing && !isSharing && Self.cleanCaption(caption) != nil }
     public var isCaptionTooLong: Bool { caption.trimmingCharacters(in: .whitespacesAndNewlines).utf16.count > Self.maxCaptionLength }
+    /// Holds characters the server refuses (tabs and other controls).
+    public var captionHasInvalidCharacters: Bool { !isCaptionTooLong && Self.cleanCaption(caption) == nil }
 
+    /// Picks loaded but not yet prepared (or kept to retry).
     @ObservationIgnored private var picks: [UUID: PickedMedia] = [:]
-    @ObservationIgnored private var queue: [(UUID, PickLoader?)] = []
+    /// How to load each pick, kept until it's loaded (to retry a picker
+    /// failure).
+    @ObservationIgnored private var loaders: [UUID: PickLoader] = [:]
+    @ObservationIgnored private var pending: [UUID] = []
     @ObservationIgnored private var worker: Task<Void, Never>?
+    /// The pick being prepared, and its task (cancelled when it's removed).
+    @ObservationIgnored private var current: (id: UUID, task: Task<Void, Never>)?
+    @ObservationIgnored private var isDiscarded = false
     @ObservationIgnored private let eventSlug: String
     @ObservationIgnored private let staging: StagingArea
     @ObservationIgnored private let importer: any MediaImporting
@@ -113,41 +140,53 @@ public final class UploadModel {
 
     /// New picks from the picker, prepared in order, one at a time (a
     /// video export and several large photos at once would exhaust memory).
-    public func add(_ loaders: [PickLoader]) {
-        let room = max(0, Self.maxPicks - items.filter { $0.state != .shared }.count)
-        for loader in loaders.prefix(room) {
+    public func add(_ newLoaders: [PickLoader]) {
+        guard !isSharing, !isDiscarded else { return }
+        for loader in newLoaders.prefix(remainingSlots) {
             let item = Item(id: UUID(), kind: nil, state: .preparing)
             items.append(item)
-            queue.append((item.id, loader))
+            loaders[item.id] = loader
+            pending.append(item.id)
         }
         startWorker()
     }
 
     public func retry(_ id: UUID) {
-        guard let index = items.firstIndex(where: { $0.id == id }), items[index].canRetry, picks[id] != nil else { return }
+        guard !isSharing, let index = items.firstIndex(where: { $0.id == id }), items[index].canRetry,
+              picks[id] != nil || loaders[id] != nil
+        else { return }
         items[index].state = .preparing
-        queue.append((id, nil))
+        pending.append(id)
         startWorker()
     }
 
-    /// Removes an item that isn't shared, with its files.
+    /// Removes an item that isn't shared, with its files. Not while sharing
+    /// (the queue may be taking it).
     public func remove(_ id: UUID) {
-        guard let index = items.firstIndex(where: { $0.id == id }), items[index].state != .shared else { return }
-        queue.removeAll { $0.0 == id }
-        if items[index].state == .preparing, worker != nil, current == id {
-            // Being prepared: cancelling the worker would stop the others
-            // too; let it finish and drop the result.
-            dropped.insert(id)
+        guard !isSharing, let index = items.firstIndex(where: { $0.id == id }), items[index].state != .shared else { return }
+        let wasPreparing = items[index].state == .preparing
+        items.remove(at: index)
+        pending.removeAll { $0 == id }
+        // `current` can outlive the job by a moment: only a pick still
+        // preparing is left to its job to clean up.
+        if wasPreparing, current?.id == id {
+            // Stops a video export; the job cleans up when it ends.
+            current?.task.cancel()
         } else {
             cleanUp(id)
         }
-        items.remove(at: index)
     }
 
-    /// Everything not shared is dropped (the screen was dismissed).
+    /// The screen closed: everything not shared is dropped and preparing
+    /// stops. While sharing, this happens once the share ends.
     public func discardAll() {
+        isDiscarded = true
+        guard !isSharing else { return }
+        pending.removeAll()
+        current?.task.cancel()
         for item in items where item.state != .shared {
-            remove(item.id)
+            items.removeAll { $0.id == item.id }
+            if !(item.state == .preparing && current?.id == item.id) { cleanUp(item.id) }
         }
     }
 
@@ -156,31 +195,38 @@ public final class UploadModel {
         guard canShare, let caption = Self.cleanCaption(caption) else { return }
         isSharing = true
         shareProblem = nil
-        defer { isSharing = false }
-        for index in items.indices {
-            guard case let .ready(media) = items[index].state else { continue }
-            let id = items[index].id
+        // The batch as it is now; items are looked up by id (nothing can be
+        // removed meanwhile, but stay safe).
+        let batch: [(UUID, PreparedMedia)] = items.compactMap { item in
+            if case let .ready(media) = item.state { (item.id, media) } else { nil }
+        }
+        loop: for (id, media) in batch {
             guard let file = QueuedUpload.StagedFile(
                 relativePath: StagingArea.relativePath(for: id, name: media.name),
                 size: media.byteCount, contentType: media.contentType
             ) else {
-                items[index].state = .failed(.tooLarge)
+                setState(.failed(.tooLarge), of: id)
                 cleanUp(id)
                 continue
             }
             let upload = QueuedUpload(id: id, eventSlug: eventSlug, file: file, caption: caption.isEmpty ? nil : caption, createdAt: now())
-            do {
-                try await submitter.submit(upload)
-                items[index].state = .shared
-            } catch UploadQueue.EnqueueError.full {
+            switch await submitter.submit(upload) {
+            case .accepted, .duplicate:
+                setState(.shared, of: id)
+            case .invalid:
+                setState(.failed(.unsupported), of: id)
+                cleanUp(id)
+            case .full:
                 shareProblem = .queueFull
-                return
-            } catch {
+                break loop
+            case .failed:
                 shareProblem = .failed
-                return
+                break loop
             }
         }
+        isSharing = false
         if !items.contains(where: { $0.state != .shared }) { self.caption = "" }
+        if isDiscarded { discardAll() }
     }
 
     /// The caption as sent: trimmed, nil when too long (in UTF-16 units, as
@@ -197,61 +243,77 @@ public final class UploadModel {
 
     // MARK: - Preparing
 
-    @ObservationIgnored private var current: UUID?
-    @ObservationIgnored private var dropped: Set<UUID> = []
-
     private func startWorker() {
         guard worker == nil else { return }
         worker = Task { [weak self] in
-            while let self, let (id, loader) = self.nextJob() {
-                await self.prepare(id, loader: loader)
+            while let self, !self.isDiscarded, !self.pending.isEmpty {
+                let id = self.pending.removeFirst()
+                let job = Task { await self.prepare(id) }
+                self.current = (id, job)
+                await job.value
+                self.current = nil
             }
             self?.worker = nil
         }
     }
 
-    private func nextJob() -> (UUID, PickLoader?)? {
-        guard !queue.isEmpty else { current = nil; return nil }
-        let job = queue.removeFirst()
-        current = job.0
-        return job
-    }
-
-    private func prepare(_ id: UUID, loader: PickLoader?) async {
-        let picked: PickedMedia
-        if let held = picks[id] {
-            picked = held
-        } else {
-            guard let loader, let loaded = try? await loader() else {
-                finish(id, .failed(.unsupported))
-                return
+    private func prepare(_ id: UUID) async {
+        var picked = picks[id]
+        if picked == nil, let loader = loaders[id] {
+            do {
+                picked = try await loader()
+            } catch {
+                // The picker couldn't hand it over (an iCloud download that
+                // failed, say): keep the loader to try again.
+                if isGone(id) { return finishGone(id) }
+                return setState(.failed(.failed), of: id)
             }
-            picked = loaded
-            picks[id] = loaded
-            if let index = items.firstIndex(where: { $0.id == id }) { items[index].kind = loaded.kind }
+            loaders[id] = nil
+            if let picked { picks[id] = picked }
         }
+        guard let picked else {
+            if isGone(id) { return finishGone(id) }
+            return setState(.failed(.unsupported), of: id)
+        }
+        if let index = items.firstIndex(where: { $0.id == id }) { items[index].kind = picked.kind }
+        // Removed (or the screen closed) while loading: don't prepare it.
+        if isGone(id) { return finishGone(id) }
         do {
             let media = try await importer.importMedia(picked, into: staging.folder(for: id))
-            // The importer deleted the pick.
             picks[id] = nil
-            finish(id, .ready(media))
+            if isGone(id) { return finishGone(id) }
+            setState(.ready(media), of: id)
         } catch {
-            if ![.failed, .cancelled, .noSpace].contains(error) { picks[id] = nil }
-            finish(id, .failed(error))
+            if !Self.retryable.contains(error) {
+                picks[id] = nil
+                // The importer keeps the pick for these; nothing else will.
+                if error == .busy { importer.discard(picked) }
+            }
+            if isGone(id) { return finishGone(id) }
+            setState(.failed(error), of: id)
         }
     }
 
-    private func finish(_ id: UUID, _ state: ItemState) {
-        if dropped.remove(id) != nil {
-            cleanUp(id)
-            return
+    private func isGone(_ id: UUID) -> Bool {
+        Task.isCancelled || !items.contains { $0.id == id }
+    }
+
+    private func finishGone(_ id: UUID) {
+        if items.contains(where: { $0.id == id }) {
+            // Cancelled with the item still listed: the screen is closing.
+            items.removeAll { $0.id == id }
         }
+        cleanUp(id)
+    }
+
+    private func setState(_ state: ItemState, of id: UUID) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         items[index].state = state
     }
 
     /// Deletes an unshared item's held pick and prepared files.
     private func cleanUp(_ id: UUID) {
+        loaders[id] = nil
         if let pick = picks.removeValue(forKey: id) { importer.discard(pick) }
         try? FileManager.default.removeItem(at: staging.folder(for: id))
     }

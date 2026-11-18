@@ -41,11 +41,41 @@ private final class FakeImporter: MediaImporting, @unchecked Sendable {
 
 private actor FakeSubmitter: UploadSubmitting {
     var submitted: [QueuedUpload] = []
-    var failure: (any Error)?
-    func fail(with error: (any Error)?) { failure = error }
-    func submit(_ upload: QueuedUpload) async throws {
-        if let failure { throw failure }
-        submitted.append(upload)
+    var answers: [SubmitResult] = []
+    /// While set, each submit waits until `release()`.
+    var isHeld = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func answer(_ results: SubmitResult...) { answers = results }
+    func hold() { isHeld = true }
+    func release() {
+        isHeld = false
+        waiters.forEach { $0.resume() }
+        waiters = []
+    }
+
+    func submit(_ upload: QueuedUpload) async -> SubmitResult {
+        if isHeld { await withCheckedContinuation { waiters.append($0) } }
+        let result = answers.isEmpty ? .accepted : answers.removeFirst()
+        if result == .accepted { submitted.append(upload) }
+        return result
+    }
+}
+
+/// Counts calls; answers from a script (`.failure` throws).
+private final class CountingLoader: @unchecked Sendable {
+    private let lock = NSLock()
+    private var script: [Result<PickedMedia?, CancellationError>]
+    private(set) var calls = 0
+    init(_ script: Result<PickedMedia?, CancellationError>...) { self.script = script }
+    var loader: PickLoader {
+        { [self] in
+            let next = lock.withLock {
+                calls += 1
+                return script.isEmpty ? .failure(CancellationError()) : script.removeFirst()
+            }
+            return try next.get()
+        }
     }
 }
 
@@ -165,14 +195,141 @@ struct UploadModelTests {
     @Test func aFullQueueStopsSharingAndKeepsTheRest() async throws {
         let submitter = FakeSubmitter()
         let model = UploadModel(eventSlug: "party", staging: staging, importer: FakeImporter(), submitter: submitter)
-        model.add([loader("a.jpg"), loader("b.jpg")])
+        model.add([loader("a.jpg"), loader("b.jpg"), loader("c.jpg")])
         await settle(model)
-        await submitter.fail(with: UploadQueue.EnqueueError.full)
+        await submitter.answer(.accepted, .full)
         await model.share()
         #expect(model.shareProblem == .queueFull && model.readyCount == 2)
-        await submitter.fail(with: nil)
+        #expect(model.items[0].state == .shared)
+        // Shared items free their slot.
+        #expect(model.remainingSlots == UploadModel.maxPicks - 2)
         await model.share()
         #expect(model.shareProblem == nil && model.readyCount == 0)
+    }
+
+    @Test func aDuplicateCountsAsSharedAndAnInvalidFileFails() async throws {
+        let submitter = FakeSubmitter()
+        let importer = FakeImporter()
+        let model = UploadModel(eventSlug: "party", staging: staging, importer: importer, submitter: submitter)
+        model.add([loader("a.jpg"), loader("b.jpg")])
+        await settle(model)
+        let invalid = model.items[1].id
+        try FileManager.default.createDirectory(at: staging.folder(for: invalid), withIntermediateDirectories: true)
+        await submitter.answer(.duplicate, .invalid)
+        await model.share()
+        #expect(model.items.map(\.state) == [.shared, .failed(.unsupported)])
+        #expect(!model.items[1].canRetry && model.shareProblem == nil)
+        #expect(!FileManager.default.fileExists(atPath: staging.folder(for: invalid).path()))
+    }
+
+    @Test func aFileTooLargeForTheQueueFails() async throws {
+        let importer = FakeImporter()
+        importer.answer("a.jpg", .success(.photo(bytes: QueuedUpload.maxFileSize + 1)))
+        let submitter = FakeSubmitter()
+        let model = UploadModel(eventSlug: "party", staging: staging, importer: importer, submitter: submitter)
+        model.add([loader("a.jpg")])
+        await settle(model)
+        await model.share()
+        let submitted = await submitter.submitted
+        #expect(model.items[0].state == .failed(.tooLarge) && submitted.isEmpty)
+    }
+
+    @Test func nothingCanBeRemovedWhileSharingAndClosingWaits() async throws {
+        let submitter = FakeSubmitter()
+        let model = UploadModel(eventSlug: "party", staging: staging, importer: FakeImporter(), submitter: submitter)
+        model.add([loader("a.jpg"), loader("b.jpg")])
+        await settle(model)
+        for item in model.items {
+            try FileManager.default.createDirectory(at: staging.folder(for: item.id), withIntermediateDirectories: true)
+        }
+        await submitter.hold()
+        let sharing = Task { await model.share() }
+        for _ in 0 ..< 100 where !model.isSharing { await Task.yield() }
+        #expect(model.isSharing)
+        model.remove(model.items[0].id)
+        model.discardAll()
+        #expect(model.items.count == 2)
+        await submitter.release()
+        await sharing.value
+        // Both were queued; their files are the queue's now.
+        #expect(model.items.allSatisfy { $0.state == .shared })
+        for item in model.items {
+            #expect(FileManager.default.fileExists(atPath: staging.folder(for: item.id).path()))
+        }
+        #expect(await submitter.submitted.count == 2)
+    }
+
+    @Test func closingWhileSharingDropsWhatWasntShared() async throws {
+        let submitter = FakeSubmitter()
+        let model = UploadModel(eventSlug: "party", staging: staging, importer: FakeImporter(), submitter: submitter)
+        model.add([loader("a.jpg"), loader("b.jpg")])
+        await settle(model)
+        let second = model.items[1].id
+        try FileManager.default.createDirectory(at: staging.folder(for: second), withIntermediateDirectories: true)
+        await submitter.answer(.accepted, .full)
+        await submitter.hold()
+        let sharing = Task { await model.share() }
+        for _ in 0 ..< 100 where !model.isSharing { await Task.yield() }
+        model.discardAll()
+        await submitter.release()
+        await sharing.value
+        #expect(model.items.count == 1 && model.items[0].state == .shared)
+        #expect(!FileManager.default.fileExists(atPath: staging.folder(for: second).path()))
+    }
+
+    @Test func aPickerFailureCanBeRetriedAndANilPickCannot() async throws {
+        let picks = CountingLoader(.success(nil))
+        let flaky = CountingLoader(.failure(CancellationError()), .success(PickedMedia(url: URL(filePath: "/picked/a.jpg"), kind: .photo)))
+        let model = UploadModel(eventSlug: "party", staging: staging, importer: FakeImporter(), submitter: FakeSubmitter())
+        // The first load throws, the retry gets the pick.
+        model.add([flaky.loader, picks.loader])
+        await settle(model)
+        #expect(model.items.map(\.state) == [.failed(.failed), .failed(.unsupported)])
+        #expect(model.items.map(\.canRetry) == [true, false])
+        model.retry(model.items[0].id)
+        await settle(model)
+        #expect(flaky.calls == 2 && model.items[0].state == .ready(.photo()))
+    }
+
+    @Test func removingAQueuedItemNeverLoadsIt() async throws {
+        let importer = FakeImporter()
+        importer.hold()
+        let waiting = CountingLoader(.success(PickedMedia(url: URL(filePath: "/picked/b.jpg"), kind: .photo)))
+        let model = UploadModel(eventSlug: "party", staging: staging, importer: importer, submitter: FakeSubmitter())
+        model.add([loader("a.jpg"), waiting.loader])
+        try await Task.sleep(for: .milliseconds(30))
+        model.remove(model.items[1].id)
+        importer.gate?.yield()
+        await settle(model)
+        #expect(waiting.calls == 0 && model.items.count == 1)
+    }
+
+    @Test func closingStopsPreparingAndCleansUp() async throws {
+        let importer = FakeImporter()
+        importer.hold()
+        let model = UploadModel(eventSlug: "party", staging: staging, importer: importer, submitter: FakeSubmitter())
+        model.add([loader("a.jpg"), loader("b.jpg")])
+        try await Task.sleep(for: .milliseconds(30))
+        let first = model.items[0].id
+        try FileManager.default.createDirectory(at: staging.folder(for: first), withIntermediateDirectories: true)
+        model.discardAll()
+        #expect(model.items.isEmpty)
+        importer.gate?.yield()
+        try await Task.sleep(for: .milliseconds(30))
+        // The second never started; the first's files are gone.
+        #expect(importer.imported == ["a.jpg"])
+        #expect(!FileManager.default.fileExists(atPath: staging.folder(for: first).path()))
+        model.add([loader("c.jpg")])
+        #expect(model.items.isEmpty)
+    }
+
+    @Test func aBusyFolderDiscardsThePick() async throws {
+        let importer = FakeImporter()
+        importer.answer("a.jpg", .failure(.busy))
+        let model = UploadModel(eventSlug: "party", staging: staging, importer: importer, submitter: FakeSubmitter())
+        model.add([loader("a.jpg")])
+        await settle(model)
+        #expect(model.items[0].state == .failed(.busy) && importer.discarded == ["a.jpg"])
     }
 
     @Test func capsTheNumberOfPicks() {
