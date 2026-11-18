@@ -72,6 +72,11 @@ final class FakeUploadServer: UploadService, PartUploader, @unchecked Sendable {
         fatalError("not used by the queue")
     }
 
+    private(set) var recoveries = 0
+    func recover() async throws {
+        lock.withLock { recoveries += 1 }
+    }
+
     func upload(
         parts: [Int], session: QueuedUpload.SessionRef, item: QueuedUpload, file: FileHandle,
         credentials: EventCredentials
@@ -149,6 +154,16 @@ private func drain(_ queue: UploadQueue) async {
 }
 
 @Suite struct UploadQueueTests {
+    @Test func loadLetsTheUploaderRecoverFirst() async throws {
+        let harness = try Harness()
+        let queue = harness.unloadedQueue()
+        #expect(harness.server.recoveries == 0)
+        try await queue.load()
+        #expect(harness.server.recoveries == 1)
+        await #expect(throws: UploadQueue.EnqueueError.alreadyLoaded) { try await queue.load() }
+        #expect(harness.server.recoveries == 1)
+    }
+
     @Test func uploadsAnItemAndCleansUpItsFile() async throws {
         let harness = try Harness()
         let queue = try await harness.queue()

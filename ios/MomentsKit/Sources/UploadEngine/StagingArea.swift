@@ -117,16 +117,35 @@ public struct StagingArea: Sendable {
         return folder
     }
 
-    /// Deletes every part file. Call only at launch, before anything
-    /// uploads, from the one process that owns the queue (a background
-    /// session in another process must not be running then). Removes a link
-    /// in the folder's place without following it.
-    public func clearPartFiles() throws {
+    /// Where a part file of this name lives (not checked or created).
+    func partFileURL(named name: String) -> URL {
+        root.appending(path: ".parts", directoryHint: .isDirectory).appending(path: name, directoryHint: .notDirectory)
+    }
+
+    /// Deletes every part file except the named ones (parts a background
+    /// session is still sending). Call only at launch, before anything
+    /// uploads. Removes a link in the folder's place without following it,
+    /// and anything in the folder that isn't a plain file.
+    public func clearPartFiles(keeping kept: Set<String> = []) throws {
         let folder = root.appending(path: ".parts", directoryHint: .isDirectory)
-        do {
-            try FileManager.default.removeItem(at: folder)
-        } catch CocoaError.fileNoSuchFile {
+        let path = root.appending(path: ".parts", directoryHint: .notDirectory).path(percentEncoded: false)
+        var status = stat()
+        guard lstat(path, &status) == 0 else { return }
+        guard status.st_mode & S_IFMT == S_IFDIR, !kept.isEmpty else {
+            do {
+                try FileManager.default.removeItem(atPath: path)
+            } catch CocoaError.fileNoSuchFile {}
             return
+        }
+        for name in try FileManager.default.contentsOfDirectory(atPath: path) {
+            let entry = folder.appending(path: name, directoryHint: .notDirectory).path(percentEncoded: false)
+            var entryStatus = stat()
+            guard lstat(entry, &entryStatus) == 0 else { continue }
+            if kept.contains(name), entryStatus.st_mode & S_IFMT == S_IFREG { continue }
+            // removeItem deletes a link itself, never its target.
+            do {
+                try FileManager.default.removeItem(atPath: entry)
+            } catch CocoaError.fileNoSuchFile {}
         }
     }
 

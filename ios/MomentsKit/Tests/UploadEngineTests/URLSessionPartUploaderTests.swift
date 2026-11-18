@@ -17,11 +17,15 @@ final class StorageStub: URLProtocol, @unchecked Sendable {
 
     nonisolated(unsafe) static var respond: @Sendable (URLRequest) -> (Int, [String: String]) = { _ in (200, ["ETag": "\"e\""]) }
     nonisolated(unsafe) static var sent: [Sent] = []
+    /// Runs on the loading thread after a request is recorded, before it is
+    /// answered (tests hold requests here).
+    nonisolated(unsafe) static var onStart: (@Sendable (URLRequest) -> Void)?
     static let lock = NSLock()
 
     static func reset() {
         lock.withLock {
             sent = []
+            onStart = nil
             respond = { _ in (200, ["ETag": "\"e\""]) }
         }
     }
@@ -43,10 +47,12 @@ final class StorageStub: URLProtocol, @unchecked Sendable {
         } else if let data = request.httpBody {
             body = data
         }
-        let (status, headers) = Self.lock.withLock {
+        let onStart = Self.lock.withLock {
             Self.sent.append(Sent(url: request.url!, method: request.httpMethod, headers: request.allHTTPHeaderFields ?? [:], body: body))
-            return Self.respond(request)
+            return Self.onStart
         }
+        onStart?(request)
+        let (status, headers) = Self.lock.withLock { Self.respond(request) }
         let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocolDidFinishLoading(self)
@@ -165,9 +171,9 @@ private struct Setup {
             url: URL(string: "https://s.example.com")!, statusCode: status, httpVersion: nil, headerFields: ["ETag": "\"e\""]
         )!
         if let error {
-            #expect(throws: error) { try URLSessionPartUploader.check(response) }
+            #expect(throws: error) { try StorageTarget.check(response) }
         } else {
-            #expect(throws: Never.self) { try URLSessionPartUploader.check(response) }
+            #expect(throws: Never.self) { try StorageTarget.check(response) }
         }
     }
 
@@ -184,7 +190,7 @@ private struct Setup {
         ("https://%61cct.example.com/b", "acct.example.com"),
     ])
     func acceptsOnlyNamedHttpsHosts(url: String, host: String?) {
-        #expect(URLSessionPartUploader.storageHost(of: URL(string: url)!) == host)
+        #expect(StorageTarget.storageHost(of: URL(string: url)!) == host)
     }
 
     @Test func allowsOnlyOurStorageAccount() throws {
@@ -202,10 +208,10 @@ private struct Setup {
         let setup = try Setup()
         setup.service.host = "attacker.example.com"
         await #expect(throws: MomentsAPIError.unexpectedResponse) { try await setup.upload([1]) }
-        #expect(URLSessionPartUploader.partNumber(in: URL(string: "https://s.example.com/k?partNumber=2&partNumber=3")!) == nil)
-        #expect(URLSessionPartUploader.partNumber(in: URL(string: "https://s.example.com/k?partNumber=2")!) == 2)
-        #expect(URLSessionPartUploader.partNumber(in: URL(string: "https://s.example.com/partNumber=2/k")!) == nil)
-        #expect(URLSessionPartUploader.partNumber(in: URL(string: "https://s.example.com/k#partNumber=2")!) == nil)
+        #expect(StorageTarget.partNumber(in: URL(string: "https://s.example.com/k?partNumber=2&partNumber=3")!) == nil)
+        #expect(StorageTarget.partNumber(in: URL(string: "https://s.example.com/k?partNumber=2")!) == 2)
+        #expect(StorageTarget.partNumber(in: URL(string: "https://s.example.com/partNumber=2/k")!) == nil)
+        #expect(StorageTarget.partNumber(in: URL(string: "https://s.example.com/k#partNumber=2")!) == nil)
         #expect(StorageStub.sent.isEmpty)
     }
 
@@ -217,12 +223,12 @@ private struct Setup {
         await #expect(throws: MomentsAPIError.invalidUpload) { try await setup.upload([1, 2, 3]) }
     }
 
-    @Test func clearsPartFilesLeftByACrash() throws {
+    @Test func clearsPartFilesLeftByACrash() async throws {
         let setup = try Setup()
         let folder = try setup.staging.partsFolder()
         try Data("photo".utf8).write(to: folder.appending(path: "left"))
         #expect(try folder.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
-        try setup.staging.clearPartFiles()
+        try await setup.uploader().recover()
         #expect(try setup.leftovers().isEmpty)
         try setup.staging.clearPartFiles()
     }
