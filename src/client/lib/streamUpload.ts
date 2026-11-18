@@ -5,6 +5,7 @@ import {
   deleteUpload,
   deleteUploadFile,
   getUploadFile,
+  createUpload,
   saveUpload,
   saveUploadFile,
   type PersistedUpload,
@@ -75,7 +76,8 @@ async function runStreamUpload(opts: StreamUploadOptions, localId: string): Prom
   state.backend = "stream";
   // Rows saved before tokens were kept: fill it in (never overwrite the owner's).
   state.guestToken ??= getGuestToken(opts.slug);
-  await saveUpload(state);
+  if (opts.resume) await saveUpload(state);
+  else await createUpload(state);
   if (cancelledStreamUploads.has(localId)) {
     await deleteUpload(localId);
     throw new DOMException("cancelled", "AbortError");

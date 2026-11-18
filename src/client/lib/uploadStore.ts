@@ -115,10 +115,41 @@ async function tx<T>(
   }
 }
 
-export async function saveUpload(u: PersistedUpload): Promise<void> {
+/** Records a new upload. */
+export async function createUpload(u: PersistedUpload): Promise<void> {
   u.updatedAt = Date.now();
   await tx((store) => store.put(u));
   notifyUploadChanged();
+}
+
+/**
+ * Updates an upload, unless it was deleted meanwhile (cancelled, or the guest
+ * left): a run still holding its copy must not bring the row back, with its
+ * file name, caption and a revoked token. Returns whether it was written.
+ */
+export async function saveUpload(u: PersistedUpload): Promise<boolean> {
+  u.updatedAt = Date.now();
+  const db = await openDB();
+  let written = false;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const t = db.transaction(STORE, "readwrite");
+      const store = t.objectStore(STORE);
+      const existing = store.count(u.id);
+      existing.onsuccess = () => {
+        if (existing.result === 0) return;
+        store.put(u);
+        written = true;
+      };
+      t.oncomplete = () => resolve();
+      t.onerror = () => reject(t.error);
+      t.onabort = () => reject(t.error);
+    });
+  } finally {
+    db.close();
+  }
+  if (written) notifyUploadChanged();
+  return written;
 }
 
 export async function getUpload(id: string): Promise<PersistedUpload | undefined> {
