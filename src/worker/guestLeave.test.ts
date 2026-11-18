@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { joinEventAsGuest, resolveGuestSession } from "./guestIdentity";
+import { bindReactor, setReaction } from "./reactions";
 import { LEAVE_ABORT_BATCH, LEAVE_DELETE_BATCH, leaveEvent } from "./guestLeave";
 import { createSqliteD1, type SqliteD1 } from "./testing/sqliteD1";
 import type { MultipartBackend } from "./uploadSessions";
@@ -143,5 +144,48 @@ describe("leaveEvent", () => {
     const sara = await joinAs("Sara");
     expect(await leaveEvent(sqlite.db, bucket, backend, { eventId: "ev1", participantId: sara.participantId })).toEqual({ done: true });
     expect(bucket.delete).not.toHaveBeenCalled();
+  });
+
+  it("takes back the hearts made under the guest's bound id, and only those", async () => {
+    const sara = await joinAs("Sara");
+    const lina = await joinAs("Lina");
+    const linaMoment = seedSession(lina.participantId, "completed", true);
+    const momentId = `m-${linaMoment}`;
+    const saraSession = await resolveGuestSession(sqlite.db, "ev1", sara.token);
+    const linaSession = await resolveGuestSession(sqlite.db, "ev1", lina.token);
+    const SARA_DEVICE = "11111111-1111-4111-8111-111111111111";
+    const LINA_DEVICE = "22222222-2222-4222-8222-222222222222";
+    await bindReactor(sqlite.db, { sessionId: saraSession!.sessionId, eventId: "ev1", reactorId: SARA_DEVICE });
+    await bindReactor(sqlite.db, { sessionId: linaSession!.sessionId, eventId: "ev1", reactorId: LINA_DEVICE });
+    const TOKENLESS = "33333333-3333-4333-8333-333333333333";
+    for (const reactorId of [SARA_DEVICE, LINA_DEVICE, TOKENLESS]) {
+      await setReaction(sqlite.db, { eventId: "ev1", momentId, reactorId, reacted: true });
+    }
+    // Sara's device hearted in another event too: that heart isn't this event's.
+    sqlite.raw.prepare("INSERT INTO events (id, slug, title, type) VALUES ('ev2', 'other', 'Other', 'party')").run();
+    sqlite.raw.prepare("INSERT INTO moments (id, event_id, uploader_name, media_url) VALUES ('x1', 'ev2', 'Sara', '/media/x1')").run();
+    await setReaction(sqlite.db, { eventId: "ev2", momentId: "x1", reactorId: SARA_DEVICE, reacted: true });
+
+    expect(await leaveEvent(sqlite.db, bucket, backend, { eventId: "ev1", participantId: sara.participantId })).toEqual({ done: true });
+    const left = sqlite.raw.prepare("SELECT reactor_id FROM moment_reactions WHERE moment_id = ? ORDER BY reactor_id").all(momentId) as { reactor_id: string }[];
+    // "someone" is the heart seedSession puts on every moment it creates.
+    expect(left.map((r) => r.reactor_id)).toEqual([LINA_DEVICE, TOKENLESS, "someone"]);
+    expect(count("SELECT COUNT(*) AS n FROM moment_reactions WHERE moment_id = 'x1'")).toBe(1);
+  });
+
+  it("keeps the hearts while the guest is kept (something still open)", async () => {
+    const sara = await joinAs("Sara");
+    const lina = await joinAs("Lina");
+    const momentId = `m-${seedSession(lina.participantId, "completed", true)}`;
+    const session = await resolveGuestSession(sqlite.db, "ev1", sara.token);
+    const DEVICE = "11111111-1111-4111-8111-111111111111";
+    await bindReactor(sqlite.db, { sessionId: session!.sessionId, eventId: "ev1", reactorId: DEVICE });
+    await setReaction(sqlite.db, { eventId: "ev1", momentId, reactorId: DEVICE, reacted: true });
+    for (let i = 0; i <= LEAVE_ABORT_BATCH; i++) seedSession(sara.participantId, "open");
+    const guest = { eventId: "ev1", participantId: sara.participantId };
+    expect(await leaveEvent(sqlite.db, bucket, backend, guest)).toEqual({ done: false });
+    expect(count("SELECT COUNT(*) AS n FROM moment_reactions WHERE reactor_id = ?", DEVICE)).toBe(1);
+    expect(await leaveEvent(sqlite.db, bucket, backend, guest)).toEqual({ done: true });
+    expect(count("SELECT COUNT(*) AS n FROM moment_reactions WHERE reactor_id = ?", DEVICE)).toBe(0);
   });
 });
