@@ -17,6 +17,10 @@ final class FakeService: MomentsService, @unchecked Sendable {
     private(set) var joinCalls: [(nickname: String, credentials: EventCredentials)] = []
     private(set) var pageCalls: [(before: Int?, reactorID: String?, credentials: EventCredentials)] = []
     private(set) var changesCalls: [Int] = []
+    var reactionResults: [Result<ReactionState, Error>] = []
+    private(set) var reactionCalls: [(reacted: Bool, momentID: String, reactorID: String)] = []
+    /// Runs before a reaction request answers (to hold it open).
+    var beforeReaction: (@Sendable () async -> Void)?
 
     func access(slug: String, credential: AccessCredential) async throws -> AccessGrant? {
         try lock.withLock { accessCalls.append(credential); return try accessResults.removeFirst().get() }
@@ -26,6 +30,17 @@ final class FakeService: MomentsService, @unchecked Sendable {
     }
     func join(slug: String, nickname: String, avatarSeed: String?, credentials: EventCredentials) async throws -> JoinResult {
         try lock.withLock { joinCalls.append((nickname, credentials)); return try joinResults.removeFirst().get() }
+    }
+    func setReaction(
+        _ reacted: Bool, slug: String, momentID: String, reactorID: String, credentials: EventCredentials
+    ) async throws -> ReactionState {
+        let result = lock.withLock {
+            reactionCalls.append((reacted, momentID, reactorID))
+            return reactionResults.isEmpty ? .success(ReactionState(reacted: reacted, reactionCount: reacted ? 1 : 0)) : reactionResults.removeFirst()
+        }
+        if let beforeReaction { await beforeReaction() }
+        try Task.checkCancellation()
+        return try result.get()
     }
     /// Runs before a page request answers (to hold it open in race tests).
     var beforePage: (@Sendable (_ before: Int?) async -> Void)?

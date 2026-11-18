@@ -19,6 +19,12 @@ public enum MomentsAPIError: Error, Sendable, Equatable {
     case upgradeRequired
     /// Another device owns this nickname in the event.
     case nicknameTaken
+    /// The moment is gone or hidden by the host.
+    case momentNotFound
+    /// Only devices that joined the event may do this (guest tokens enforced).
+    case guestRequired
+    /// Too many requests from this device; slow down and try later.
+    case rateLimited
     /// The server rejected the request as malformed (a client bug).
     case invalidRequest
     /// The response did not have the documented shape.

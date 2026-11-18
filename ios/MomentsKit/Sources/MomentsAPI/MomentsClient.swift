@@ -40,6 +40,17 @@ public struct FeedChanges: Sendable, Hashable {
     }
 }
 
+/// This device's reaction on one moment, as the server now has it.
+public struct ReactionState: Sendable, Hashable {
+    public let reacted: Bool
+    public let reactionCount: Int
+
+    public init(reacted: Bool, reactionCount: Int) {
+        self.reacted = reacted
+        self.reactionCount = reactionCount
+    }
+}
+
 /// Result of joining an event.
 public struct JoinResult: Sendable, Hashable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public let participant: Participant
@@ -94,6 +105,11 @@ public protocol MomentsService: Sendable {
     func feedPage(slug: String, before: Int?, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> FeedPage
     func feedChanges(slug: String, since: Int, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> FeedChanges
     func join(slug: String, nickname: String, avatarSeed: String?, credentials: EventCredentials) async throws -> JoinResult
+    /// Adds (`reacted == true`) or removes this device's heart. Idempotent,
+    /// so a retry can't flip it.
+    func setReaction(
+        _ reacted: Bool, slug: String, momentID: String, reactorID: String, credentials: EventCredentials
+    ) async throws -> ReactionState
 }
 
 /// The app's API client: the generated v1 client plus the version header,
@@ -274,6 +290,51 @@ public struct MomentsClient: MomentsService {
         }
     }
 
+    public func setReaction(
+        _ reacted: Bool, slug: String, momentID: String, reactorID: String, credentials: EventCredentials = .init()
+    ) async throws -> ReactionState {
+        try await perform {
+            let body = Components.Schemas.ReactionRequest(reactorId: reactorID)
+            if reacted {
+                let output = try await client.addReaction(
+                    path: .init(slug: slug, id: momentID),
+                    headers: .init(xEventAccess: credentials.accessGrant, xGuestToken: credentials.guestToken),
+                    body: .json(body)
+                )
+                switch output {
+                case let .ok(response): return Self.reactionState(try response.body.json)
+                case let .badRequest(response): throw Self.error(400, try? response.body.json.code)
+                case let .unauthorized(response): throw Self.error(401, try? response.body.json.code)
+                case let .forbidden(response): throw Self.error(403, try? response.body.json.code)
+                case let .notFound(response): throw Self.error(404, try? response.body.json.code)
+                case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
+                case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+                case let .default(status, response): throw Self.error(status, try? response.body.json.code)
+                }
+            } else {
+                let output = try await client.removeReaction(
+                    path: .init(slug: slug, id: momentID),
+                    headers: .init(xEventAccess: credentials.accessGrant, xGuestToken: credentials.guestToken),
+                    body: .json(body)
+                )
+                switch output {
+                case let .ok(response): return Self.reactionState(try response.body.json)
+                case let .badRequest(response): throw Self.error(400, try? response.body.json.code)
+                case let .unauthorized(response): throw Self.error(401, try? response.body.json.code)
+                case let .forbidden(response): throw Self.error(403, try? response.body.json.code)
+                case let .notFound(response): throw Self.error(404, try? response.body.json.code)
+                case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
+                case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+                case let .default(status, response): throw Self.error(status, try? response.body.json.code)
+                }
+            }
+        }
+    }
+
+    private static func reactionState(_ body: Components.Schemas.Reaction) -> ReactionState {
+        ReactionState(reacted: body.reacted, reactionCount: max(0, body.reactionCount))
+    }
+
     /// Runs one call and converts every failure to `MomentsAPIError`, so no
     /// runtime error (whose description prints request headers) escapes.
     private func perform<T>(_ operation: () async throws -> T) async throws -> T {
@@ -304,6 +365,9 @@ public struct MomentsClient: MomentsService {
         case (404, "event_not_found"): .eventNotFound
         case (426, _): .upgradeRequired
         case (409, "nickname_taken"): .nicknameTaken
+        case (404, "moment_not_found"): .momentNotFound
+        case (403, "guest_required"): .guestRequired
+        case (429, "rate_limited"): .rateLimited
         case (400, _), (415, _): .invalidRequest
         default: .server(status: status, code: code)
         }

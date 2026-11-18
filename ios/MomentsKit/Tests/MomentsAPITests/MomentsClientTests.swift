@@ -54,6 +54,40 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
         #expect(body == ["nickname": "Sara", "avatar_seed": "s"])
     }
 
+    @Test(arguments: [(true, HTTPRequest.Method.put), (false, .delete)])
+    func setsReactionsWithTheReactorInTheBody(_ reacted: Bool, _ method: HTTPRequest.Method) async throws {
+        let stub = StubTransport(json: #"{"reacted":\#(reacted),"reaction_count":4}"#)
+        let state = try await client(stub).setReaction(
+            reacted, slug: "party", momentID: "m1", reactorID: "abcdef0123456789",
+            credentials: .init(accessGrant: "grant-1", guestToken: "gt_me")
+        )
+        #expect(state == ReactionState(reacted: reacted, reactionCount: 4))
+        let request = try #require(stub.requests.first)
+        #expect(request.request.method == method)
+        #expect(request.request.path == "/events/party/moments/m1/reaction")
+        #expect(request.request.headerFields[HTTPField.Name("X-Event-Access")!] == "grant-1")
+        #expect(request.request.headerFields[HTTPField.Name("X-Guest-Token")!] == "gt_me")
+        let body = try JSONSerialization.jsonObject(with: Data(try #require(request.body).utf8)) as? [String: String]
+        #expect(body == ["reactor_id": "abcdef0123456789"])
+    }
+
+    @Test(arguments: [
+        (404, "moment_not_found", MomentsAPIError.momentNotFound),
+        (404, "event_not_found", .eventNotFound),
+        (403, "guest_required", .guestRequired),
+        (429, "rate_limited", .rateLimited),
+        (401, "access_required", .accessRequired),
+    ])
+    func mapsReactionErrors(_ status: Int, _ code: String, _ expected: MomentsAPIError) async throws {
+        let stub = StubTransport(status: status, json: #"{"error":"x","code":"\#(code)"}"#)
+        await #expect(throws: expected) {
+            _ = try await client(stub).setReaction(true, slug: "party", momentID: "m1", reactorID: "abcdef0123456789")
+        }
+        await #expect(throws: expected) {
+            _ = try await client(stub).setReaction(false, slug: "party", momentID: "m1", reactorID: "abcdef0123456789")
+        }
+    }
+
     @Test func passesFeedQuery() async throws {
         let stub = StubTransport(json: #"{"moments":[],"next_before":null,"cursor":7}"#)
         let page = try await client(stub).feedPage(slug: "party", before: 10, limit: 30, reactorID: "me")
