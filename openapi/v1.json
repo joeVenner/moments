@@ -515,6 +515,150 @@
           "reactor_id"
         ]
       },
+      "UploadSession": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "client_upload_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "`open`, `completed` or `aborted`; more may be added"
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "part_size": {
+            "type": "integer",
+            "description": "Bytes per part; every part but the last is exactly this size"
+          },
+          "part_count": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "description": "UTC, `YYYY-MM-DD HH:MM:SS`",
+            "example": "2026-11-17 18:30:00"
+          }
+        },
+        "required": [
+          "id",
+          "client_upload_id",
+          "status",
+          "content_type",
+          "size",
+          "part_size",
+          "part_count",
+          "created_at"
+        ]
+      },
+      "StartUploadRequest": {
+        "type": "object",
+        "properties": {
+          "client_upload_id": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "description": "The app's UUID for this queued item; a retried init with it returns the same session"
+          },
+          "content_type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "example": "image/jpeg"
+          },
+          "size": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Exact file size in bytes (max 512 MB)"
+          },
+          "caption": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "filename": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "Original name; only sanitized letters survive in the key"
+          }
+        },
+        "required": [
+          "client_upload_id",
+          "content_type",
+          "size"
+        ]
+      },
+      "UploadStatus": {
+        "type": "object",
+        "properties": {
+          "upload": {
+            "$ref": "#/components/schemas/UploadSession"
+          },
+          "uploaded_parts": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Part numbers R2 already has (open sessions only); upload the rest"
+          }
+        },
+        "required": [
+          "upload",
+          "uploaded_parts"
+        ]
+      },
+      "PartUrls": {
+        "type": "object",
+        "properties": {
+          "expires_at": {
+            "type": "string",
+            "description": "UTC, `YYYY-MM-DD HH:MM:SS`",
+            "example": "2026-11-17 18:30:00"
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "part_number": {
+                  "type": "integer"
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Presigned PUT URL; send the part's bytes with no extra x-amz or checksum headers"
+                }
+              },
+              "required": [
+                "part_number",
+                "url"
+              ]
+            }
+          }
+        },
+        "required": [
+          "expires_at",
+          "parts"
+        ]
+      },
+      "PartUrlsRequest": {
+        "type": "object",
+        "properties": {
+          "part_numbers": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maxItems": 10000,
+            "description": "Parts to sign; omit for all of them"
+          }
+        }
+      },
       "AccessResponse": {
         "type": "object",
         "properties": {
@@ -1505,6 +1649,501 @@
           },
           "429": {
             "description": "`rate_limited`: too many reactions from this device; slow down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error (415, 5xx, ...)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{slug}/uploads": {
+      "post": {
+        "operationId": "startUpload",
+        "tags": [
+          "Uploads"
+        ],
+        "summary": "Open an upload session (idempotent per client_upload_id)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "slug",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "Access grant; required for private events only"
+            },
+            "required": false,
+            "description": "Access grant; required for private events only",
+            "name": "x-event-access",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "This device's guest token (required: uploads belong to a joined guest)"
+            },
+            "required": false,
+            "description": "This device's guest token (required: uploads belong to a joined guest)",
+            "name": "x-guest-token",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "This client_upload_id already has a session; here it is",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Session opened",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_upload`: unsupported type, size or caption",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Private event; send a grant from the access endpoint in X-Event-Access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`guest_required`: join first and send X-Guest-Token; or `uploads_closed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live event with this slug",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`upload_conflict`: this client_upload_id was used for a different file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_uploads` (open sessions) or `rate_limited`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "`uploads_unavailable`: direct uploads are not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`storage_unavailable`: R2 failed; retry later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error (415, 5xx, ...)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{slug}/uploads/{id}": {
+      "get": {
+        "operationId": "getUpload",
+        "tags": [
+          "Uploads"
+        ],
+        "summary": "A session's state and which parts R2 already has",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "slug",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "Access grant; required for private events only"
+            },
+            "required": false,
+            "description": "Access grant; required for private events only",
+            "name": "x-event-access",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "This device's guest token (required: uploads belong to a joined guest)"
+            },
+            "required": false,
+            "description": "This device's guest token (required: uploads belong to a joined guest)",
+            "name": "x-guest-token",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Private event; send a grant from the access endpoint in X-Event-Access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`guest_required`: join first and send X-Guest-Token; or `uploads_closed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live event with this slug, or `upload_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_uploads` (open sessions) or `rate_limited`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "`uploads_unavailable`: direct uploads are not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`storage_unavailable`: R2 failed; retry later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error (415, 5xx, ...)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{slug}/uploads/{id}/part-urls": {
+      "post": {
+        "operationId": "getPartUrls",
+        "tags": [
+          "Uploads"
+        ],
+        "summary": "Presigned PUT URLs for a session's parts, valid for 24 h",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "slug",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "Access grant; required for private events only"
+            },
+            "required": false,
+            "description": "Access grant; required for private events only",
+            "name": "x-event-access",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "This device's guest token (required: uploads belong to a joined guest)"
+            },
+            "required": false,
+            "description": "This device's guest token (required: uploads belong to a joined guest)",
+            "name": "x-guest-token",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartUrlsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed URLs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartUrls"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_parts`: a part number outside the file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Private event; send a grant from the access endpoint in X-Event-Access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`guest_required`: join first and send X-Guest-Token; or `uploads_closed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live event with this slug, or `upload_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`upload_not_open`: completed or aborted; start a new session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_uploads` (open sessions) or `rate_limited`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "`uploads_unavailable`: direct uploads are not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`storage_unavailable`: R2 failed; retry later",
             "content": {
               "application/json": {
                 "schema": {

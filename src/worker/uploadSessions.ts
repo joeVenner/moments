@@ -1,6 +1,14 @@
 import { isAllowedContentType, sanitizeFilename } from "./storage";
 import { MAX_DIRECT_UPLOAD_BYTES } from "./presign";
-import { MULTIPART_PART_BYTES, type R2Part } from "./multipartPresign";
+import {
+  abortMultipartUpload,
+  createMultipartUpload,
+  listParts,
+  MULTIPART_PART_BYTES,
+  presignPartUrl,
+  type R2Part,
+} from "./multipartPresign";
+import type { Env } from "./types";
 
 /**
  * Upload sessions for the native app (v1). The app uploads parts straight to
@@ -20,6 +28,16 @@ export interface MultipartBackend {
   presignPart(key: string, uploadId: string, partNumber: number, expiresInSeconds: number): Promise<string>;
   listParts(key: string, uploadId: string): Promise<R2Part[]>;
   abort(key: string, uploadId: string): Promise<void>;
+}
+
+/** R2 through its S3 API (needs the R2_* secrets; see isR2Configured). */
+export function r2MultipartBackend(env: Env): MultipartBackend {
+  return {
+    create: (key, contentType) => createMultipartUpload(env, key, contentType),
+    presignPart: (key, uploadId, part, ttl) => presignPartUrl(env, key, uploadId, part, ttl),
+    listParts: (key, uploadId) => listParts(env, key, uploadId),
+    abort: (key, uploadId) => abortMultipartUpload(env, key, uploadId),
+  };
 }
 
 /** Part URLs live this long: long enough for a background upload to finish. */
