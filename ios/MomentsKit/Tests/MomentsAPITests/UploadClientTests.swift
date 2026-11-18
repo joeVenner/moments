@@ -193,4 +193,15 @@ private func json(_ body: String?) throws -> [String: Any] {
             _ = try await client(stub).abortUpload(slug: "p", uploadID: "u1", credentials: guest)
         }
     }
+
+    @Test func classifiesErrorsForRetry() {
+        #expect(MomentsAPIError.transport(nil).isRetryable)
+        #expect(MomentsAPIError.storageUnavailable.isRetryable)
+        #expect(MomentsAPIError.server(status: 503, code: nil).isRetryable)
+        #expect(!MomentsAPIError.server(status: 404, code: nil).isRetryable)
+        #expect(!MomentsAPIError.uploadsClosed.isRetryable)
+        #expect(!MomentsAPIError.uploadNotOpen.isRetryable)
+        #expect(RejectReason(rawValue: RejectReason.objectMismatch.rawValue) == .objectMismatch)
+        #expect(RejectReason.unknown("x").rawValue == "x")
+    }
 }

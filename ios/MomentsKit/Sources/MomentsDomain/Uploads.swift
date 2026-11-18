@@ -110,6 +110,16 @@ public enum RejectReason: Sendable, Hashable {
     /// A reason a newer server added.
     case unknown(String)
 
+    /// The server's string for this reason.
+    public var rawValue: String {
+        switch self {
+        case .partSizeMismatch: "part_size_mismatch"
+        case .objectMismatch: "object_mismatch"
+        case .signatureMismatch: "signature_mismatch"
+        case let .unknown(value): value
+        }
+    }
+
     public init(rawValue: String) {
         switch rawValue {
         case "part_size_mismatch": self = .partSizeMismatch
