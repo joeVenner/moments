@@ -15,20 +15,27 @@ enum PartFile {
 
     /// Writes `range` of `source` to a new file at `url`, created
     /// exclusively (an existing file or link there is an error), readable
-    /// after first unlock. Removes the partial file on failure.
+    /// after first unlock from the start. Removes the partial file on
+    /// failure.
     static func write(from source: FileHandle, range: Range<Int64>, to url: URL) throws(Problem) {
         let path = url.path(percentEncoded: false)
         let descriptor = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
         guard descriptor >= 0 else { throw .writeFailed }
         let output = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        // Protected before the first byte lands (class C: readable after
+        // first unlock). Simulators and macOS have no data protection.
+        #if os(iOS) && !targetEnvironment(simulator)
+        guard fcntl(descriptor, F_SETPROTECTIONCLASS, 3) == 0 else {
+            unlink(path)
+            throw .writeFailed
+        }
+        #endif
         do {
             try copy(from: source, range: range, to: output)
             try output.synchronize()
             try output.close()
-            try FileManager.default.setAttributes(
-                [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: path
-            )
         } catch {
+            // May already be closed; closing twice is harmless here.
             try? output.close()
             unlink(path)
             throw (error as? Problem) ?? .writeFailed

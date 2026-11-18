@@ -101,7 +101,7 @@ private struct Setup {
     func uploader() -> URLSessionPartUploader {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StorageStub.self]
-        return URLSessionPartUploader(service: service, staging: staging, configuration: configuration)
+        return URLSessionPartUploader(service: service, staging: staging, hosts: .cloudflareR2, configuration: configuration)
     }
 
     func upload(_ parts: [Int], with uploader: URLSessionPartUploader? = nil) async throws -> Set<Int> {
@@ -111,9 +111,11 @@ private struct Setup {
         )
     }
 
-    /// Files left in the item's folder besides the staged file.
+    /// Files left in the item's folder besides the staged file, and part
+    /// files.
     func leftovers() throws -> [String] {
-        try FileManager.default.contentsOfDirectory(atPath: staging.folder(for: item.id).path()).filter { $0 != "a.jpg" }
+        let parts = (try? FileManager.default.contentsOfDirectory(atPath: staging.root.appending(path: ".parts").path())) ?? []
+        return try FileManager.default.contentsOfDirectory(atPath: staging.folder(for: item.id).path()).filter { $0 != "a.jpg" } + parts
     }
 }
 
@@ -152,8 +154,9 @@ private struct Setup {
     }
 
     @Test(arguments: [
-        (200, MomentsAPIError?.none), (302, .unexpectedResponse), (400, .invalidUpload), (403, .storageUnavailable),
-        (404, .uploadNotOpen), (413, .invalidUpload), (429, .storageUnavailable), (503, .storageUnavailable),
+        (200, MomentsAPIError?.none), (302, .unexpectedResponse), (400, .storageUnavailable), (403, .storageUnavailable),
+        (404, .uploadNotOpen), (408, .storageUnavailable), (411, .invalidUpload), (413, .invalidUpload),
+        (418, .unexpectedResponse), (429, .storageUnavailable), (503, .storageUnavailable),
     ])
     func mapsStorageAnswers(status: Int, error: MomentsAPIError?) {
         let response = HTTPURLResponse(
@@ -168,30 +171,76 @@ private struct Setup {
 
     @Test(arguments: [
         ("https://acct.r2.cloudflarestorage.com/b/k", "acct.r2.cloudflarestorage.com"),
+        ("https://ACCT.R2.cloudflarestorage.com/b/k", "acct.r2.cloudflarestorage.com"),
         ("http://acct.r2.cloudflarestorage.com/b/k", nil), ("https://127.0.0.1/b", nil), ("https://[::1]/b", nil),
+        ("https://2130706433/b", nil), ("https://0x7f000001/b", nil), ("https://0x7f.0.0.1/b", nil),
+        ("https://0177.0.0.1/b", nil), ("https://1.2.3.0x4/b", nil),
         ("https://localhost/b", nil), ("https://a.localhost/b", nil), ("https://user:pw@s.example.com/b", nil),
-        ("https://10.0.0.1./b", nil),
+        ("https://10.0.0.1./b", nil), ("https://nas/b", nil), ("https://printer.local/b", nil),
+        ("https://metadata.internal/b", nil), ("https://s.example.com./b", nil),
     ])
     func acceptsOnlyNamedHttpsHosts(url: String, host: String?) {
         #expect(URLSessionPartUploader.storageHost(of: URL(string: url)!) == host)
+    }
+
+    @Test func allowsOnlyTheConfiguredStorageDomains() {
+        let policy = StorageHostPolicy.cloudflareR2
+        #expect(policy.allows("acct.r2.cloudflarestorage.com") && policy.allows("r2.cloudflarestorage.com"))
+        #expect(!policy.allows("evilr2.cloudflarestorage.com.example.com") && !policy.allows("xr2.cloudflarestorage.com"))
+    }
+
+    @Test func refusesURLsForAnotherPartOrHost() async throws {
+        let setup = try Setup()
+        setup.service.host = "attacker.example.com"
+        await #expect(throws: MomentsAPIError.unexpectedResponse) { try await setup.upload([1]) }
+        #expect(URLSessionPartUploader.partNumber(in: URL(string: "https://s.example.com/k?partNumber=2&partNumber=3")!) == nil)
+        #expect(URLSessionPartUploader.partNumber(in: URL(string: "https://s.example.com/k?partNumber=2")!) == 2)
+        #expect(StorageStub.sent.isEmpty)
+    }
+
+    @Test func rethrowsARefusalEvenAfterProgress() async throws {
+        let setup = try Setup()
+        StorageStub.respond = { request in
+            request.url!.query()!.contains("partNumber=2") ? (413, [:]) : (200, ["ETag": "\"e\""])
+        }
+        await #expect(throws: MomentsAPIError.invalidUpload) { try await setup.upload([1, 2, 3]) }
+    }
+
+    @Test func clearsPartFilesLeftByACrash() throws {
+        let setup = try Setup()
+        let folder = try setup.staging.partsFolder()
+        try Data("photo".utf8).write(to: folder.appending(path: "left"))
+        #expect(try folder.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+        try setup.staging.clearPartFiles()
+        #expect(try setup.leftovers().isEmpty)
+        try setup.staging.clearPartFiles()
+    }
+
+    @Test func refusesAPartsFolderThatIsALink() throws {
+        let setup = try Setup()
+        try FileManager.default.createSymbolicLink(
+            at: setup.staging.root.appending(path: ".parts"), withDestinationURL: setup.folder.url.appending(path: "elsewhere")
+        )
+        try FileManager.default.createDirectory(at: setup.folder.url.appending(path: "elsewhere"), withIntermediateDirectories: true)
+        #expect(throws: StagingArea.Problem.outsideStaging) { try setup.staging.partsFolder() }
     }
 
     @Test func pinsTheFirstHostOfASession() async throws {
         let setup = try Setup()
         let uploader = setup.uploader()
         #expect(try await setup.upload([1], with: uploader) == [1])
-        setup.service.host = "elsewhere.example.com"
+        setup.service.host = "other.r2.cloudflarestorage.com"
         await #expect(throws: MomentsAPIError.unexpectedResponse) { try await setup.upload([2], with: uploader) }
         // Nor within one batch.
         setup.service.host = "acct.r2.cloudflarestorage.com"
-        setup.service.hosts = [3: "elsewhere.example.com"]
+        setup.service.hosts = [3: "other.r2.cloudflarestorage.com"]
         await #expect(throws: MomentsAPIError.unexpectedResponse) { try await setup.upload([2, 3], with: uploader) }
         #expect(StorageStub.sent.count == 1)
     }
 
     @Test func refusesRedirects() async throws {
         let setup = try Setup()
-        let uploader = setup.uploader()
+        let uploader = RedirectRefuser()
         let task = URLSession.shared.dataTask(with: URL(string: "https://s.example.com")!)
         let response = HTTPURLResponse(url: URL(string: "https://s.example.com")!, statusCode: 307, httpVersion: nil, headerFields: nil)!
         let next = await uploader.urlSession(

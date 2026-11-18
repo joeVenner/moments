@@ -108,6 +108,13 @@ public actor UploadQueue {
         guard !isLoaded else { throw EnqueueError.alreadyLoaded }
         let loaded = try store.load()
         isLoaded = true
+        // Part files left by a crash hold photo bytes; nothing is uploading
+        // yet, so they can all go.
+        do {
+            try staging.clearPartFiles()
+        } catch {
+            cleanupFailures += 1
+        }
         unloaded = loaded.deferred + loaded.overflow
         for var item in loaded.items {
             let before = item

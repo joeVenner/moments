@@ -2,45 +2,66 @@ import Foundation
 import MomentsAPI
 import MomentsDomain
 
+/// Which hosts storage URLs may point at. The app passes its storage
+/// domains; nothing else is accepted, so even a compromised API can't send
+/// photo bytes to a host of its choosing.
+public struct StorageHostPolicy: Sendable {
+    /// Hosts allowed as is or as a parent domain (`r2.cloudflarestorage.com`
+    /// allows `acct.r2.cloudflarestorage.com`), compared on a label boundary.
+    public let domains: [String]
+
+    public init(domains: [String]) {
+        self.domains = domains.map { $0.lowercased() }
+    }
+
+    /// Cloudflare R2's S3 endpoints.
+    public static let cloudflareR2 = StorageHostPolicy(domains: ["r2.cloudflarestorage.com"])
+
+    func allows(_ host: String) -> Bool {
+        domains.contains { host == $0 || host.hasSuffix("." + $0) }
+    }
+}
+
 /// Sends parts straight to storage with presigned PUT URLs. Each part is
 /// copied from the checked staged-file handle into a part file in the
-/// item's staging folder, uploaded and deleted.
+/// staging area's parts folder (wiped at launch), uploaded and deleted.
 ///
 /// Storage is a different trust zone from the API: requests carry no API
 /// headers (the URL is the credential), redirects are refused (a redirect
-/// would carry the bytes elsewhere), and every URL must be https to a named
-/// host — never an IP address or localhost — and, once a session's first
-/// URL was seen, the same host as that one.
+/// would carry the bytes elsewhere), and every URL must be https to an
+/// allowed, named host, for the part it claims to be, on the same host as
+/// the session's first URL.
 ///
 /// Parts go one at a time. This is the foreground uploader; a background
-/// URLSession variant follows.
-public final class URLSessionPartUploader: NSObject, PartUploader, URLSessionTaskDelegate, @unchecked Sendable {
+/// URLSession variant follows. Call `invalidate()` when done with it.
+public final class URLSessionPartUploader: PartUploader, Sendable {
+    /// Hosts pinned per session are forgotten beyond this many sessions.
+    static let maxPinnedSessions = 256
+
     private let service: any UploadService
     private let staging: StagingArea
-    private let allowsHost: @Sendable (String) -> Bool
-    private let lock = NSLock()
-    private let fileLock = NSLock()
-    private var pinnedHosts: [String: String] = [:]
-    private var session: URLSession!
+    private let hosts: StorageHostPolicy
+    private let session: URLSession
+    private let pins = Pins()
 
-    /// - Parameter allowsHost: extra check on storage hosts (for example a
-    ///   known suffix); the built-in rules always apply.
     public init(
-        service: any UploadService, staging: StagingArea, configuration: URLSessionConfiguration = .ephemeral,
-        allowsHost: @escaping @Sendable (String) -> Bool = { _ in true }
+        service: any UploadService, staging: StagingArea, hosts: StorageHostPolicy,
+        configuration: URLSessionConfiguration = .ephemeral
     ) {
         self.service = service
         self.staging = staging
-        self.allowsHost = allowsHost
-        super.init()
+        self.hosts = hosts
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
-        session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+        // The delegate holds nothing, so the session doesn't keep the
+        // uploader alive.
+        session = URLSession(configuration: configuration, delegate: RedirectRefuser(), delegateQueue: nil)
     }
 
-    deinit {
+    /// Cancels uploads in flight and releases the session.
+    public func invalidate() {
         session.invalidateAndCancel()
     }
 
@@ -48,60 +69,67 @@ public final class URLSessionPartUploader: NSObject, PartUploader, URLSessionTas
         parts: [Int], session ref: QueuedUpload.SessionRef, item: QueuedUpload, file: FileHandle,
         credentials: EventCredentials
     ) async throws -> Set<Int> {
+        let parts = Array(Set(parts)).sorted()
         guard !parts.isEmpty else { return [] }
         let batch = try await service.partURLs(slug: item.eventSlug, uploadID: ref.id, parts: parts, credentials: credentials)
-        let urls = try checked(batch, for: ref.id, parts: parts)
+        let targets = try checked(batch, for: ref.id, parts: parts)
         var sent: Set<Int> = []
-        for number in parts {
+        for (number, url) in targets {
             do {
                 try Task.checkCancellation()
-                try await send(part: number, of: ref, item: item, file: file, to: urls[number]!)
+                try await send(part: number, of: ref, item: item, file: file, to: url)
                 sent.insert(number)
             } catch {
-                // Parts already sent are progress; report them and let the
-                // queue retry the rest. Nothing sent: report the error.
-                if sent.isEmpty { throw error }
+                // Parts already sent are progress the queue should record;
+                // the rest is retried. A refusal of the file itself, or
+                // nothing sent at all, is reported as the error.
+                if sent.isEmpty || !Self.isRetryable(error) { throw error }
                 return sent
             }
         }
         return sent
     }
 
+    private static func isRetryable(_ error: any Error) -> Bool {
+        (error as? MomentsAPIError)?.isRetryable ?? (error is CancellationError)
+    }
+
     // MARK: URLs
 
-    /// The batch's URLs for exactly these parts, after the host rules.
-    private func checked(_ batch: PartURLBatch, for sessionID: String, parts: [Int]) throws -> [Int: URL] {
-        var urls: [Int: URL] = [:]
-        for number in parts {
-            guard let url = batch.urls[number], let host = Self.storageHost(of: url), allowsHost(host),
-                  pin(host, for: sessionID)
+    /// The batch's URLs for exactly these parts, in order, after the host
+    /// rules and a check that each URL is for the part it is listed under.
+    private func checked(_ batch: PartURLBatch, for sessionID: String, parts: [Int]) throws -> [(Int, URL)] {
+        try parts.map { number in
+            guard let url = batch.urls[number], let host = Self.storageHost(of: url), hosts.allows(host),
+                  Self.partNumber(in: url) == number, pins.pin(host, for: sessionID)
             else { throw MomentsAPIError.unexpectedResponse }
-            urls[number] = url
+            return (number, url)
         }
-        return urls
     }
 
-    /// The URL's host if it is https to a named host (not an IP literal,
-    /// not localhost), with no user info.
+    /// The URL's host if it is https to a plain ASCII domain name: no IP
+    /// literal in any notation (decimal, octal, hex, IPv6), no localhost,
+    /// `.local` or `.internal`, no single label, no user info.
     static func storageHost(of url: URL) -> String? {
         guard url.scheme?.lowercased() == "https", url.user == nil, url.password == nil,
-              let host = url.host(percentEncoded: false)?.lowercased(), !host.isEmpty
+              let host = url.host(percentEncoded: false)?.lowercased(),
+              !host.isEmpty, host.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == ".") })
         else { return nil }
-        let bare = host.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-        if bare == "localhost" || bare.hasSuffix(".localhost") || bare.contains(":") { return nil }
-        // Dotted digits only: an IPv4 literal.
-        if bare.allSatisfy({ $0.isNumber || $0 == "." }) { return nil }
-        if bare.hasSuffix(".") || bare.contains("..") { return nil }
-        return bare
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard labels.count >= 2, labels.allSatisfy({ !$0.isEmpty && $0.count <= 63 }), let last = labels.last else { return nil }
+        // A numeric or 0x last label makes the resolver read the host as an
+        // IPv4 address (WHATWG URL rule); real top-level domains are letters.
+        guard last.count >= 2, last.first!.isLetter, !last.hasPrefix("0x") else { return nil }
+        if ["localhost", "local", "internal", "home", "lan"].contains(String(last)) { return nil }
+        return host
     }
 
-    /// First host seen for a session wins; later URLs must match it.
-    private func pin(_ host: String, for sessionID: String) -> Bool {
-        lock.withLock {
-            if let pinned = pinnedHosts[sessionID] { return pinned == host }
-            pinnedHosts[sessionID] = host
-            return true
-        }
+    /// The `partNumber` query item, as storage reads it.
+    static func partNumber(in url: URL) -> Int? {
+        let values = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+            .filter { $0.name == "partNumber" }.compactMap(\.value) ?? []
+        guard values.count == 1 else { return nil }
+        return Int(values[0])
     }
 
     // MARK: Sending
@@ -110,9 +138,14 @@ public final class URLSessionPartUploader: NSObject, PartUploader, URLSessionTas
         guard let range = UploadPlan.byteRange(part: number, size: item.file.size, partSize: ref.partSize) else {
             throw MomentsAPIError.invalidUpload
         }
-        let partURL = staging.folder(for: item.id).appending(path: ".part-\(number)-\(UUID().uuidString)")
+        let partURL: URL
+        do throws(StagingArea.Problem) {
+            partURL = try staging.partsFolder().appending(path: "\(item.id.uuidString)-\(number)-\(UUID().uuidString)")
+        } catch {
+            throw MomentsAPIError.transport(nil)
+        }
         do throws(PartFile.Problem) {
-            try writePart(from: file, range: range, to: partURL)
+            try PartFile.write(from: file, range: range, to: partURL)
         } catch .shortRead {
             throw MomentsAPIError.invalidUpload
         } catch {
@@ -132,13 +165,6 @@ public final class URLSessionPartUploader: NSObject, PartUploader, URLSessionTas
         try Self.check(response)
     }
 
-    /// One reader at a time: the handle's offset is shared.
-    private func writePart(from file: FileHandle, range: Range<Int64>, to url: URL) throws(PartFile.Problem) {
-        fileLock.lock()
-        defer { fileLock.unlock() }
-        try PartFile.write(from: file, range: range, to: url)
-    }
-
     /// Storage's answer as the queue understands it.
     static func check(_ response: URLResponse) throws {
         guard let http = response as? HTTPURLResponse else { throw MomentsAPIError.unexpectedResponse }
@@ -148,20 +174,36 @@ public final class URLSessionPartUploader: NSObject, PartUploader, URLSessionTas
             guard let etag = http.value(forHTTPHeaderField: "ETag"), !etag.isEmpty else {
                 throw MomentsAPIError.unexpectedResponse
             }
-        // Expired or refused signature: new URLs next time.
-        case 403: throw MomentsAPIError.storageUnavailable
+        // 400 too: S3-style stores use it for timeouts and expired requests.
+        case 400, 403, 408, 429, 500...: throw MomentsAPIError.storageUnavailable
         // The multipart upload is gone: the queue re-reads the session.
         case 404: throw MomentsAPIError.uploadNotOpen
-        case 400, 411, 413: throw MomentsAPIError.invalidUpload
-        case 408, 429, 500...: throw MomentsAPIError.storageUnavailable
+        // The part itself is unacceptable; sending it again won't help.
+        case 411, 413: throw MomentsAPIError.invalidUpload
         // Includes refused redirects.
         default: throw MomentsAPIError.unexpectedResponse
         }
     }
+}
 
-    // MARK: URLSessionTaskDelegate
+/// The first storage host seen per session; later URLs must match it.
+private final class Pins: @unchecked Sendable {
+    private let lock = NSLock()
+    private var hosts: [String: String] = [:]
 
-    public func urlSession(
+    func pin(_ host: String, for sessionID: String) -> Bool {
+        lock.withLock {
+            if let pinned = hosts[sessionID] { return pinned == host }
+            if hosts.count >= URLSessionPartUploader.maxPinnedSessions { hosts.removeAll() }
+            hosts[sessionID] = host
+            return true
+        }
+    }
+}
+
+/// Refuses every redirect: storage answers directly or not at all.
+final class RedirectRefuser: NSObject, URLSessionTaskDelegate, Sendable {
+    func urlSession(
         _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
         newRequest request: URLRequest
     ) async -> URLRequest? {
@@ -170,7 +212,8 @@ public final class URLSessionPartUploader: NSObject, PartUploader, URLSessionTas
 }
 
 /// Labels a task by item and part only: never the URL (a credential) or
-/// anything about the file.
+/// anything about the file. Refuses redirects too, as task delegates are
+/// asked first.
 private final class TaskLabel: NSObject, URLSessionTaskDelegate, Sendable {
     let label: String
     init(item: UUID, part: Int) { label = "\(item.uuidString):\(part)" }

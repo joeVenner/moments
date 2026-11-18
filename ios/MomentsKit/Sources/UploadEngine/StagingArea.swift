@@ -82,6 +82,48 @@ public struct StagingArea: Sendable {
         return parent.appending(path: path.lastPathComponent, directoryHint: .notDirectory)
     }
 
+    // MARK: Part files
+
+    /// Where part files are written while they upload: `<root>/.parts/`,
+    /// apart from the items' folders and wiped at every launch, so a part
+    /// left by a crash (photo bytes) never outlives the next start. Created
+    /// readable after first unlock and excluded from backup; refused if it
+    /// is a link.
+    public func partsFolder() throws(Problem) -> URL {
+        let folder = root.appending(path: ".parts", directoryHint: .isDirectory)
+        // No trailing slash: with one, lstat would follow a link.
+        let path = root.appending(path: ".parts", directoryHint: .notDirectory).path(percentEncoded: false)
+        var status = stat()
+        // Checked before anything is set on it, and again after creating.
+        if lstat(path, &status) == 0, status.st_mode & S_IFMT != S_IFDIR { throw .outsideStaging }
+        do {
+            try FileManager.default.createDirectory(
+                at: folder, withIntermediateDirectories: true,
+                attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+            )
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            var url = folder
+            try url.setResourceValues(values)
+        } catch {
+            throw .unreadable
+        }
+        guard lstat(path, &status) == 0 else { throw .unreadable }
+        guard status.st_mode & S_IFMT == S_IFDIR else { throw .outsideStaging }
+        return folder
+    }
+
+    /// Deletes every part file (call at launch, before uploading). Removes
+    /// a link in the folder's place without following it.
+    public func clearPartFiles() throws {
+        let folder = root.appending(path: ".parts", directoryHint: .isDirectory)
+        do {
+            try FileManager.default.removeItem(at: folder)
+        } catch CocoaError.fileNoSuchFile {
+            return
+        }
+    }
+
     /// Symlinks resolved and `.`/`..` removed. Applied to both sides so
     /// system links (`/var` → `/private/var`) compare equal.
     private static func canonical(_ url: URL) -> URL {
