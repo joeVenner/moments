@@ -48,7 +48,10 @@ public struct FeedView: View {
         }
         .onChange(of: model.newMomentCount) { old, new in
             guard new > old else { return }
-            AccessibilityNotification.Announcement(String(localized: "^[\(new) new moment](inflect: true)")).post()
+            // Through AttributedString so the inflection applies; String(localized:)
+            // would read out the raw "^[…](inflect: true)" markup.
+            let message = AttributedString(localized: "^[\(new) new moment](inflect: true)")
+            AccessibilityNotification.Announcement(String(message.characters)).post()
         }
         // Back from the background: don't wait for the next 15 s tick.
         .onChange(of: scenePhase) { _, phase in
