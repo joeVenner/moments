@@ -21,7 +21,7 @@ public struct UploadSession: Sendable, Hashable, Identifiable {
 
     public let id: String
     /// The id the app chose; a retry with it returns this same session.
-    public let clientUploadID: String
+    public let clientUploadID: UUID
     public let status: Status
     public let contentType: String
     public let size: Int64
@@ -33,7 +33,7 @@ public struct UploadSession: Sendable, Hashable, Identifiable {
     public let momentID: String?
 
     public init(
-        id: String, clientUploadID: String, status: Status, contentType: String, size: Int64, partSize: Int64,
+        id: String, clientUploadID: UUID, status: Status, contentType: String, size: Int64, partSize: Int64,
         partCount: Int, createdAt: Date, completedAt: Date? = nil, momentID: String? = nil
     ) {
         self.id = id
@@ -77,10 +77,18 @@ public struct UploadProgress: Sendable, Hashable {
         self.session = session
         self.uploadedParts = uploadedParts
     }
+
+    /// Parts still to send; none unless the session is open (the server
+    /// lists no parts for a finished or cancelled one).
+    public var missingParts: [Int] {
+        guard session.status == .open else { return [] }
+        return UploadPlan.missingParts(partCount: session.partCount, uploaded: uploadedParts)
+    }
 }
 
-/// Presigned part URLs, all valid until `expiresAt`.
-public struct PartURLBatch: Sendable, Hashable {
+/// Presigned part URLs, all valid until `expiresAt`. Each URL is a write
+/// credential for hours, so the batch never prints them (see the extension).
+public struct PartURLBatch: Sendable, Hashable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public let expiresAt: Date
     /// Part number → presigned PUT URL (https only).
     public let urls: [Int: URL]
@@ -88,6 +96,27 @@ public struct PartURLBatch: Sendable, Hashable {
     public init(expiresAt: Date, urls: [Int: URL]) {
         self.expiresAt = expiresAt
         self.urls = urls
+    }
+}
+
+/// Why the server refused an upload's bytes.
+public enum RejectReason: Sendable, Hashable {
+    /// A part had the wrong length (often a resume bug: prepare the file anew).
+    case partSizeMismatch
+    /// The assembled file's size or type differs from the session.
+    case objectMismatch
+    /// The file's first bytes aren't the declared type.
+    case signatureMismatch
+    /// A reason a newer server added.
+    case unknown(String)
+
+    public init(rawValue: String) {
+        switch rawValue {
+        case "part_size_mismatch": self = .partSizeMismatch
+        case "object_mismatch": self = .objectMismatch
+        case "signature_mismatch": self = .signatureMismatch
+        default: self = .unknown(rawValue)
+        }
     }
 }
 
@@ -99,41 +128,55 @@ public enum CompleteOutcome: Sendable, Hashable {
     case incomplete(uploadedParts: Set<Int>)
     /// The bytes didn't match what was declared; the session is gone. Queue
     /// the item again only after preparing the file anew.
-    case rejected(reason: String)
+    case rejected(RejectReason)
     /// Cancelled (by the guest or a cleanup), or its moment was since deleted.
     case notOpen
 }
 
-/// Pure arithmetic for splitting a file into the session's parts.
+/// Pure arithmetic for splitting a file into the session's parts. Values
+/// come from the server, so nothing here traps: bad input gives nil or empty.
 public enum UploadPlan {
-    /// Parts for a file of `size` bytes (at least one, as the server counts).
-    public static func partCount(size: Int64, partSize: Int64) -> Int {
-        precondition(size >= 0 && partSize > 0, "invalid sizes")
-        return max(1, Int((size + partSize - 1) / partSize))
+    /// Storage's limit on parts per upload; more means a bad session.
+    public static let maxParts = 10_000
+
+    /// Parts for a file of `size` bytes (at least one, as the server counts),
+    /// or nil for negative sizes, a non-positive part size or over `maxParts`.
+    public static func partCount(size: Int64, partSize: Int64) -> Int? {
+        guard size >= 0, partSize > 0 else { return nil }
+        let (whole, rest) = size.quotientAndRemainder(dividingBy: partSize)
+        let count = max(1, whole + (rest > 0 ? 1 : 0))
+        return count <= Int64(maxParts) ? Int(count) : nil
     }
 
-    /// The byte range of part `number` (1-based). Every part is `partSize`
-    /// long except the last, which holds the rest; the server rejects any
-    /// other length.
-    public static func byteRange(part number: Int, size: Int64, partSize: Int64) -> Range<Int64> {
-        let count = partCount(size: size, partSize: partSize)
-        precondition((1...count).contains(number), "part out of range")
+    /// The byte range of part `number` (1-based), or nil when out of range.
+    /// Every part is `partSize` long except the last, which holds the rest;
+    /// the server rejects any other length.
+    public static func byteRange(part number: Int, size: Int64, partSize: Int64) -> Range<Int64>? {
+        guard let count = partCount(size: size, partSize: partSize), (1...count).contains(number) else { return nil }
+        // No overflow: start < size because number ≤ count.
         let start = Int64(number - 1) * partSize
-        return start ..< min(size, start + partSize)
+        return start ..< min(size, start + min(partSize, size - start))
     }
 
-    /// Part numbers still to send, ascending.
+    /// Part numbers still to send, ascending (numbers outside the session ignored).
     public static func missingParts(partCount: Int, uploaded: Set<Int>) -> [Int] {
-        guard partCount > 0 else { return [] }
+        guard (1...maxParts).contains(partCount) else { return [] }
         return (1...partCount).filter { !uploaded.contains($0) }
     }
 
     /// Whether the server's session describes the same file the app holds
     /// (same size and type, and a part count that matches the part size).
+    /// Check this before reading any bytes for the session.
     public static func matches(_ session: UploadSession, size: Int64, contentType: String) -> Bool {
         session.size == size
             && session.contentType.lowercased() == contentType.lowercased()
-            && session.partSize > 0
             && session.partCount == partCount(size: size, partSize: session.partSize)
     }
+}
+
+// Redacted: the URLs carry presigned write credentials.
+public extension PartURLBatch {
+    var description: String { "PartURLBatch(parts: \(urls.count), redacted, expiresAt: \(expiresAt))" }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
 }

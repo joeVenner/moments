@@ -35,6 +35,7 @@ private func json(_ body: String?) throws -> [String: Any] {
             slug: "party", credentials: guest
         )
         #expect(result.status == .open)
+        #expect(result.clientUploadID == id)
         #expect(result.partSize == 8_388_608 && result.partCount == 3 && result.size == 16_777_316)
         let request = try #require(stub.requests.first)
         #expect(request.request.method == .post)
@@ -78,6 +79,57 @@ private func json(_ body: String?) throws -> [String: Any] {
         }
     }
 
+    @Test(arguments: [
+        // Not requested, duplicated, out of range, or missing one asked for.
+        (#"[{"part_number":3,"url":"https://r2.test/a"}]"#, [2] as [Int]?),
+        (#"[{"part_number":2,"url":"https://r2.test/a"},{"part_number":2,"url":"https://r2.test/b"}]"#, [2]),
+        (#"[{"part_number":0,"url":"https://r2.test/a"}]"#, nil),
+        (#"[{"part_number":2,"url":"https://r2.test/a"}]"#, [2, 3]),
+        (#"[{"part_number":1,"url":"https:///no-host"}]"#, nil),
+    ])
+    func refusesPartBatchesThatDontMatchTheRequest(parts: String, requested: [Int]?) async throws {
+        let stub = StubTransport(json: #"{"expires_at":"2026-11-18 16:00:00","parts":\#(parts)}"#)
+        await #expect(throws: MomentsAPIError.unexpectedResponse) {
+            _ = try await client(stub).partURLs(slug: "party", uploadID: "u1", parts: requested, credentials: guest)
+        }
+    }
+
+    @Test func omitsThePartListWhenAskingForAll() async throws {
+        let stub = StubTransport(json: #"{"expires_at":"2026-11-18 16:00:00","parts":[{"part_number":1,"url":"HTTPS://r2.test/a"}]}"#)
+        #expect(try await client(stub).partURLs(slug: "p", uploadID: "u1", parts: nil, credentials: guest).urls.count == 1)
+        #expect(try json(stub.requests.first?.body)["part_numbers"] == nil)
+    }
+
+    @Test(arguments: [
+        session().replacingOccurrences(of: #""part_count":3"#, with: #""part_count":4"#),
+        session().replacingOccurrences(of: #""part_size":8388608"#, with: #""part_size":0"#),
+        session().replacingOccurrences(of: "6f1c2a7e-3b4d-4e5f-8a9b-0c1d2e3f4a5b", with: "not-a-uuid"),
+    ])
+    func refusesInconsistentSessions(json: String) async throws {
+        await #expect(throws: MomentsAPIError.unexpectedResponse) {
+            _ = try await client(StubTransport(json: json)).abortUpload(slug: "p", uploadID: "u1", credentials: guest)
+        }
+    }
+
+    @Test func dropsUploadedPartsOutsideTheSession() async throws {
+        let stub = StubTransport(json: #"{"upload":\#(session()),"uploaded_parts":[1,9,0]}"#)
+        #expect(try await client(stub).uploadProgress(slug: "p", uploadID: "u1", credentials: guest).uploadedParts == [1])
+    }
+
+    @Test func mapsAnUnreadable409OnCompleteToUnexpectedResponse() async throws {
+        await #expect(throws: MomentsAPIError.unexpectedResponse) {
+            _ = try await client(StubTransport(status: 409, json: "oops")).completeUpload(slug: "p", uploadID: "u1", credentials: guest)
+        }
+    }
+
+    @Test func refusesAnEmptyFileWithoutAskingTheServer() async throws {
+        let stub = StubTransport(json: "{}")
+        await #expect(throws: MomentsAPIError.invalidUpload) {
+            _ = try await client(stub).startUpload(NewUpload(clientUploadID: UUID(), contentType: "image/jpeg", size: 0), slug: "p", credentials: guest)
+        }
+        #expect(stub.requests.isEmpty)
+    }
+
     @Test func neverSendsAnEmptyPartList() async throws {
         let stub = StubTransport(json: "{}")
         await #expect(throws: MomentsAPIError.invalidRequest) {
@@ -101,7 +153,7 @@ private func json(_ body: String?) throws -> [String: Any] {
         let notOpen = StubTransport(status: 409, json: #"{"error":"x","code":"upload_not_open"}"#)
         #expect(try await client(notOpen).completeUpload(slug: "p", uploadID: "u1", credentials: guest) == .notOpen)
         let rejected = StubTransport(status: 422, json: #"{"error":"x","code":"upload_rejected","reason":"signature_mismatch"}"#)
-        #expect(try await client(rejected).completeUpload(slug: "p", uploadID: "u1", credentials: guest) == .rejected(reason: "signature_mismatch"))
+        #expect(try await client(rejected).completeUpload(slug: "p", uploadID: "u1", credentials: guest) == .rejected(.signatureMismatch))
     }
 
     @Test(arguments: [
