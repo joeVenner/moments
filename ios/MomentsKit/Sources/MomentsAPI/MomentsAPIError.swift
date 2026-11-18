@@ -25,6 +25,22 @@ public enum MomentsAPIError: Error, Sendable, Equatable {
     case guestRequired
     /// Too many requests from this device; slow down and try later.
     case rateLimited
+    /// The event stopped taking uploads (and the finishing grace has passed).
+    case uploadsClosed
+    /// No such upload session for this guest in this event.
+    case uploadNotFound
+    /// The session was cancelled: queue the item again under a new id.
+    case uploadNotOpen
+    /// This client upload id was already used for a different file.
+    case uploadConflict
+    /// Too many unfinished uploads (for this guest or the event): finish some first.
+    case tooManyUploads
+    /// Unsupported type, size or caption.
+    case invalidUpload
+    /// The server has no direct-upload storage configured.
+    case uploadsUnavailable
+    /// Storage failed on the server side: retry later.
+    case storageUnavailable
     /// The server rejected the request as malformed (a client bug).
     case invalidRequest
     /// The response did not have the documented shape.

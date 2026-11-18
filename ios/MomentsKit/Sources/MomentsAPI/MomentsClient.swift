@@ -119,8 +119,9 @@ public protocol MomentsService: Sendable {
 /// The app's API client: the generated v1 client plus the version header,
 /// typed errors and mapping into MomentsDomain.
 public struct MomentsClient: MomentsService {
-    private let client: Client
-    private let mapper: WireMapper
+    // Internal (not private) for the upload calls in MomentsClient+Uploads.swift.
+    let client: Client
+    let mapper: WireMapper
 
     public enum ConfigurationError: Error, Equatable {
         /// https only (http to localhost in debug builds), no credentials,
@@ -379,7 +380,7 @@ public struct MomentsClient: MomentsService {
 
     /// Runs one call and converts every failure to `MomentsAPIError`, so no
     /// runtime error (whose description prints request headers) escapes.
-    private func perform<T>(_ operation: () async throws -> T) async throws -> T {
+    func perform<T>(_ operation: () async throws -> T) async throws -> T {
         do {
             return try await operation()
         } catch {
@@ -410,6 +411,14 @@ public struct MomentsClient: MomentsService {
         case (404, "moment_not_found"): .momentNotFound
         case (403, "guest_required"): .guestRequired
         case (429, "rate_limited"): .rateLimited
+        case (403, "uploads_closed"): .uploadsClosed
+        case (404, "upload_not_found"): .uploadNotFound
+        case (409, "upload_not_open"): .uploadNotOpen
+        case (409, "upload_conflict"): .uploadConflict
+        case (429, "too_many_uploads"): .tooManyUploads
+        case (400, "invalid_upload"): .invalidUpload
+        case (501, "uploads_unavailable"): .uploadsUnavailable
+        case (502, "storage_unavailable"): .storageUnavailable
         case (400, _), (415, _): .invalidRequest
         default: .server(status: status, code: code)
         }
