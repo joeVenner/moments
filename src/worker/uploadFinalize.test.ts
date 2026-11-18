@@ -94,6 +94,8 @@ const moments = () => sqlite.raw.prepare("SELECT uploader_name, caption, points_
 beforeEach(() => {
   sqlite = createSqliteD1();
   sqlite.raw.prepare("INSERT INTO events (id, slug, title, type) VALUES ('event-1', 'party', 'Party', 'Party')").run();
+  // startUpload only serves guests that still exist in the event.
+  sqlite.raw.prepare("INSERT INTO participants (id, event_id, nickname) VALUES ('p1', 'event-1', 'Sara')").run();
 });
 
 describe("checkParts", () => {

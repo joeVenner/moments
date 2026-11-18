@@ -515,6 +515,18 @@
           "reactor_id"
         ]
       },
+      "LeaveResponse": {
+        "type": "object",
+        "properties": {
+          "done": {
+            "type": "boolean",
+            "description": "True once everything is deleted and the guest token is revoked; false: call again with the same token"
+          }
+        },
+        "required": [
+          "done"
+        ]
+      },
       "UploadSession": {
         "type": "object",
         "properties": {
@@ -1729,6 +1741,132 @@
           },
           "429": {
             "description": "`rate_limited`: too many reactions from this device; slow down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error (415, 5xx, ...)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{slug}/participants/me": {
+      "delete": {
+        "operationId": "leaveEvent",
+        "tags": [
+          "Guest"
+        ],
+        "summary": "Leave the event and delete what this guest shared from the app",
+        "description": "Cancels this guest's open upload sessions, deletes the moments made from their sessions (not web uploads under the same name), then revokes the guest token and frees the nickname. Resumable: repeat while `done` is false. After the last call the token no longer works, so a `guest_required` answer to a retry means it already finished.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "slug",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "Access grant; required for private events only"
+            },
+            "required": false,
+            "description": "Access grant; required for private events only",
+            "name": "x-event-access",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "This device's guest token (required: uploads belong to a joined guest)"
+            },
+            "required": false,
+            "description": "This device's guest token (required: uploads belong to a joined guest)",
+            "name": "x-guest-token",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Progress; repeat while `done` is false",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaveResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Private event; send a grant from the access endpoint in X-Event-Access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`guest_required`: no valid guest token (already left, or never joined)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live event with this slug",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`storage_unavailable`: R2 failed; retry later",
             "content": {
               "application/json": {
                 "schema": {

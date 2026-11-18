@@ -53,7 +53,7 @@ struct AppEnvironment {
         let client = makeClient()
         let guest = GuestDependencies(
             service: client, store: credentials, mediaFetcher: makeMediaFetcher(),
-            reactorID: reactorIDs(secret: reactorSecret(defaults))
+            reactorID: reactorIDs(secret: reactorSecret(defaults)), leaver: client
         )
         return AppEnvironment(service: client, credentials: credentials, guest: guest)
     }

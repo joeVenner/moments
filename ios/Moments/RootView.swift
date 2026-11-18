@@ -17,6 +17,8 @@ struct RootView: View {
                 GuestEventView(join: joinModel, dependencies: environment.guest) {
                     // Access changed under the feed: start over with the PIN.
                     self.joinModel = makeJoinModel(slug: joinModel.slug, invite: nil)
+                } onLeft: {
+                    self.joinModel = nil
                 }
                 // A new model per open restarts the flow cleanly.
                 .id(joinModel.id)

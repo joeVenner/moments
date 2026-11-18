@@ -104,6 +104,8 @@ export type StartUploadResult =
   /** The client id's session was aborted; the app must use a new id. */
   | { kind: "not_open"; session: UploadSessionRow }
   | { kind: "too_many_open" }
+  /** The guest left (or was removed) while this request ran. */
+  | { kind: "guest_gone" }
   | { kind: "closed" }
   | { kind: "rate_limited" };
 
@@ -196,12 +198,15 @@ export async function startUpload(
          SELECT ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?
           WHERE (SELECT COUNT(*) FROM uploads WHERE participant_id = ? AND status = 'open') < ?
             AND (SELECT COUNT(*) FROM uploads WHERE event_id = ? AND status = 'open') < ?
+            -- A guest who left meanwhile must not get a session nobody can abort.
+            AND EXISTS (SELECT 1 FROM participants WHERE id = ? AND event_id = ?)
          ON CONFLICT (event_id, participant_id, client_upload_id) WHERE client_upload_id IS NOT NULL DO NOTHING`
       )
       .bind(
         id, input.eventId, input.nickname, key, uploadId, contentType, input.size,
         input.clientUploadId.toLowerCase(), input.participantId, input.caption, MULTIPART_PART_BYTES,
-        input.participantId, MAX_OPEN_UPLOADS_PER_GUEST, input.eventId, MAX_OPEN_UPLOADS_PER_EVENT
+        input.participantId, MAX_OPEN_UPLOADS_PER_GUEST, input.eventId, MAX_OPEN_UPLOADS_PER_EVENT,
+        input.participantId, input.eventId
       )
       .run();
     changes = result.meta.changes;
@@ -213,7 +218,10 @@ export async function startUpload(
   if (changes === 0) {
     await abortOwn();
     const winner = await findByClientId(db, input);
-    return winner ? existingResult(winner, input) : { kind: "too_many_open" };
+    if (winner) return existingResult(winner, input);
+    const stillHere = await db.prepare("SELECT 1 FROM participants WHERE id = ? AND event_id = ?")
+      .bind(input.participantId, input.eventId).first();
+    return stillHere ? { kind: "too_many_open" } : { kind: "guest_gone" };
   }
   const session = await getUploadById(db, id);
   if (!session) throw new Error("upload session missing after insert");

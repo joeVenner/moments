@@ -47,11 +47,21 @@ function input(overrides: Partial<StartUploadInput> = {}): StartUploadInput {
   };
 }
 
+const PARTICIPANTS = [
+  ["p1", "event-1", "Sara"],
+  ["p2", "event-1", "Lina"],
+  ["p3", "event-2", "Sara"],
+] as const;
+
 beforeEach(() => {
   cleanupErrors.length = 0;
   sqlite = createSqliteD1();
   sqlite.raw.prepare("INSERT INTO events (id, slug, title, type) VALUES ('event-1', 'party', 'Party', 'Party')").run();
   sqlite.raw.prepare("INSERT INTO events (id, slug, title, type) VALUES ('event-2', 'other', 'Other', 'Party')").run();
+  // startUpload only serves guests that still exist in the event.
+  for (const [id, eventId, nickname] of PARTICIPANTS) {
+    sqlite.raw.prepare("INSERT INTO participants (id, event_id, nickname) VALUES (?, ?, ?)").run(id, eventId, nickname);
+  }
 });
 
 describe("startUpload", () => {
@@ -95,7 +105,15 @@ describe("startUpload", () => {
     const { backend } = fakeBackend();
     await startUpload(sqlite.db, backend, input(), HOOKS);
     expect((await startUpload(sqlite.db, backend, input({ participantId: "p2" }), HOOKS)).kind).toBe("started");
-    expect((await startUpload(sqlite.db, backend, input({ eventId: "event-2" }), HOOKS)).kind).toBe("started");
+    expect((await startUpload(sqlite.db, backend, input({ eventId: "event-2", participantId: "p3" }), HOOKS)).kind).toBe("started");
+  });
+
+  it("refuses a guest who is gone and aborts its own multipart", async () => {
+    const { backend, calls } = fakeBackend();
+    expect(await startUpload(sqlite.db, backend, input({ participantId: "p-left" }), HOOKS)).toEqual({ kind: "guest_gone" });
+    // A participant of another event doesn't count either.
+    expect(await startUpload(sqlite.db, backend, input({ participantId: "p3" }), HOOKS)).toEqual({ kind: "guest_gone" });
+    expect(calls.abort).toHaveLength(2);
   });
 
   it("lets a concurrent duplicate lose cleanly and aborts its multipart", async () => {

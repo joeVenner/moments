@@ -27,12 +27,16 @@ public struct GuestDependencies: Sendable {
     public let reactorID: @Sendable (_ eventID: String) -> String
     /// Nil until uploads are wired in the app: the share button is hidden.
     public let uploads: UploadDependencies?
+    /// "Leave this event"; nil hides it.
+    public let leaver: (any LeaveService)?
 
     public init(
         service: any MomentsService, store: any EventCredentialStore, mediaFetcher: MediaFetcher,
-        reactorID: @escaping @Sendable (_ eventID: String) -> String, uploads: UploadDependencies? = nil
+        reactorID: @escaping @Sendable (_ eventID: String) -> String, uploads: UploadDependencies? = nil,
+        leaver: (any LeaveService)? = nil
     ) {
         self.uploads = uploads
+        self.leaver = leaver
         self.service = service
         self.store = store
         self.mediaFetcher = mediaFetcher

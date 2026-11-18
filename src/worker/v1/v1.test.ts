@@ -132,6 +132,21 @@ describe("private events", () => {
     expect((await join("secret", { nickname: "Sara" })).status).toBe(401);
   });
 
+  it("lets a guest leave with only their token after access changed", async () => {
+    const grant = await signAccessGrant(SECRET, { eventId: "event-p", accessVersion: 1, expiresAt: Math.floor(Date.now() / 1000) + 600 });
+    const joined = (await (await join("secret", { nickname: "Sara" }, { "X-Event-Access": grant })).json()) as { guest_token: string };
+    // A new PIN revokes every grant.
+    sqlite.raw.prepare("UPDATE events SET access_version = 2 WHERE id = 'event-p'").run();
+    expect((await call("/events/secret/feed", { headers: { "X-Event-Access": grant } })).status).toBe(401);
+    const leave = (headers: Record<string, string>) => call("/events/secret/participants/me", { method: "DELETE", headers });
+    expect((await leave({})).status).toBe(403);
+    expect((await leave({ "X-Guest-Token": "gt_" + "x".repeat(43) })).status).toBe(403);
+    const res = await leave({ "X-Guest-Token": joined.guest_token });
+    expect(await res.json()).toEqual({ done: true });
+    // Only DELETE on that exact path skips the grant.
+    expect((await call("/events/secret/participants/me", { headers: { "X-Guest-Token": joined.guest_token } })).status).toBe(401);
+  });
+
   it("accepts a valid grant in X-Event-Access", async () => {
     const grant = await signAccessGrant(SECRET, {
       eventId: "event-p",
@@ -952,6 +967,44 @@ describe("upload sessions", () => {
     expect(await reused.json()).toMatchObject({ code: "upload_not_open" });
     const lea = await guestToken("party", "Lea");
     expect((await call(`/events/party/uploads/${id}`, authed(lea, { method: "DELETE" }))).status).toBe(404);
+  });
+
+  it("lets a guest leave: aborts their sessions, revokes the token, frees the name", async () => {
+    s3.mockImplementation(async () => new Response(null, { status: 204 }));
+    const bucketDelete = vi.fn(async () => undefined);
+    extraEnv = { ...R2_ENV, BUCKET: { delete: bucketDelete } as unknown as R2Bucket };
+    const token = await guestToken();
+    s3.mockImplementationOnce(async () =>
+      new Response("<InitiateMultipartUploadResult><UploadId>mp-x</UploadId></InitiateMultipartUploadResult>")
+    );
+    expect((await start(token)).status).toBe(201);
+    const leave = (value: string | null) =>
+      call("/events/party/participants/me", { method: "DELETE", headers: value ? { "X-Guest-Token": value } : {} });
+
+    const res = await leave(token);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(await res.json()).toEqual({ done: true });
+    expect(s3.mock.calls.some(([input, init]) => (input instanceof Request ? input.method : init?.method) === "DELETE")).toBe(true);
+    expect(bucketDelete).toHaveBeenCalledTimes(1);
+    // A retry after a lost answer: the token is gone, which means it's done.
+    expect(await (await leave(token)).json()).toMatchObject({ code: "guest_required" });
+    expect((await leave(null)).status).toBe(403);
+    expect((await join("party", { nickname: "Sara" })).status).toBe(200);
+  });
+
+  it("refuses a session to a guest who left meanwhile", async () => {
+    const token = await guestToken();
+    // The guest left between the token check and the insert.
+    s3.mockImplementationOnce(async () => {
+      sqlite.raw.prepare("DELETE FROM participants WHERE nickname = 'Sara'").run();
+      return new Response("<InitiateMultipartUploadResult><UploadId>mp-late</UploadId></InitiateMultipartUploadResult>");
+    });
+    s3.mockImplementation(async () => new Response(null, { status: 204 }));
+    const res = await start(token);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: "guest_required" });
+    expect(sqlite.raw.prepare("SELECT COUNT(*) AS n FROM uploads").get()).toEqual({ n: 0 });
   });
 
   it("rejects an empty part list and control characters in captions", async () => {
