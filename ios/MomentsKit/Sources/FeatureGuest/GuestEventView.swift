@@ -10,6 +10,10 @@ public struct GuestEventView: View {
     let dependencies: GuestDependencies
     /// Called when the feed loses access, to start a fresh join flow.
     let rejoin: () -> Void
+    /// The guest left the event (everything deleted, identity forgotten).
+    let onLeft: () -> Void
+    @State private var leave: LeaveModel?
+    @State private var isConfirmingLeave = false
     @State private var feed: FeedModel?
     @State private var highlights: HighlightsModel?
     @State private var leaderboard: LeaderboardModel?
@@ -24,10 +28,11 @@ public struct GuestEventView: View {
     /// the sheet is already closing).
     @State private var sharedBatches = 0
 
-    public init(join: JoinModel, dependencies: GuestDependencies, rejoin: @escaping () -> Void) {
+    public init(join: JoinModel, dependencies: GuestDependencies, rejoin: @escaping () -> Void, onLeft: @escaping () -> Void = {}) {
         self.join = join
         self.dependencies = dependencies
         self.rejoin = rejoin
+        self.onLeft = onLeft
     }
 
     public var body: some View {
@@ -47,6 +52,7 @@ public struct GuestEventView: View {
                     }
                     .tint(MomentsColor.accent)
                     .haptic(.uploadComplete, trigger: sharedBatches)
+                    .safeAreaInset(edge: .top) { if let leave { eventMenu(leave) } }
                     if feed.phase == .accessLost {
                         Button("Join again", action: rejoin)
                             .buttonStyle(.momentsPrimary)
@@ -54,6 +60,24 @@ public struct GuestEventView: View {
                     }
                 }
                 .background(MomentsColor.background)
+                // Deleting takes a few calls; nothing else may start meanwhile.
+                .disabled(leave?.phase == .leaving)
+                .accessibilityHidden(leave?.phase == .leaving)
+                .overlay {
+                    if leave?.phase == .leaving {
+                        ZStack {
+                            // Blocks scrolling and the tab bar, not just buttons.
+                            MomentsColor.background.opacity(0.6).ignoresSafeArea()
+                            ProgressView("Leaving…")
+                                .tint(MomentsColor.text)
+                                .foregroundStyle(MomentsColor.text)
+                                .padding(Spacing.md)
+                                .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.card))
+                                .accessibilityElement(children: .combine)
+                        }
+                        .onAppear { AccessibilityNotification.Announcement("Leaving the event").post() }
+                    }
+                }
             } else {
                 JoinView(model: join)
             }
@@ -111,6 +135,72 @@ public struct GuestEventView: View {
             highlights = highlightsModel
             leaderboard = leaderboardModel
             feed = feedModel
+            if let leaver = dependencies.leaver {
+                leave = LeaveModel(slug: join.slug, service: leaver, store: dependencies.store)
+            }
+        }
+        .onChange(of: leave?.phase) { _, phase in
+            guard phase == .left else { return }
+            upload?.discardAll()
+            upload = nil
+            highlights?.end()
+            leaderboard?.end()
+            for loader in [thumbnails, viewerImages].compactMap(\.self) { Task { await loader.removeAll() } }
+            onLeft()
+        }
+    }
+
+    // MARK: - Leaving
+
+    private func eventMenu(_ leave: LeaveModel) -> some View {
+        HStack {
+            Spacer()
+            Menu {
+                Button("Leave event…", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                    isConfirmingLeave = true
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.title3)
+                    .foregroundStyle(MomentsColor.textMuted)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .accessibilityLabel(Text("Event options"))
+            .disabled(leave.phase == .leaving)
+        }
+        .padding(.horizontal, Spacing.sm)
+        .confirmationDialog("Leave this event?", isPresented: $isConfirmingLeave, titleVisibility: .visible) {
+            Button("Leave and delete", role: .destructive) { Task { await leave.leave() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The photos and videos you shared from this app are deleted and your nickname is freed. Anything shared from the website stays. This can't be undone.")
+        }
+        .alert(
+            "Couldn't leave the event",
+            // Closed any way but "Try again": back to idle, so it doesn't reappear.
+            isPresented: Binding(
+                get: { leaveFailure(leave) != nil },
+                set: { if !$0 { leave.dismissFailure() } }
+            ),
+            presenting: leaveFailure(leave)
+        ) { _ in
+            Button("Try again") { Task { await leave.leave() } }
+            Button("Cancel", role: .cancel) {}
+        } message: { failure in
+            Text(leaveMessage(failure))
+        }
+    }
+
+    private func leaveFailure(_ leave: LeaveModel) -> LeaveModel.Failure? {
+        if case let .failed(failure) = leave.phase { failure } else { nil }
+    }
+
+    private func leaveMessage(_ failure: LeaveModel.Failure) -> LocalizedStringResource {
+        switch failure {
+        case .busy: "Too many requests right now. Try again in a minute."
+        case .upgradeRequired: "Update Moments to leave this event."
+        case .temporary: "Moments couldn't finish leaving the event. Try again to continue where it stopped."
+        case .storage: "Your uploads are deleted, but this device couldn't forget your name. Try again."
         }
     }
 
