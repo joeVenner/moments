@@ -963,6 +963,13 @@ describe("upload sessions", () => {
     expect(caption.status).toBe(400);
     expect((await start(token, { client_upload_id: "00000000-0000-4000-8000-000000000004", caption: "line one\nline two" })).status).toBe(201);
     expect((await start(token, { client_upload_id: "00000000-0000-4000-8000-000000000005", caption: "a\r\nb" })).status).toBe(201);
+    for (const [index, hidden] of ["\u202E", "\u202A", "\u2066", "\u2069"].entries()) {
+      const res = await start(token, { client_upload_id: `00000000-0000-4000-8000-00000000010${index}`, caption: `gift${hidden}txt.exe` });
+      expect(res.status).toBe(400);
+    }
+    // Joiners and direction marks are ordinary text: emoji and RTL scripts.
+    const family = "\u{1F469}\u200D\u{1F467} \u0645\u0631\u062D\u0628\u0627\u200F \u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645";
+    expect((await start(token, { client_upload_id: "00000000-0000-4000-8000-000000000006", caption: family })).status).toBe(201);
   });
 
   it("logs R2 failures without the response body", async () => {

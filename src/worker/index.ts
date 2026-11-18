@@ -66,6 +66,7 @@ import {
   type PublicParticipant,
 } from "./guestIdentity";
 import { isJoinLimited, JOIN_RATE_LIMITED, JOIN_RETRY_AFTER_SECONDS } from "./joinLimit";
+import { cleanWebCaption } from "./captionText";
 import {
   MAX_PIN_LENGTH,
   MIN_PIN_LENGTH,
@@ -528,7 +529,7 @@ app.post("/api/events/:slug/moments", async (c) => {
   const body = await c.req.parseBody();
   const uploaderName =
     typeof body.uploader_name === "string" ? body.uploader_name.trim() : "";
-  const caption = typeof body.caption === "string" ? body.caption.trim() : null;
+  const caption = typeof body.caption === "string" ? cleanWebCaption(body.caption) : null;
   const file = body.file instanceof File ? body.file : null;
 
   if (!uploaderName || !file || file.size === 0) {
@@ -926,7 +927,7 @@ app.post("/api/events/:slug/moments/stream/complete", async (c) => {
   } | null;
   const streamUid = typeof body?.stream_uid === "string" ? body.stream_uid : "";
   const uploaderName = typeof body?.uploader_name === "string" ? body.uploader_name.trim() : "";
-  const caption = typeof body?.caption === "string" ? body.caption.trim() : null;
+  const caption = typeof body?.caption === "string" ? cleanWebCaption(body.caption) : null;
   if (!streamUid || !uploaderName) return c.json({ error: "stream_uid and uploader_name are required" }, 400);
 
   const upload = await getUpload(c.env.DB, event.id, streamUid, `stream/${streamUid}`);
@@ -1246,7 +1247,7 @@ app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
 
   const uploadId = typeof body?.upload_id === "string" ? body.upload_id : "";
   const key = typeof body?.key === "string" ? body.key : "";
-  const caption = typeof body?.caption === "string" ? body.caption.trim() : null;
+  const caption = typeof body?.caption === "string" ? cleanWebCaption(body.caption) : null;
   const uploaderName = typeof body?.uploader_name === "string" ? body.uploader_name.trim() : "";
   const parts = Array.isArray(body?.parts) ? body.parts : null;
 
