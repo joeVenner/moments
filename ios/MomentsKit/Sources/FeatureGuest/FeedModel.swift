@@ -274,8 +274,7 @@ public final class FeedModel {
     }
 
     private func credentials() throws -> EventCredentials {
-        let stored = try store.credentials(for: slug)
-        return EventCredentials(accessGrant: stored?.validAccessGrant(), guestToken: stored?.guestToken)
+        try eventCredentials(store: store, slug: slug)
     }
 
     /// Runs one sync at a time (FeedState's contract). Returns whether the
