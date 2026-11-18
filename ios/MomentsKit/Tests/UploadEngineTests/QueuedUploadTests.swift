@@ -458,3 +458,34 @@ private extension QueuedUpload {
     }
 }
 
+
+@Suite struct QueuedUploadGuestViewTests {
+    /// Each error drives the item to a failure; "Try again" works only on some.
+    @Test(arguments: [
+        (MomentsAPIError.uploadsClosed, false), (.eventNotFound, false), (.invalidUpload, false),
+        (.uploadNotFound, false), (.accessRequired, true), (.upgradeRequired, true),
+        (.uploadsUnavailable, true), (.nicknameTaken, true),
+    ])
+    func retryableFailures(error: MomentsAPIError, retryable: Bool) {
+        var upload = uploading()
+        upload.apply(.requestFailed(error, clientUploadID: upload.clientUploadID), now: t0)
+        #expect(upload.isFinished)
+        #expect(upload.canRetryByGuest == retryable)
+        let before = upload
+        upload.retryByGuest()
+        #expect((upload != before) == retryable)
+    }
+
+    @Test func aLostFileCannotBeRetried() {
+        var upload = uploading()
+        upload.apply(.fileLost(clientUploadID: upload.clientUploadID), now: t0)
+        #expect(upload.phase == .failed(.fileLost) && !upload.canRetryByGuest)
+    }
+
+    @Test func uploadedFractionFollowsTheParts() {
+        #expect(item().uploadedFraction == 0)
+        #expect(uploading().uploadedFraction == 0)
+        #expect(uploading([1]).uploadedFraction == 1.0 / 3)
+        #expect(uploading([1, 2, 3]).uploadedFraction == 1)
+    }
+}
