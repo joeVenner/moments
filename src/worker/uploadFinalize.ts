@@ -1,4 +1,5 @@
 import { matchesContentType, SIGNATURE_BYTES } from "./mediaSignature";
+import { isR2Configured } from "./presign";
 import { completeMultipartUpload, type R2Part, R2RequestError } from "./multipartPresign";
 import { pointsForContentType } from "./storage";
 import type { Env } from "./types";
@@ -166,3 +167,66 @@ export async function finalizeUpload(
   }
   return register(db, backend, session);
 }
+
+/** Sessions the daily sweep tries per run (each costs up to 5 R2 calls). */
+export const FINALIZE_SWEEP_BATCH = 5;
+/** Leave sessions this young alone; the app is probably still uploading. */
+export const FINALIZE_SWEEP_MIN_AGE_MINUTES = 30;
+
+export interface FinalizeSweepSummary {
+  completed: number;
+  waiting: number;
+  rejected: number;
+  failed: number;
+}
+
+/**
+ * Daily cron: finishes open v1 sessions nobody nudged (the app was killed,
+ * or its background "complete" call never ran), in live events only. Runs
+ * before the orphan sweep so a finished upload is kept, not aborted. A part
+ * URL can't be minted after the close grace and lives 6 h, so this can't
+ * accept uploads long after the close.
+ */
+export async function finalizeReadyUploads(
+  env: Env,
+  backend: FinalizeBackend = r2FinalizeBackend(env)
+): Promise<FinalizeSweepSummary> {
+  const summary: FinalizeSweepSummary = { completed: 0, waiting: 0, rejected: 0, failed: 0 };
+  if (!isR2Configured(env)) return summary;
+  const { results } = await env.DB.prepare(
+    `SELECT u.id FROM uploads u JOIN events e ON e.id = u.event_id
+      WHERE u.status = 'open' AND u.client_upload_id IS NOT NULL
+        AND u.created_at <= datetime('now', '-${FINALIZE_SWEEP_MIN_AGE_MINUTES} minutes')
+        -- Live events only (PURGE_AT_SQL, qualified for the join).
+        AND e.archived_at IS NULL
+        AND (COALESCE(e.purge_after, e.expires_at) IS NULL OR COALESCE(e.purge_after, e.expires_at) > datetime('now'))
+      ORDER BY random()
+      LIMIT ?`
+  )
+    .bind(FINALIZE_SWEEP_BATCH)
+    .all<{ id: string }>();
+  for (const { id } of results) {
+    try {
+      const session = await getUploadById(env.DB, id);
+      if (!session) continue;
+      const result = await finalizeUpload(env.DB, backend, session);
+      if (result.kind === "completed") summary.completed += 1;
+      else if (result.kind === "incomplete") summary.waiting += 1;
+      else summary.rejected += 1;
+    } catch (err) {
+      summary.failed += 1;
+      console.error(
+        JSON.stringify({
+          scope: "upload",
+          event: "finalize_sweep_failed",
+          uploadRecordId: id,
+          error: err instanceof Error ? err.name : "unknown",
+          ...(err instanceof R2RequestError ? { status: err.status, s3Code: err.code } : {}),
+        })
+      );
+    }
+  }
+  console.log(JSON.stringify({ scope: "upload", event: "finalize_sweep", ...summary }));
+  return summary;
+}
+

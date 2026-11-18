@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createSqliteD1, type SqliteD1 } from "./testing/sqliteD1";
-import { checkParts, type FinalizeBackend, finalizeUpload } from "./uploadFinalize";
+import { checkParts, type FinalizeBackend, finalizeReadyUploads, finalizeUpload, FINALIZE_SWEEP_BATCH } from "./uploadFinalize";
+import type { Env } from "./types";
+import { vi } from "vitest";
 import { abortUpload, getUploadById, startUpload, type StartUploadHooks, type UploadSessionRow } from "./uploadSessions";
 import { MULTIPART_PART_BYTES, type R2Part, R2RequestError } from "./multipartPresign";
 
@@ -230,3 +232,63 @@ describe("finalizeUpload", () => {
     expect(r2.state.object).toBeNull();
   });
 });
+
+describe("finalizeReadyUploads", () => {
+  const env = (): Env =>
+    ({
+      DB: sqlite.db,
+      R2_ACCESS_KEY_ID: "k",
+      R2_SECRET_ACCESS_KEY: "s",
+      R2_S3_ENDPOINT: "https://r2.example.com",
+      R2_BUCKET_NAME: "b",
+    }) as unknown as Env;
+  const age = (minutes: number) => sqlite.raw.prepare("UPDATE uploads SET created_at = datetime('now', ?)").run(`-${minutes} minutes`);
+
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+  });
+
+  it("finishes sessions nobody nudged once they are old enough", async () => {
+    const r2 = fakeR2();
+    await openSession(r2);
+    r2.state.parts = fullParts();
+    age(5);
+    expect(await finalizeReadyUploads(env(), r2.backend)).toMatchObject({ completed: 0 });
+    age(31);
+    expect(await finalizeReadyUploads(env(), r2.backend)).toEqual({ completed: 1, waiting: 0, rejected: 0, failed: 0 });
+    expect(moments()).toHaveLength(1);
+  });
+
+  it("leaves incomplete sessions open and skips purged events", async () => {
+    const r2 = fakeR2();
+    await openSession(r2);
+    age(60);
+    expect(await finalizeReadyUploads(env(), r2.backend)).toMatchObject({ waiting: 1 });
+    sqlite.raw.prepare("UPDATE events SET purge_after = datetime('now', '-1 minute')").run();
+    r2.state.parts = fullParts();
+    expect(await finalizeReadyUploads(env(), r2.backend)).toEqual({ completed: 0, waiting: 0, rejected: 0, failed: 0 });
+  });
+
+  it("logs a failing session by id and goes on", async () => {
+    const r2 = fakeR2();
+    await openSession(r2);
+    age(60);
+    r2.backend.listParts = async () => {
+      throw new R2RequestError("listParts", 403, "AccessDenied");
+    };
+    expect(await finalizeReadyUploads(env(), r2.backend)).toMatchObject({ failed: 1 });
+    expect(String(vi.mocked(console.error).mock.calls[0][0])).toContain("AccessDenied");
+  });
+
+  it("does nothing without R2 credentials", async () => {
+    expect(await finalizeReadyUploads({ DB: sqlite.db } as unknown as Env, fakeR2().backend)).toEqual({
+      completed: 0,
+      waiting: 0,
+      rejected: 0,
+      failed: 0,
+    });
+    expect(FINALIZE_SWEEP_BATCH).toBeGreaterThan(0);
+  });
+});
+

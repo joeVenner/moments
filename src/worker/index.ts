@@ -46,6 +46,7 @@ import {
 import { deleteMomentMedia } from "./moderation";
 import { cleanupEvent, cleanupExpiredEvents, pruneAccessFailures } from "./lifecycle";
 import { abortOrphanUploads } from "./orphanUploads";
+import { finalizeReadyUploads } from "./uploadFinalize";
 import { attemptEventAccess } from "./accessAttempt";
 import {
   CHANGES_MAX_LIMIT,
@@ -1633,7 +1634,12 @@ export default {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) => app.fetch(request, env, ctx),
   scheduled: async (_controller: ScheduledController, env: Env, ctx: ExecutionContext) => {
     // Sequential: both spend the invocation's subrequest budget on R2 calls.
-    ctx.waitUntil(cleanupExpiredEvents(env).then(() => abortOrphanUploads(env)));
+    // Finalize before the orphan sweep, so a finished upload is kept, not aborted.
+    ctx.waitUntil(
+      cleanupExpiredEvents(env)
+        .then(() => finalizeReadyUploads(env))
+        .then(() => abortOrphanUploads(env))
+    );
     ctx.waitUntil(pruneAccessFailures(env));
   },
 } satisfies ExportedHandler<Env>;
