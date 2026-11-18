@@ -35,8 +35,16 @@ final class FakeService: MomentsService, @unchecked Sendable {
     func join(slug: String, nickname: String, avatarSeed: String?, credentials: EventCredentials) async throws -> JoinResult {
         try lock.withLock { joinCalls.append((nickname, credentials)); return try joinResults.removeFirst().get() }
     }
+    /// Runs before a highlights request answers (to hold it open).
+    var beforeHighlights: (@Sendable () async -> Void)?
+    /// Answers reactions even when the caller was cancelled (like a request
+    /// that already reached the server).
+    var reactionsIgnoreCancellation = false
+
     func highlights(slug: String, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> [Moment] {
-        try lock.withLock { highlightsCalls.append((reactorID, credentials)); return try highlightsResults.removeFirst().get() }
+        let result = lock.withLock { highlightsCalls.append((reactorID, credentials)); return highlightsResults.removeFirst() }
+        if let beforeHighlights { await beforeHighlights() }
+        return try result.get()
     }
     func leaderboard(slug: String, credentials: EventCredentials) async throws -> [LeaderboardEntry] {
         try lock.withLock { leaderboardCalls += 1; return try leaderboardResults.removeFirst().get() }
@@ -49,7 +57,7 @@ final class FakeService: MomentsService, @unchecked Sendable {
             return reactionResults.isEmpty ? .success(ReactionState(reacted: reacted, reactionCount: reacted ? 1 : 0)) : reactionResults.removeFirst()
         }
         if let beforeReaction { await beforeReaction() }
-        try Task.checkCancellation()
+        if !reactionsIgnoreCancellation { try Task.checkCancellation() }
         return try result.get()
     }
     /// Runs before a page request answers (to hold it open in race tests).

@@ -23,7 +23,7 @@ public final class LeaderboardModel {
 
     public let participantID: String
     @ObservationIgnored private var throttle = ReloadThrottle()
-    @ObservationIgnored private var isLoading = false
+    @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var hasEnded = false
     @ObservationIgnored private var wasOnPodium: Bool?
     @ObservationIgnored private let service: any MomentsService
@@ -64,11 +64,18 @@ public final class LeaderboardModel {
         hasEnded = true
     }
 
+    /// Joins a load in flight (see `HighlightsModel.load`).
     private func load() async {
-        guard !isLoading, !hasEnded else { return }
-        isLoading = true
-        defer { isLoading = false }
-        if entries.isEmpty, phase != .loaded { phase = .loading }
+        if let loadTask { return await loadTask.value }
+        guard !hasEnded else { return }
+        let task = Task { await performLoad() }
+        loadTask = task
+        await task.value
+        loadTask = nil
+    }
+
+    private func performLoad() async {
+        if phase != .loaded { phase = .loading }
         do {
             let loaded = try await service.leaderboard(slug: slug.value, credentials: eventCredentials(store: store, slug: slug))
             entries = loaded
@@ -80,10 +87,12 @@ public final class LeaderboardModel {
         } catch {
             switch error {
             case is CancellationError:
-                break
+                return
             case MomentsAPIError.accessRequired, MomentsAPIError.eventNotFound:
                 end()
                 onFatalError?(error)
+            case MomentsAPIError.rateLimited:
+                throttle.markLoaded(at: now())
             default:
                 if !(error is MomentsAPIError) {
                     logger.error("leaderboard failed: \(String(describing: error), privacy: .public)")

@@ -368,9 +368,11 @@ final class GrantCache: @unchecked Sendable {
 }
 
 extension FeedModel: ReactionHost {
+    // `_modify` mutates in place; a plain setter would copy the feed on
+    // every tap.
     var reactionList: FeedState {
         get { feed }
-        set { feed = newValue }
+        _modify { yield &feed }
     }
 
     var acceptsReactions: Bool { phase == .loaded }

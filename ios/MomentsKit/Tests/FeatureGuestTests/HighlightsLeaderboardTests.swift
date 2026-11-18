@@ -159,3 +159,116 @@ private final class Clock: @unchecked Sendable {
         #expect(fatal == 1)
     }
 }
+
+@Suite @MainActor struct HighlightsLoadingTests {
+    private func makeModel(clock: Clock = Clock()) -> (HighlightsModel, FakeService) {
+        let service = FakeService()
+        let model = HighlightsModel(
+            slug: slug, reactorID: "r1", service: service, store: InMemoryEventCredentialStore(), now: { clock.now }
+        )
+        return (model, service)
+    }
+
+    @Test func aPullDuringALoadWaitsForIt() async {
+        let (model, service) = makeModel()
+        let gate = Gate()
+        service.beforeHighlights = { await gate.wait() }
+        service.highlightsResults = [.success([moment("a", seq: 1)])]
+        let appear = Task { await model.loadIfStale() }
+        while service.highlightsCalls.isEmpty { await Task.yield() }
+        let pull = Task { await model.refresh() }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(model.isRefreshing)
+        await gate.open()
+        await pull.value
+        #expect(model.phase == .loaded)
+        await appear.value
+        #expect(service.highlightsCalls.count == 1)
+    }
+
+    @Test func cancellationIsNotAFailure() async {
+        let (model, service) = makeModel()
+        service.highlightsResults = [.failure(CancellationError())]
+        await model.loadIfStale()
+        #expect(model.phase == .loading)
+    }
+
+    @Test func rateLimitsBackOffTabSwitchesButNotPulls() async {
+        let clock = Clock()
+        let (model, service) = makeModel(clock: clock)
+        service.highlightsResults = [.failure(MomentsAPIError.rateLimited), .success([])]
+        await model.loadIfStale()
+        #expect(model.phase == .failed)
+        await model.loadIfStale()
+        #expect(service.highlightsCalls.count == 1)
+        await model.refresh()
+        #expect(model.phase == .loaded)
+    }
+
+    @Test func anEndedListNeitherConfirmsNorSyncsALateAnswer() async {
+        let (model, service) = makeModel()
+        let gate = Gate()
+        service.highlightsResults = [.success([moment("a", seq: 1, reactions: 2)])]
+        service.reactionResults = [.success(ReactionState(reacted: true, reactionCount: 3))]
+        service.beforeReaction = { await gate.wait() }
+        service.reactionsIgnoreCancellation = true
+        var settled = 0
+        model.onReactionSettled = { _, _ in settled += 1 }
+        await model.loadIfStale()
+        let task = model.toggleReaction(onMomentID: "a")
+        while service.reactionCalls.isEmpty { await Task.yield() }
+        model.end()
+        await gate.open()
+        await task?.value
+        #expect(settled == 0)
+        #expect(model.moments.first?.hasReacted == false)
+        #expect(model.reactionFailureCount == 0)
+    }
+}
+
+@Suite @MainActor struct CrossListHeartTests {
+    @Test func aHeartSettledInTheFeedShowsInHighlightsWithoutEchoing() async {
+        let service = FakeService()
+        let store = InMemoryEventCredentialStore()
+        let highlights = HighlightsModel(slug: slug, reactorID: "r1", service: service, store: store)
+        service.highlightsResults = [.success([moment("a", seq: 1, reactions: 2)])]
+        await highlights.loadIfStale()
+        var echoes = 0
+        highlights.onReactionSettled = { _, _ in echoes += 1 }
+        // What GuestEventView wires from the feed's onReactionSettled.
+        highlights.applyServerReaction(momentID: "a", state: ReactionState(reacted: true, reactionCount: 3))
+        #expect(highlights.moments.first?.hasReacted == true)
+        #expect(highlights.moments.first?.reactionCount == 3)
+        #expect(echoes == 0)
+        #expect(service.reactionCalls.isEmpty)
+    }
+
+    @Test func aHeartInFlightHereIsNotOverwrittenFromElsewhere() async {
+        let service = FakeService()
+        let gate = Gate()
+        let highlights = HighlightsModel(slug: slug, reactorID: "r1", service: service, store: InMemoryEventCredentialStore())
+        service.highlightsResults = [.success([moment("a", seq: 1, reactions: 2)])]
+        service.reactionResults = [.success(ReactionState(reacted: true, reactionCount: 3))]
+        service.beforeReaction = { await gate.wait() }
+        await highlights.loadIfStale()
+        let task = highlights.toggleReaction(onMomentID: "a")
+        while service.reactionCalls.isEmpty { await Task.yield() }
+        highlights.applyServerReaction(momentID: "a", state: ReactionState(reacted: false, reactionCount: 2))
+        #expect(highlights.moments.first?.hasReacted == true)
+        await gate.open()
+        await task?.value
+        #expect(highlights.moments.first?.reactionCount == 3)
+    }
+}
+
+@Suite @MainActor struct LeaderboardPodiumTests {
+    @Test func aShortBoardHasAShortPodium() async {
+        let service = FakeService()
+        let model = LeaderboardModel(slug: slug, participantID: "p1", service: service, store: InMemoryEventCredentialStore())
+        service.leaderboardResults = [.success([entry("p1", points: 3, rank: 1), entry("p2", points: 3, rank: 1)])]
+        await model.loadIfStale()
+        #expect(model.podium.map(\.rank) == [1, 1])
+        #expect(model.others.isEmpty)
+        #expect(model.podiumCelebrations == 1)
+    }
+}

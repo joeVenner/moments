@@ -25,9 +25,11 @@ public final class HighlightsModel {
 
     @ObservationIgnored private var state = HighlightsState()
     @ObservationIgnored private var throttle = ReloadThrottle()
-    @ObservationIgnored private var isLoading = false
+    /// The load in flight; refresh and appear join it instead of starting
+    /// another (and a cancelled pull doesn't cancel it).
+    @ObservationIgnored private var loadTask: Task<Void, Never>?
     /// Stops loading and hearting once the event has ended for this guest.
-    @ObservationIgnored private var hasEnded = false
+    public private(set) var hasEnded = false
     @ObservationIgnored private lazy var reactionSenders = ReactionSenders(host: self)
     @ObservationIgnored private let service: any MomentsService
     @ObservationIgnored private let store: any EventCredentialStore
@@ -74,7 +76,7 @@ public final class HighlightsModel {
     /// This device's state learned from the feed.
     public func applyServerReaction(momentID: String, state reaction: ReactionState) {
         state.applyServerReaction(forMomentID: momentID, reacted: reaction.reacted, reactionCount: reaction.reactionCount)
-        moments = state.moments
+        if state.moments != moments { moments = state.moments }
     }
 
     /// The event ended for this guest (the feed lost access): stop.
@@ -84,9 +86,15 @@ public final class HighlightsModel {
     }
 
     private func load() async {
-        guard !isLoading, !hasEnded else { return }
-        isLoading = true
-        defer { isLoading = false }
+        if let loadTask { return await loadTask.value }
+        guard !hasEnded else { return }
+        let task = Task { await performLoad() }
+        loadTask = task
+        await task.value
+        loadTask = nil
+    }
+
+    private func performLoad() async {
         if !state.hasLoaded { phase = .loading }
         do {
             let loaded = try await service.highlights(
@@ -105,10 +113,13 @@ public final class HighlightsModel {
     private func failed(_ error: any Error) {
         switch error {
         case is CancellationError:
-            break
+            return
         case MomentsAPIError.accessRequired, MomentsAPIError.eventNotFound:
             end()
             onFatalError?(error)
+        case MomentsAPIError.rateLimited:
+            // Back off: tab switches don't retry for a while (pull still does).
+            throttle.markLoaded(at: now())
         default:
             if !(error is MomentsAPIError) {
                 logger.error("highlights failed: \(String(describing: error), privacy: .public)")
@@ -120,9 +131,11 @@ public final class HighlightsModel {
 }
 
 extension HighlightsModel: ReactionHost {
+    // `_modify` mutates in place; a plain setter would copy the list on
+    // every tap.
     var reactionList: HighlightsState {
         get { state }
-        set { state = newValue }
+        _modify { yield &state }
     }
 
     var acceptsReactions: Bool { phase == .loaded && !hasEnded }

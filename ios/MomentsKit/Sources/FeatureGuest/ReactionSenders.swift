@@ -59,7 +59,9 @@ final class ReactionSenders<Host: ReactionHost> {
         return setReacted(!moment.hasReacted, onMomentID: id)
     }
 
-    /// The screen is over (access lost, event gone).
+    /// The screen is over (access lost, event gone). A request already sent
+    /// may still land on the server; the local heart is rolled back anyway,
+    /// since nothing is shown any more.
     func cancelAll() {
         for task in tasks.values { task.cancel() }
     }
@@ -72,9 +74,12 @@ final class ReactionSenders<Host: ReactionHost> {
               !host.reactionList.discardUnsentReactionIfUnchanged(forMomentID: id),
               let wanted = host.reactionList.moments.first(where: { $0.id == id })?.hasReacted {
             do {
+                try Task.checkCancellation()
                 guard requests < Self.maxRequests else { throw SendError.tooManyRequests }
                 requests += 1
                 let state = try await host.sendReaction(wanted, momentID: id)
+                // Ended while the request was out: don't confirm or sync.
+                try Task.checkCancellation()
                 guard state.reacted == wanted else { throw SendError.mismatchedAnswer }
                 let settled = host.reactionList.confirmReaction(
                     forMomentID: id, reacted: state.reacted, reactionCount: state.reactionCount
