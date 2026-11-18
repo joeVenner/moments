@@ -110,7 +110,14 @@ private struct Harness {
         try FileManager.default.createDirectory(at: staging.root, withIntermediateDirectories: true)
     }
 
-    func queue(credentials: CredentialsLookupResult = .found(EventCredentials(guestToken: "gt-test"))) -> UploadQueue {
+    /// A queue that loaded the (empty) saved queue.
+    func queue(credentials: CredentialsLookupResult = .found(EventCredentials(guestToken: "gt-test"))) async throws -> UploadQueue {
+        let queue = unloadedQueue(credentials: credentials)
+        try await queue.load()
+        return queue
+    }
+
+    func unloadedQueue(credentials: CredentialsLookupResult = .found(EventCredentials(guestToken: "gt-test"))) -> UploadQueue {
         let clock = clock
         return UploadQueue(
             store: store, staging: staging, service: server, partUploader: server,
@@ -144,7 +151,7 @@ private func drain(_ queue: UploadQueue) async {
 @Suite struct UploadQueueTests {
     @Test func uploadsAnItemAndCleansUpItsFile() async throws {
         let harness = try Harness()
-        let queue = harness.queue()
+        let queue = try await harness.queue()
         let item = try harness.stage("a.jpg")
         try await queue.enqueue(item)
         await drain(queue)
@@ -158,7 +165,7 @@ private func drain(_ queue: UploadQueue) async {
 
     @Test func refusesMissingDuplicateAndOverflowingItems() async throws {
         let harness = try Harness(maxItems: 1)
-        let queue = harness.queue()
+        let queue = try await harness.queue()
         let item = try harness.stage("a.jpg")
         let missingID = UUID()
         let missing = QueuedUpload(
@@ -183,7 +190,7 @@ private func drain(_ queue: UploadQueue) async {
         let item = locked
         try harness.store.save(locked)
         try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: harness.store.recordURL(for: locked.id).path())
-        let queue = harness.queue()
+        let queue = harness.unloadedQueue()
         #expect(try await queue.load().deferred == 1)
         await #expect(throws: UploadQueue.EnqueueError.full) { try await queue.enqueue(try harness.stage("b.jpg")) }
         // Its staged file is left alone.
@@ -192,7 +199,7 @@ private func drain(_ queue: UploadQueue) async {
 
     @Test func rereadsTheSessionAfterARelaunch() async throws {
         let harness = try Harness()
-        let first = harness.queue()
+        let first = try await harness.queue()
         let item = try harness.stage("a.jpg")
         try await first.enqueue(item)
         harness.server.failNext = [.transport(.notConnectedToInternet)]
@@ -200,7 +207,7 @@ private func drain(_ queue: UploadQueue) async {
         harness.clock.advance(60)
         await first.step(id: item.id) // start succeeds; parts not sent yet
 
-        let second = harness.queue()
+        let second = harness.unloadedQueue()
         try await second.load()
         #expect(await second.snapshot().first?.nextAction(now: harness.clock.now) == .readSession(.init(
             id: "u-\(item.id.uuidString.prefix(8))", partSize: partSize, partCount: 1
@@ -211,7 +218,7 @@ private func drain(_ queue: UploadQueue) async {
 
     @Test func failsWithoutCredentials() async throws {
         let harness = try Harness()
-        let queue = harness.queue(credentials: .missing)
+        let queue = try await harness.queue(credentials: .missing)
         let item = try harness.stage("a.jpg")
         try await queue.enqueue(item)
         await drain(queue)
@@ -221,7 +228,7 @@ private func drain(_ queue: UploadQueue) async {
 
     @Test func failsWhenTheStagedFileDisappears() async throws {
         let harness = try Harness()
-        let queue = harness.queue()
+        let queue = try await harness.queue()
         let item = try harness.stage("a.jpg")
         try await queue.enqueue(item)
         await queue.step(id: item.id)
@@ -233,7 +240,7 @@ private func drain(_ queue: UploadQueue) async {
 
     @Test func treatsNoAcceptedPartsAsAFailureAndBacksOff() async throws {
         let harness = try Harness()
-        let queue = harness.queue()
+        let queue = try await harness.queue()
         let item = try harness.stage("a.jpg")
         try await queue.enqueue(item)
         harness.server.acceptParts = []
@@ -251,7 +258,7 @@ private func drain(_ queue: UploadQueue) async {
 
     @Test func waitsOutABackOff() async throws {
         let harness = try Harness()
-        let queue = harness.queue()
+        let queue = try await harness.queue()
         let item = try harness.stage("a.jpg")
         try await queue.enqueue(item)
         harness.server.failNext = [.storageUnavailable]
@@ -267,7 +274,7 @@ private func drain(_ queue: UploadQueue) async {
 
     @Test func retriesAndDiscardsFailedItems() async throws {
         let harness = try Harness()
-        let queue = harness.queue()
+        let queue = try await harness.queue()
         let item = try harness.stage("a.jpg")
         try await queue.enqueue(item)
         harness.server.failNext = [.upgradeRequired]
@@ -284,7 +291,7 @@ private func drain(_ queue: UploadQueue) async {
 
     @Test func discardKeepsUnfinishedItems() async throws {
         let harness = try Harness()
-        let queue = harness.queue()
+        let queue = try await harness.queue()
         let item = try harness.stage("a.jpg")
         try await queue.enqueue(item)
         try await queue.discard(id: item.id)
@@ -294,7 +301,7 @@ private func drain(_ queue: UploadQueue) async {
 
     @Test func publishesChanges() async throws {
         let harness = try Harness()
-        let queue = harness.queue()
+        let queue = try await harness.queue()
         var updates = await queue.updates().makeAsyncIterator()
         #expect(await updates.next() == [])
         let item = try harness.stage("a.jpg")
@@ -304,7 +311,7 @@ private func drain(_ queue: UploadQueue) async {
 
     @Test func runLoopWakesOnEnqueue() async throws {
         let harness = try Harness()
-        let queue = harness.queue()
+        let queue = try await harness.queue()
         let runner = Task { await queue.run() }
         defer { runner.cancel() }
         var updates = await queue.updates().makeAsyncIterator()
@@ -318,7 +325,7 @@ private func drain(_ queue: UploadQueue) async {
 
     @Test func holdsInsteadOfSpinningOnIgnoredAnswers() async throws {
         let harness = try Harness()
-        let queue = harness.queue()
+        let queue = try await harness.queue()
         try await queue.enqueue(try harness.stage())
         harness.server.answerForeignSessions = true
         #expect(await queue.runDue() == (false, harness.clock.now.addingTimeInterval(UploadQueue.noProgressHold)))
@@ -331,7 +338,7 @@ private func drain(_ queue: UploadQueue) async {
 
     @Test func holdsWhileCredentialsAreUnavailable() async throws {
         let harness = try Harness()
-        let queue = harness.queue(credentials: .unavailable)
+        let queue = try await harness.queue(credentials: .unavailable)
         let item = try harness.stage()
         try await queue.enqueue(item)
         await drain(queue)
@@ -342,7 +349,7 @@ private func drain(_ queue: UploadQueue) async {
 
     @Test func cancellingTheRunDoesNotCountATry() async throws {
         let harness = try Harness()
-        let queue = harness.queue()
+        let queue = try await harness.queue()
         let item = try harness.stage()
         try await queue.enqueue(item)
         await queue.step(id: item.id) // session open
@@ -360,7 +367,7 @@ private func drain(_ queue: UploadQueue) async {
 
     @Test func keepsTheFileWhenDoneCannotBeSaved() async throws {
         let harness = try Harness()
-        let queue = harness.queue()
+        let queue = try await harness.queue()
         let item = try harness.stage()
         try await queue.enqueue(item)
         await queue.step(id: item.id)
@@ -374,11 +381,29 @@ private func drain(_ queue: UploadQueue) async {
         #expect(harness.stagedFileExists(item))
     }
 
-    @Test func loadsOnlyOnce() async throws {
+    @Test func loadsOnceBeforeEnqueueing() async throws {
         let harness = try Harness()
-        let queue = harness.queue()
+        let queue = harness.unloadedQueue()
+        await #expect(throws: UploadQueue.EnqueueError.notLoaded) { try await queue.enqueue(try harness.stage()) }
         try await queue.load()
         await #expect(throws: UploadQueue.EnqueueError.alreadyLoaded) { try await queue.load() }
+    }
+
+    @Test func holdsWhileTheStagedFileIsUnreadable() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue()
+        let item = try harness.stage()
+        try await queue.enqueue(item)
+        await queue.step(id: item.id)
+        let path = harness.staging.root.appending(path: item.file.relativePath).path()
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: path)
+        await drain(queue)
+        #expect(await queue.snapshot().first?.phase == .uploading)
+        #expect(await queue.runDue().next == harness.clock.now.addingTimeInterval(UploadQueue.unreadableHold))
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
+        harness.clock.advance(UploadQueue.unreadableHold)
+        await drain(queue)
+        #expect(await queue.snapshot().first?.phase == .done(momentID: "m1"))
     }
 }
 

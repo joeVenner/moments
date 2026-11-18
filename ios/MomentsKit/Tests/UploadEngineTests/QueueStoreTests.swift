@@ -300,6 +300,17 @@ private func item(_ name: String = "a.jpg", at seconds: TimeInterval = 0) -> Que
         #expect(throws: StagingArea.Problem.outsideStaging) { try area.open(staged("a.jpg"), owner: owner) }
     }
 
+    @Test func handlesOddPathsAndAMissingOwnerFolder() throws {
+        let folder = try TempFolder()
+        let area = StagingArea(root: folder.url.appending(path: "staging/"))
+        let other = UUID()
+        let escape = QueuedUpload.StagedFile(relativePath: "\(owner.uuidString)/../\(other.uuidString)/a.jpg", size: 4, contentType: "image/jpeg")
+        // Refused when decoded or created, so it never reaches the area.
+        #expect(escape == nil)
+        #expect(throws: StagingArea.Problem.missing) { try area.open(staged("a.jpg"), owner: owner) }
+        try area.remove(staged("a.jpg"), owner: owner)
+    }
+
     @Test func refusesSymlinksThatLeaveTheFolder() throws {
         let folder = try TempFolder()
         let area = try area(folder)

@@ -36,6 +36,8 @@ public actor UploadQueue {
         case duplicate
         /// `load()` runs once, at launch, before anything else.
         case alreadyLoaded
+        /// `enqueue` before `load()` would leave the saved queue unread.
+        case notLoaded
         /// The staged file can't be used.
         case file(StagingArea.Problem)
     }
@@ -103,7 +105,7 @@ public actor UploadQueue {
     /// Call once, before enqueueing or running.
     @discardableResult
     public func load() throws -> QueueStore.Loaded {
-        guard !isLoaded, items.isEmpty, inFlight.isEmpty else { throw EnqueueError.alreadyLoaded }
+        guard !isLoaded else { throw EnqueueError.alreadyLoaded }
         let loaded = try store.load()
         isLoaded = true
         unloaded = loaded.deferred + loaded.overflow
@@ -121,7 +123,7 @@ public actor UploadQueue {
     /// Adds a prepared upload. Its staged file must exist as recorded, in
     /// the item's own staging folder.
     public func enqueue(_ item: QueuedUpload) throws {
-        isLoaded = true
+        guard isLoaded else { throw EnqueueError.notLoaded }
         guard items[item.id] == nil else { throw EnqueueError.duplicate }
         guard items.count + unloaded < store.maxItems else { throw EnqueueError.full }
         do throws(StagingArea.Problem) {
