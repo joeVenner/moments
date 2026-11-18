@@ -18,6 +18,9 @@
 /// - A pending optimistic reaction is never overwritten by server rows; it is
 ///   confirmed or rolled back explicitly, and after confirmation it survives
 ///   one more sync (that sync may have been read before the request landed).
+/// - The guest may toggle again while a request is in flight; the request's
+///   answer then doesn't settle the moment and the caller sends the new
+///   intent (the endpoints are idempotent, so the last one sent wins).
 ///
 /// Caller contract: run syncs (`replace`/`applyChanges`) one at a time, and
 /// `appendOlderPage` calls one at a time, newest bound first. Changes may
@@ -122,25 +125,61 @@ public struct FeedState: Sendable, Equatable {
     }
 
     /// Optimistic reaction toggle. Returns false (and changes nothing) when the
-    /// moment is unknown, already in that state, or still has a request in
-    /// flight: one request per moment at a time, so send one only on `true`.
+    /// moment is unknown or already in that state. Allowed while a request is
+    /// in flight: the caller keeps one request per moment and sends the
+    /// current intent again when `confirmReaction` says it hasn't settled.
     @discardableResult
     public mutating func setReacted(_ hasReacted: Bool, forMomentID id: String) -> Bool {
         guard let index = moments.firstIndex(where: { $0.id == id }),
-              moments[index].hasReacted != hasReacted,
-              pendingReactions[id]?.isConfirmed != false else { return false }
+              moments[index].hasReacted != hasReacted else { return false }
         let server = pendingReactions[id]?.server
             ?? ReactionSnapshot(hasReacted: moments[index].hasReacted, reactionCount: moments[index].reactionCount)
         pendingReactions[id] = PendingReaction(server: server)
+        // A new intent restarts the "outlive one sync" clock.
+        confirmedAtLastSync.remove(id)
         moments[index].hasReacted = hasReacted
         moments[index].reactionCount = max(0, moments[index].reactionCount + (hasReacted ? 1 : -1))
         return true
     }
 
-    /// The reaction request succeeded. The toggle is kept through the next
-    /// sync, then server values take over again.
-    public mutating func confirmReaction(forMomentID id: String) {
+    /// Whether the moment has a reaction the server hasn't answered yet.
+    public func hasUnsentReaction(forMomentID id: String) -> Bool {
+        pendingReactions[id]?.isConfirmed == false
+    }
+
+    /// Before sending: when the guest's intent is back to what the server
+    /// last reported (on, then off, before anything was sent), there is
+    /// nothing to send. Clears the pending toggle and returns true.
+    @discardableResult
+    public mutating func discardUnsentReactionIfUnchanged(forMomentID id: String) -> Bool {
+        guard let pending = pendingReactions[id], !pending.isConfirmed,
+              let index = moments.firstIndex(where: { $0.id == id }),
+              moments[index].hasReacted == pending.server.hasReacted else { return false }
+        pendingReactions[id] = nil
+        moments[index].reactionCount = pending.server.reactionCount
+        return true
+    }
+
+    /// The server answered a reaction request with its state for this device.
+    /// Returns true when that settles the moment (or there is nothing pending:
+    /// it was removed or refreshed away). Returns false when the guest toggled
+    /// again meanwhile: send the moment's current `hasReacted` next.
+    ///
+    /// A settling answer's count is shown and kept through the next sync,
+    /// then server rows take over again.
+    @discardableResult
+    public mutating func confirmReaction(forMomentID id: String, reacted: Bool, reactionCount: Int) -> Bool {
+        guard pendingReactions[id] != nil, let index = moments.firstIndex(where: { $0.id == id }) else { return true }
+        pendingReactions[id]?.server = ReactionSnapshot(hasReacted: reacted, reactionCount: reactionCount)
+        guard moments[index].hasReacted == reacted else {
+            // Shown relative to the server's count, toggled the guest's way.
+            moments[index].reactionCount = max(0, reactionCount + (moments[index].hasReacted ? 1 : -1))
+            return false
+        }
+        moments[index].reactionCount = reactionCount
         pendingReactions[id]?.isConfirmed = true
+        confirmedAtLastSync.remove(id)
+        return true
     }
 
     /// The reaction request failed: restore what the server last reported.
