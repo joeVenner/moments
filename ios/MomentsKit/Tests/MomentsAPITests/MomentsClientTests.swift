@@ -225,6 +225,22 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
         await #expect(throws: expected) { _ = try await client(StubTransport(status: status, json: json)).feedPage(slug: "p") }
     }
 
+    /// The server reports `reacted` for the token's guest, so every read that carries it sends the token.
+    @Test func sendsTheGuestTokenOnReadsThatReportReacted() async throws {
+        let credentials = EventCredentials(accessGrant: "grant-1", guestToken: "gt_me")
+        let feedStub = StubTransport(json: #"{"moments":[],"next_before":null,"cursor":7}"#)
+        _ = try await client(feedStub).feedPage(slug: "party", credentials: credentials)
+        let changesStub = StubTransport(json: #"{"upserts":[],"removed":[],"cursor":7,"has_more":false}"#)
+        _ = try await client(changesStub).feedChanges(slug: "party", since: 1, credentials: credentials)
+        let highlightsStub = StubTransport(json: #"{"moments":[]}"#)
+        _ = try await client(highlightsStub).highlights(slug: "party", credentials: credentials)
+        for stub in [feedStub, changesStub, highlightsStub] {
+            let fields = try #require(stub.requests.first).request.headerFields
+            #expect(fields[HTTPField.Name("X-Guest-Token")!] == "gt_me")
+            #expect(fields[HTTPField.Name("X-Event-Access")!] == "grant-1")
+        }
+    }
+
     @Test func fetchesChanges() async throws {
         let stub = StubTransport(json: """
             {"upserts":[\(Fixtures.moment(id: "a"))],"removed":["z"],"cursor":12,"has_more":true}

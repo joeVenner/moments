@@ -66,7 +66,7 @@ import {
   type PublicParticipant,
 } from "./guestIdentity";
 import { isJoinLimited, JOIN_RATE_LIMITED, JOIN_RETRY_AFTER_SECONDS } from "./joinLimit";
-import { gateReaction, REACTOR_ID_PATTERN, setReaction } from "./reactions";
+import { gateReaction, REACTOR_ID_PATTERN, setReaction, viewerReactorId } from "./reactions";
 import { cleanWebCaption } from "./captionText";
 import {
   MAX_PIN_LENGTH,
@@ -441,7 +441,11 @@ app.get("/api/events/:slug/moments", async (c) => {
   // Default 25, cap 100 — bounds the initial payload + DOM.
   const limit = Math.min(Math.max(parseInt(c.req.query("limit") ?? "25", 10) || 25, 1), 100);
   const offset = Math.max(parseInt(c.req.query("offset") ?? "0", 10) || 0, 0);
-  const reactorId = (c.req.query("reactor_id") ?? "").slice(0, 100);
+  const reactorId = await viewerReactorId(c.env, {
+    eventId: event.id,
+    token: c.req.header(GUEST_TOKEN_HEADER),
+    clientReactorId: c.req.query("reactor_id"),
+  });
 
   const { results } = await c.env.DB.prepare(
     `SELECT ${WEB_MOMENT_COLUMNS},
@@ -482,6 +486,8 @@ app.get("/api/events/:slug/moments", async (c) => {
     your_points = pts?.s ?? 0;
   }
 
+  // `reacted` is this guest's (token): never let a cache share it.
+  c.header("Cache-Control", "no-store");
   return c.json({
     moments: await signMomentsForEvent(c.env, event, results),
     hasMore: results.length === limit,
@@ -498,7 +504,11 @@ app.get("/api/events/:slug/feed", async (c) => {
     eventId: event.id,
     before: parseCursor(c.req.query("before")),
     limit: clampLimit(c.req.query("limit"), FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT),
-    reactorId: (c.req.query("reactor_id") ?? "").slice(0, 100),
+    reactorId: await viewerReactorId(c.env, {
+      eventId: event.id,
+      token: c.req.header(GUEST_TOKEN_HEADER),
+      clientReactorId: c.req.query("reactor_id"),
+    }),
   });
   c.header("Cache-Control", "no-store");
   return c.json({ ...page, moments: await signMomentsForEvent(c.env, event, page.moments) });
@@ -513,7 +523,11 @@ app.get("/api/events/:slug/feed/changes", async (c) => {
     eventId: event.id,
     since,
     limit: clampLimit(c.req.query("limit"), CHANGES_MAX_LIMIT, CHANGES_MAX_LIMIT),
-    reactorId: (c.req.query("reactor_id") ?? "").slice(0, 100),
+    reactorId: await viewerReactorId(c.env, {
+      eventId: event.id,
+      token: c.req.header(GUEST_TOKEN_HEADER),
+      clientReactorId: c.req.query("reactor_id"),
+    }),
   });
   c.header("Cache-Control", "no-store");
   return c.json({ ...changes, upserts: await signMomentsForEvent(c.env, event, changes.upserts) });
@@ -569,7 +583,11 @@ app.post("/api/events/:slug/moments", async (c) => {
 app.get("/api/events/:slug/highlights", async (c) => {
   const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
-  const reactorId = (c.req.query("reactor_id") ?? "").slice(0, 100);
+  const reactorId = await viewerReactorId(c.env, {
+    eventId: event.id,
+    token: c.req.header(GUEST_TOKEN_HEADER),
+    clientReactorId: c.req.query("reactor_id"),
+  });
   const { results } = await c.env.DB.prepare(
     `SELECT ${WEB_MOMENT_COLUMNS},
             COUNT(r.id) AS reaction_count,
@@ -581,6 +599,8 @@ app.get("/api/events/:slug/highlights", async (c) => {
       ORDER BY reaction_count DESC, m.created_at DESC
       LIMIT 50`
   ).bind(reactorId, event.id).all<MomentRow>();
+  // `reacted` is this guest's (token): never let a cache share it.
+  c.header("Cache-Control", "no-store");
   return c.json({ moments: await signMomentsForEvent(c.env, event, results) });
 });
 
@@ -588,9 +608,10 @@ app.post("/api/events/:slug/moments/:id/reactions", async (c) => {
   const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
   const body = (await c.req.json().catch(() => null)) as { reactor_id?: unknown } | null;
-  const reactorId = typeof body?.reactor_id === "string" ? body.reactor_id : "";
-  // Same shape as v1 (web ids are UUIDs); never server-made keys.
-  if (!REACTOR_ID_PATTERN.test(reactorId)) return c.json({ error: "reactor_id is required" }, 400);
+  // Optional with a guest token (the server reacts as that guest). When sent,
+  // same shape as v1 (web ids are UUIDs); never a server-made `guest:` id.
+  const reactorId = body?.reactor_id === undefined ? undefined : typeof body.reactor_id === "string" ? body.reactor_id : "";
+  if (reactorId !== undefined && !REACTOR_ID_PATTERN.test(reactorId)) return c.json({ error: "reactor_id is invalid" }, 400);
   const gate = await gateReaction(c.env, {
     eventId: event.id,
     token: c.req.header(GUEST_TOKEN_HEADER),

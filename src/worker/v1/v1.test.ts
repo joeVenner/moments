@@ -266,10 +266,40 @@ describe("feed", () => {
   it("reports reacted as a boolean for the reactor", async () => {
     addMoment("m1");
     sqlite.raw
-      .prepare("INSERT INTO moment_reactions (id, moment_id, event_id, reactor_id) VALUES ('r1', 'm1', 'event-1', 'me')")
+      .prepare("INSERT INTO moment_reactions (id, moment_id, event_id, reactor_id) VALUES ('r1', 'm1', 'event-1', 'device-0001')")
       .run();
-    const page = FeedPageSchema.parse(await (await call("/events/party/feed?reactor_id=me")).json());
+    const page = FeedPageSchema.parse(await (await call("/events/party/feed?reactor_id=device-0001")).json());
     expect(page.moments[0]).toMatchObject({ reacted: true, reaction_count: 1 });
+  });
+
+  it("reports the token's guest's heart, whatever reactor_id says", async () => {
+    addMoment("m1");
+    const joined = (await (await join("party", { nickname: "Sara" })).json()) as { guest_token: string };
+    const heart = await call("/events/party/moments/m1/reaction", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Guest-Token": joined.guest_token },
+      body: "{}",
+    });
+    expect(heart.status).toBe(200);
+    const feed = async (token?: string) => {
+      const res = await call("/events/party/feed?reactor_id=device-0001", { headers: token ? { "X-Guest-Token": token } : {} });
+      return FeedPageSchema.parse(await res.json()).moments[0];
+    };
+    expect(await feed(joined.guest_token)).toMatchObject({ reacted: true, reaction_count: 1 });
+    expect(await feed()).toMatchObject({ reacted: false, reaction_count: 1 });
+  });
+
+  it("reports the token's heart on changes and highlights, and removes it without a body id", async () => {
+    addMoment("m1");
+    const joined = (await (await join("party", { nickname: "Sara" })).json()) as { guest_token: string };
+    const headers = { "Content-Type": "application/json", "X-Guest-Token": joined.guest_token };
+    await call("/events/party/moments/m1/reaction", { method: "PUT", headers, body: "{}" });
+    const changes = (await (await call("/events/party/feed/changes?since=0", { headers })).json()) as { upserts: { reacted: boolean }[] };
+    expect(changes.upserts[0]?.reacted).toBe(true);
+    const highlights = (await (await call("/events/party/highlights", { headers })).json()) as { moments: { reacted: boolean }[] };
+    expect(highlights.moments[0]?.reacted).toBe(true);
+    const removed = await call("/events/party/moments/m1/reaction", { method: "DELETE", headers, body: "{}" });
+    expect(await removed.json()).toEqual({ reacted: false, reaction_count: 0 });
   });
 
   it.each([

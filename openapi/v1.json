@@ -508,12 +508,9 @@
           "reactor_id": {
             "type": "string",
             "pattern": "^[A-Za-z0-9-]{8,100}$",
-            "description": "This device's reactor id for the event (8-100 letters, digits or dashes)"
+            "description": "Deprecated: ignored when X-Guest-Token is sent (the server reacts as the token's guest). Required only for tokenless requests, which GUEST_TOKENS_ENFORCED refuses."
           }
-        },
-        "required": [
-          "reactor_id"
-        ]
+        }
       },
       "LeaveResponse": {
         "type": "object",
@@ -916,9 +913,11 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 100
+              "maxLength": 100,
+              "description": "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's."
             },
             "required": false,
+            "description": "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's.",
             "name": "reactor_id",
             "in": "query"
           },
@@ -931,6 +930,17 @@
             "required": false,
             "description": "Access grant; required for private events only",
             "name": "x-event-access",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "This device's guest token; `reacted` reports this guest's hearts"
+            },
+            "required": false,
+            "description": "This device's guest token; `reacted` reports this guest's hearts",
+            "name": "x-guest-token",
             "in": "header"
           }
         ],
@@ -1027,9 +1037,11 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 100
+              "maxLength": 100,
+              "description": "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's."
             },
             "required": false,
+            "description": "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's.",
             "name": "reactor_id",
             "in": "query"
           },
@@ -1042,6 +1054,17 @@
             "required": false,
             "description": "Access grant; required for private events only",
             "name": "x-event-access",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "This device's guest token; `reacted` reports this guest's hearts"
+            },
+            "required": false,
+            "description": "This device's guest token; `reacted` reports this guest's hearts",
+            "name": "x-guest-token",
             "in": "header"
           }
         ],
@@ -1250,9 +1273,11 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 100
+              "maxLength": 100,
+              "description": "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's."
             },
             "required": false,
+            "description": "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's.",
             "name": "reactor_id",
             "in": "query"
           },
@@ -1265,6 +1290,17 @@
             "required": false,
             "description": "Access grant; required for private events only",
             "name": "x-event-access",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "This device's guest token; `reacted` reports this guest's hearts"
+            },
+            "required": false,
+            "description": "This device's guest token; `reacted` reports this guest's hearts",
+            "name": "x-guest-token",
             "in": "header"
           }
         ],
@@ -1537,7 +1573,7 @@
         },
         "responses": {
           "200": {
-            "description": "This device's reaction state and the moment's total",
+            "description": "The guest's reaction state and the moment's total",
             "content": {
               "application/json": {
                 "schema": {
@@ -1547,7 +1583,7 @@
             }
           },
           "400": {
-            "description": "Invalid reactor id",
+            "description": "Invalid reactor id, or none sent without X-Guest-Token",
             "content": {
               "application/json": {
                 "schema": {
@@ -1680,7 +1716,7 @@
         },
         "responses": {
           "200": {
-            "description": "This device's reaction state and the moment's total",
+            "description": "The guest's reaction state and the moment's total",
             "content": {
               "application/json": {
                 "schema": {
@@ -1690,7 +1726,7 @@
             }
           },
           "400": {
-            "description": "Invalid reactor id",
+            "description": "Invalid reactor id, or none sent without X-Guest-Token",
             "content": {
               "application/json": {
                 "schema": {
