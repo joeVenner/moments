@@ -18,6 +18,14 @@ export function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
 }
 
+/**
+ * A new moment's object key. The orphan sweeper only aborts keys under
+ * `events/<event>/moments/`, so every upload path builds keys here.
+ */
+export function momentKey(eventId: string, filename: string): string {
+  return `events/${eventId}/moments/${crypto.randomUUID()}-${sanitizeFilename(filename)}`;
+}
+
 export function isAllowedContentType(contentType: string): boolean {
   return ALLOWED_CONTENT_TYPES.has(contentType.toLowerCase());
 }

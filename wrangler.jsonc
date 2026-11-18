@@ -44,6 +44,16 @@
   ],
   "ratelimits": [
     {
+      // v1 upload sessions, keyed per guest session. A 50-item queue needs
+      // about 150 calls (start, part URLs, status), so this leaves headroom.
+      "name": "UPLOAD_LIMITER",
+      "namespace_id": "1004",
+      "simple": {
+        "limit": 300,
+        "period": 60
+      }
+    },
+    {
       "name": "ADMIN_AUTH_LIMITER",
       "namespace_id": "1001",
       "simple": {

@@ -39,7 +39,13 @@ export async function cleanupEvent(env: Env, event: Pick<EventRow, "id">, abort?
     env.DB.prepare("DELETE FROM moment_tombstones WHERE event_id = ?").bind(event.id),
     env.DB.prepare("DELETE FROM guest_sessions WHERE event_id = ?").bind(event.id),
     env.DB.prepare("DELETE FROM participants WHERE event_id = ?").bind(event.id),
-    env.DB.prepare("DELETE FROM uploads WHERE event_id = ?").bind(event.id),
+    // Sessions still open here failed to abort (or were past the per-purge
+    // cap). Their part URLs work until R2 aborts them, so keep the rows,
+    // stripped of guest data, for the daily sweeper to finish the job.
+    env.DB.prepare("DELETE FROM uploads WHERE event_id = ? AND status <> 'open'").bind(event.id),
+    env.DB.prepare(
+      "UPDATE uploads SET uploader_name = '', caption = NULL, participant_id = NULL WHERE event_id = ?"
+    ).bind(event.id),
     env.DB.prepare("DELETE FROM access_failures WHERE event_id = ?").bind(event.id),
     env.DB.prepare("UPDATE events SET archived_at = datetime('now') WHERE id = ?").bind(event.id),
   ]);

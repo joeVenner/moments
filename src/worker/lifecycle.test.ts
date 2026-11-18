@@ -52,6 +52,6 @@ describe("cleanupEvent", () => {
     expect(bucket.delete).toHaveBeenCalledWith("events/event/moments/photo.png");
     expect(bucket.delete).toHaveBeenCalledWith(["events/event/cover/cover.png"]);
     expect(db.batch).toHaveBeenCalledOnce();
-    expect(statements).toHaveLength(8);
+    expect(statements).toHaveLength(9);
   });
 });

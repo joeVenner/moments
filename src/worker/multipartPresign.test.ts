@@ -8,8 +8,7 @@ import {
   partCountForSize,
   MULTIPART_PART_BYTES,
   MULTIPART_MIN_PART_BYTES,
-  PART_PRESIGN_EXPIRY_SECONDS,
-} from "./multipartPresign";
+  PART_PRESIGN_EXPIRY_SECONDS, R2RequestError } from "./multipartPresign";
 import type { Env } from "./types";
 
 function envWithR2(overrides: Partial<Env> = {}): Env {
@@ -85,8 +84,16 @@ describe("createMultipartUpload", () => {
   it("throws a clear error when R2 returns non-OK", async () => {
     stubFetch(() => new Response("<Error><Code>NoSuchBucket</Code></Error>", { status: 404 }));
     await expect(createMultipartUpload(envWithR2(), KEY, "video/mp4")).rejects.toThrow(
-      /createMultipartUpload failed \(404\)/
+      "createMultipartUpload failed (404 NoSuchBucket)"
     );
+  });
+
+  it("keeps the R2 response body (which can echo the key) out of the error", async () => {
+    stubFetch(() => new Response(`<Error><Code>AccessDenied</Code><Key>${KEY}</Key></Error>`, { status: 403 }));
+    const error = await createMultipartUpload(envWithR2(), KEY, "video/mp4").catch((err: unknown) => err);
+    expect(error).toBeInstanceOf(R2RequestError);
+    expect(error).toMatchObject({ status: 403, code: "AccessDenied" });
+    expect(String((error as Error).message)).not.toContain(KEY);
   });
 });
 

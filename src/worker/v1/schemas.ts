@@ -2,6 +2,7 @@ import { z } from "@hono/zod-openapi";
 import { MAX_PIN_LENGTH } from "../eventAccess";
 import { MAX_NICKNAME_LENGTH } from "../guestIdentity";
 import { REACTOR_ID_PATTERN } from "../reactions";
+import { CLIENT_UPLOAD_ID_PATTERN, MAX_CAPTION_LENGTH } from "../uploadSessions";
 
 /**
  * Schemas for the native app API. The OpenAPI document generated from these
@@ -225,3 +226,76 @@ export const ReactionHeadersSchema = EventHeadersSchema.extend({
 export const JoinHeadersSchema = EventHeadersSchema.extend({
   "x-guest-token": optionalHeader("This device's guest token, if it has one for this event"),
 });
+
+export const UploadHeadersSchema = EventHeadersSchema.extend({
+  "x-guest-token": optionalHeader("This device's guest token (required: uploads belong to a joined guest)"),
+});
+
+export const UploadParamSchema = SlugParamSchema.extend({
+  id: z.string().min(1).max(100).openapi({ param: { name: "id", in: "path" } }),
+});
+
+export const StartUploadRequestSchema = z
+  .object({
+    client_upload_id: z
+      .string()
+      .regex(CLIENT_UPLOAD_ID_PATTERN)
+      .openapi({ description: "The app's UUID for this queued item; a retried init with it returns the same session" }),
+    content_type: z.string().min(1).max(100).openapi({ example: "image/jpeg" }),
+    size: z.number().int().positive().openapi({ description: "Exact file size in bytes (max 512 MB)" }),
+    caption: z
+      .string()
+      .trim()
+      .max(MAX_CAPTION_LENGTH)
+      // Plain text: no control characters other than line breaks (LF, CR).
+      .refine((value) => !/[\u0000-\u0009\u000B\u000C\u000E-\u001F\u007F]/.test(value), "caption has control characters")
+      .optional(),
+    filename: z.string().max(255).optional().openapi({ description: "Original name; only sanitized letters survive in the key" }),
+  })
+  .openapi("StartUploadRequest");
+
+export const UploadSessionSchema = z
+  .object({
+    id: z.string(),
+    client_upload_id: z.string(),
+    // A plain string, not an enum (see the enum guard in openapi.test.ts).
+    status: z.string().openapi({ description: "`open`, `completed` or `aborted`; more may be added" }),
+    content_type: z.string(),
+    size: z.number().int(),
+    part_size: z.number().int().openapi({ description: "Bytes per part; every part but the last is exactly this size" }),
+    part_count: z.number().int(),
+    created_at: timestamp,
+  })
+  .openapi("UploadSession");
+
+export const UploadStatusSchema = z
+  .object({
+    upload: UploadSessionSchema,
+    uploaded_parts: z
+      .array(z.number().int())
+      .openapi({ description: "Part numbers R2 already has (open sessions only); upload the rest" }),
+  })
+  .openapi("UploadStatus");
+
+export const PartUrlsRequestSchema = z
+  .object({
+    part_numbers: z
+      .array(z.number().int().min(1))
+      .min(1)
+      .max(1000)
+      .optional()
+      .openapi({ description: "Parts to sign; omit for all of them (an empty list is an error)" }),
+  })
+  .openapi("PartUrlsRequest");
+
+export const PartUrlsSchema = z
+  .object({
+    expires_at: timestamp,
+    parts: z.array(
+      z.object({
+        part_number: z.number().int(),
+        url: z.string().openapi({ description: "Presigned PUT URL; send the part's bytes with no extra x-amz or checksum headers" }),
+      })
+    ),
+  })
+  .openapi("PartUrls");

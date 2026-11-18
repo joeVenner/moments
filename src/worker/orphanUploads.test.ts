@@ -168,11 +168,33 @@ describe("event cleanup", () => {
     expect(status("elsewhere")).toBe("open");
   });
 
-  it("still purges when an abort fails", async () => {
-    seedEvent("ev");
+  it("still purges when an abort fails, keeping the session (without guest data) for the sweeper", async () => {
+    seedEvent("ev", { uploads_close_at: ago(48) });
     seedUpload("open", "ev", 1);
+    sqlite.raw.prepare("UPDATE uploads SET caption = 'Cake', participant_id = 'p1' WHERE id = 'open'").run();
     await cleanupEvent(env(), { id: "ev" }, vi.fn(async () => Promise.reject(new Error("down"))));
+    expect(sqlite.raw.prepare("SELECT archived_at IS NOT NULL AS gone FROM events WHERE id = 'ev'").get()).toEqual({ gone: 1 });
+    expect(sqlite.raw.prepare("SELECT status, uploader_name, caption, participant_id FROM uploads WHERE id = 'open'").get()).toEqual({
+      status: "open",
+      uploader_name: "",
+      caption: null,
+      participant_id: null,
+    });
+
+    // The next sweep aborts it and drops the row.
+    sqlite.raw.prepare("UPDATE events SET purge_after = ? WHERE id = 'ev'").run(ago(1));
+    const abort = vi.fn(async () => undefined);
+    await abortOrphanUploads(env(), abort);
+    expect(abort).toHaveBeenCalledWith(expect.anything(), "events/ev/moments/open-a.jpg", "mpu-open");
     expect(status("open")).toBeUndefined();
+  });
+
+  it("keeps aborted rows of events that are only archived, not purged", async () => {
+    seedEvent("ev");
+    seedUpload("old", "ev", 1, "aborted");
+    sqlite.raw.prepare("UPDATE events SET archived_at = datetime('now'), purge_after = datetime('now', '+30 days') WHERE id = 'ev'").run();
+    await abortOrphanUploads(env(), vi.fn(async () => undefined));
+    expect(status("old")).toBe("aborted");
   });
 
   it("caps the aborts per event", async () => {
@@ -203,7 +225,8 @@ describe("event cleanup", () => {
       throw new Error("Too many subrequests");
     });
     await cleanupEvent(broken, { id: "ev" }, abort);
-    expect(status("open")).toBeUndefined();
+    expect(sqlite.raw.prepare("SELECT archived_at IS NOT NULL AS gone FROM events WHERE id = 'ev'").get()).toEqual({ gone: 1 });
+    expect(status("open")).toBe("open");
   });
 
   it("keeps purging other expired events when one fails", async () => {
