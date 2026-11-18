@@ -1,5 +1,5 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import type { MiddlewareHandler } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { getActiveEventBySlug, sqlTimestamp, toPublicEvent } from "../events";
 import { attemptEventAccess } from "../accessAttempt";
@@ -14,7 +14,8 @@ import {
   parseCursor,
   type FeedMoment,
 } from "../feed";
-import { GUEST_TOKEN_HEADER, joinEventAsGuest, toPublicParticipant } from "../guestIdentity";
+import { GUEST_TOKEN_HEADER, joinEventAsGuest, resolveGuestSession, toPublicParticipant } from "../guestIdentity";
+import { type ReactionState, setReaction } from "../reactions";
 import { signMomentsForEvent, STREAM_SIGNING_UNAVAILABLE, StreamSigningError } from "../streamSigning";
 import { withGuestMediaGrant, withGuestMediaGrants } from "../mediaAccess";
 import type { Env, EventRow } from "../types";
@@ -29,6 +30,10 @@ import {
   FeedPageSchema,
   FeedQuerySchema,
   JoinHeadersSchema,
+  MomentParamSchema,
+  ReactionHeadersSchema,
+  ReactionRequestSchema,
+  ReactionSchema,
   JoinRequestSchema,
   JoinResponseSchema,
   SlugParamSchema,
@@ -130,6 +135,44 @@ const joinEventRoute = createRoute({
     409: json(ErrorSchema, "`nickname_taken`: another device owns this nickname"),
     ...commonErrors,
   },
+});
+
+const reactionResponses = {
+  200: json(ReactionSchema, "This device's reaction state and the moment's total"),
+  400: json(ErrorSchema, "Invalid reactor id"),
+  403: json(ErrorSchema, "`guest_required`: join the event first (once guest tokens are enforced)"),
+  429: json(ErrorSchema, "`rate_limited`: too many reactions from this device; slow down"),
+  ...commonErrors,
+  404: json(ErrorSchema, "No live event with this slug, or `moment_not_found`"),
+};
+
+const addReactionRoute = createRoute({
+  method: "put",
+  path: "/events/{slug}/moments/{id}/reaction",
+  operationId: "addReaction",
+  tags: ["Guest"],
+  summary: "Heart a moment (idempotent)",
+  request: {
+    params: MomentParamSchema,
+    headers: ReactionHeadersSchema,
+    body: { content: { "application/json": { schema: ReactionRequestSchema } }, required: true },
+  },
+  responses: reactionResponses,
+});
+
+const removeReactionRoute = createRoute({
+  method: "delete",
+  path: "/events/{slug}/moments/{id}/reaction",
+  operationId: "removeReaction",
+  tags: ["Guest"],
+  summary: "Remove this device's heart (idempotent)",
+  request: {
+    params: MomentParamSchema,
+    headers: ReactionHeadersSchema,
+    // A body, not a query: keeps the reactor id out of access logs.
+    body: { content: { "application/json": { schema: ReactionRequestSchema } }, required: true },
+  },
+  responses: reactionResponses,
 });
 
 const accessRoute = createRoute({
@@ -269,6 +312,46 @@ v1.openapi(joinEventRoute, async (c) => {
   }
   const participant = toPublicParticipant(result.participant);
   return c.json(result.guestToken ? { participant, guest_token: result.guestToken } : { participant }, 200);
+});
+
+type ReactionOutcome =
+  | { ok: true; state: ReactionState }
+  | { ok: false; status: 403 | 404 | 429; body: { error: string; code: string } };
+
+/**
+ * Shared by add and remove: guest check (when enforced), rate limit, then
+ * the write. The limiter keys on the guest session when there is one, else
+ * the client IP, and runs before any moment query.
+ */
+async function applyReaction(
+  c: Context<V1Env>,
+  momentId: string,
+  reactorId: string,
+  reacted: boolean
+): Promise<ReactionOutcome> {
+  const event = c.get("event");
+  const session = await resolveGuestSession(c.env.DB, event.id, c.req.header(GUEST_TOKEN_HEADER));
+  if (c.env.GUEST_TOKENS_ENFORCED === "true" && !session) {
+    return { ok: false, status: 403, body: { error: "join the event first", code: "guest_required" } };
+  }
+  if (c.env.REACTION_LIMITER) {
+    const who = session ? `guest:${session.sessionId}` : `ip:${c.req.header("CF-Connecting-IP") ?? "unknown"}`;
+    const { success } = await c.env.REACTION_LIMITER.limit({ key: `${event.id}:${who}` });
+    if (!success) return { ok: false, status: 429, body: { error: "too many reactions", code: "rate_limited" } };
+  }
+  const state = await setReaction(c.env.DB, { eventId: event.id, momentId, reactorId, reacted });
+  if (!state) return { ok: false, status: 404, body: { error: "moment not found", code: "moment_not_found" } };
+  return { ok: true, state };
+}
+
+v1.openapi(addReactionRoute, async (c) => {
+  const outcome = await applyReaction(c, c.req.valid("param").id, c.req.valid("json").reactor_id, true);
+  return outcome.ok ? c.json(outcome.state, 200) : c.json(outcome.body, outcome.status);
+});
+
+v1.openapi(removeReactionRoute, async (c) => {
+  const outcome = await applyReaction(c, c.req.valid("param").id, c.req.valid("json").reactor_id, false);
+  return outcome.ok ? c.json(outcome.state, 200) : c.json(outcome.body, outcome.status);
 });
 
 // No cookie here: native clients keep the grant themselves (keychain).

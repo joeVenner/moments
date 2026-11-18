@@ -135,7 +135,7 @@
           },
           "code": {
             "type": "string",
-            "description": "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, client_upgrade_required, not_found, internal"
+            "description": "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, not_found, internal"
           }
         },
         "required": [
@@ -412,6 +412,34 @@
         },
         "required": [
           "nickname"
+        ]
+      },
+      "Reaction": {
+        "type": "object",
+        "properties": {
+          "reacted": {
+            "type": "boolean"
+          },
+          "reaction_count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reacted",
+          "reaction_count"
+        ]
+      },
+      "ReactionRequest": {
+        "type": "object",
+        "properties": {
+          "reactor_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9-]{8,100}$",
+            "description": "This device's reactor id for the event (8-100 letters, digits or dashes)"
+          }
+        },
+        "required": [
+          "reactor_id"
         ]
       },
       "AccessResponse": {
@@ -902,6 +930,294 @@
           },
           "426": {
             "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error (415, 5xx, ...)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{slug}/moments/{id}/reaction": {
+      "put": {
+        "operationId": "addReaction",
+        "tags": [
+          "Guest"
+        ],
+        "summary": "Heart a moment (idempotent)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "slug",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "Access grant; required for private events only"
+            },
+            "required": false,
+            "description": "Access grant; required for private events only",
+            "name": "x-event-access",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "This device's guest token; required once guest tokens are enforced"
+            },
+            "required": false,
+            "description": "This device's guest token; required once guest tokens are enforced",
+            "name": "x-guest-token",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReactionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "This device's reaction state and the moment's total",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reaction"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid reactor id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Private event; send a grant from the access endpoint in X-Event-Access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`guest_required`: join the event first (once guest tokens are enforced)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live event with this slug, or `moment_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: too many reactions from this device; slow down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error (415, 5xx, ...)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "removeReaction",
+        "tags": [
+          "Guest"
+        ],
+        "summary": "Remove this device's heart (idempotent)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "slug",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "Access grant; required for private events only"
+            },
+            "required": false,
+            "description": "Access grant; required for private events only",
+            "name": "x-event-access",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "This device's guest token; required once guest tokens are enforced"
+            },
+            "required": false,
+            "description": "This device's guest token; required once guest tokens are enforced",
+            "name": "x-guest-token",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReactionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "This device's reaction state and the moment's total",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reaction"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid reactor id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Private event; send a grant from the access endpoint in X-Event-Access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`guest_required`: join the event first (once guest tokens are enforced)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live event with this slug, or `moment_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: too many reactions from this device; slow down",
             "content": {
               "application/json": {
                 "schema": {

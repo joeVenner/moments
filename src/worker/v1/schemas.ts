@@ -1,6 +1,7 @@
 import { z } from "@hono/zod-openapi";
 import { MAX_PIN_LENGTH } from "../eventAccess";
 import { MAX_NICKNAME_LENGTH } from "../guestIdentity";
+import { REACTOR_ID_PATTERN } from "../reactions";
 
 /**
  * Schemas for the native app API. The OpenAPI document generated from these
@@ -19,7 +20,7 @@ export const ErrorSchema = z
     error: z.string(),
     code: z.string().openapi({
       description:
-        "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, client_upgrade_required, not_found, internal",
+        "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, not_found, internal",
     }),
   })
   .openapi("Error");
@@ -112,6 +113,24 @@ export const SlugParamSchema = z.object({
   slug: z.string().min(1).max(200).openapi({ param: { name: "slug", in: "path" } }),
 });
 
+export const MomentParamSchema = SlugParamSchema.extend({
+  id: z.string().min(1).max(100).openapi({ param: { name: "id", in: "path" } }),
+});
+
+const reactorId = z
+  .string()
+  .regex(REACTOR_ID_PATTERN)
+  .openapi({ description: "This device's reactor id for the event (8-100 letters, digits or dashes)" });
+
+export const ReactionRequestSchema = z.object({ reactor_id: reactorId }).openapi("ReactionRequest");
+
+export const ReactionSchema = z
+  .object({
+    reacted: z.boolean(),
+    reaction_count: z.number().int(),
+  })
+  .openapi("Reaction");
+
 export const FeedQuerySchema = z.object({
   before: cursor.optional(),
   limit: limit.optional(),
@@ -173,6 +192,10 @@ const optionalHeader = (description: string) => z.string().max(512).optional().o
 
 export const EventHeadersSchema = z.object({
   "x-event-access": optionalHeader("Access grant; required for private events only"),
+});
+
+export const ReactionHeadersSchema = EventHeadersSchema.extend({
+  "x-guest-token": optionalHeader("This device's guest token; required once guest tokens are enforced"),
 });
 
 export const JoinHeadersSchema = EventHeadersSchema.extend({
