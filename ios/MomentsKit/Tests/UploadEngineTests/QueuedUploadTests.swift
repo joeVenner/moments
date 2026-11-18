@@ -32,7 +32,7 @@ private func session(
 private func uploading(_ parts: Set<Int> = []) -> QueuedUpload {
     var upload = item()
     upload.apply(.sessionStarted(session(upload)), now: t0)
-    if !parts.isEmpty { upload.apply(.partsUploaded(parts), now: t0) }
+    if !parts.isEmpty { upload.sendParts(parts, now: t0) }
     return upload
 }
 
@@ -44,9 +44,9 @@ private func uploading(_ parts: Set<Int> = []) -> QueuedUpload {
 
         upload.apply(.sessionStarted(session(upload)), now: t0)
         #expect(upload.nextAction(now: t0) == .uploadParts(session: ref, parts: [1, 2, 3]))
-        upload.apply(.partsUploaded([1, 3]), now: t0)
+        upload.sendParts([1, 3], now: t0)
         #expect(upload.nextAction(now: t0) == .uploadParts(session: ref, parts: [2]))
-        upload.apply(.partsUploaded([2]), now: t0)
+        upload.sendParts([2], now: t0)
         #expect(upload.nextAction(now: t0) == .complete(session: ref))
 
         upload.apply(.completeAnswered(.completed(session(upload, status: .completed, momentID: "m1"))), now: t0)
@@ -89,7 +89,7 @@ private func uploading(_ parts: Set<Int> = []) -> QueuedUpload {
 
     @Test func keepsTheClientIDWhenTheGuestRetries() {
         var upload = uploading([1])
-        for _ in 0 ..< QueuedUpload.maxAttempts { upload.apply(.requestFailed(.storageUnavailable), now: t0) }
+        for _ in 0 ..< QueuedUpload.maxAttempts { upload.failRequest(.storageUnavailable, now: t0) }
         #expect(upload.phase == .failed(.gaveUp))
         let id = upload.clientUploadID
         upload.retryByGuest()
@@ -103,7 +103,7 @@ private func uploading(_ parts: Set<Int> = []) -> QueuedUpload {
 
     @Test func retriesFromTheStartWhenNoSessionWasKnown() {
         var upload = item()
-        upload.apply(.requestFailed(.guestRequired), now: t0)
+        upload.failRequest(.guestRequired, now: t0)
         upload.retryByGuest()
         #expect(upload.phase == .prepared && upload.clientUploadID == upload.id)
     }
@@ -118,7 +118,7 @@ private func uploading(_ parts: Set<Int> = []) -> QueuedUpload {
         case .eventGone: .eventNotFound
         default: .invalidUpload
         }
-        upload.apply(.requestFailed(error), now: t0)
+        upload.failRequest(error, now: t0)
         upload.retryByGuest()
         #expect(upload.phase == .failed(failure))
     }
@@ -139,7 +139,7 @@ private func uploading(_ parts: Set<Int> = []) -> QueuedUpload {
 
     @Test func restartsWhenStartIsRefusedAsCancelled() {
         var upload = item()
-        upload.apply(.requestFailed(.uploadNotOpen), now: t0)
+        upload.failRequest(.uploadNotOpen, now: t0)
         #expect(upload.phase == .prepared && upload.restarts == 1)
     }
 
@@ -162,10 +162,84 @@ private func uploading(_ parts: Set<Int> = []) -> QueuedUpload {
         #expect(upload.retryAt != nil)
     }
 
-    @Test func givesUpRatherThanRestartingWhenTheSessionVanished() {
+    @Test func neverStartsOverWhenTheSessionVanished() {
         var upload = uploading([1])
-        upload.apply(.requestFailed(.uploadNotFound), now: t0)
+        upload.failRequest(.uploadNotFound, now: t0)
+        #expect(upload.phase == .failed(.sessionLost))
+        upload.retryByGuest()
+        #expect(upload.phase == .failed(.sessionLost))
+    }
+
+    @Test func letsTheGuestStartFreshAfterRestartsRanOut() {
+        var upload = item()
+        for _ in 0 ... QueuedUpload.maxRestarts { upload.apply(.sessionStarted(session(upload, status: .aborted)), now: t0) }
+        #expect(upload.phase == .failed(.gaveUp) && upload.session == nil)
+        upload.retryByGuest()
+        #expect(upload.phase == .prepared && upload.restarts == 0)
+    }
+
+    @Test func dropsLateEventsFromASupersededSession() {
+        var upload = uploading([1])
+        let oldID = upload.clientUploadID
+        upload.apply(.completeAnswered(.notOpen), now: t0)
+        upload.apply(.progressRead(UploadProgress(session: session(upload, status: .aborted), uploadedParts: [])), now: t0)
+        upload.apply(.sessionStarted(session(upload, id: "u2")), now: t0)
+        let before = upload
+        upload.apply(.partsUploaded([2, 3], sessionID: "u1"), now: t0)
+        upload.apply(.requestFailed(.uploadConflict, clientUploadID: oldID), now: t0)
+        #expect(upload == before)
+    }
+
+    @Test func ignoresAProgressReadItDidNotAskFor() {
+        var upload = uploading([1, 2])
+        upload.apply(.progressRead(UploadProgress(session: session(upload), uploadedParts: [])), now: t0)
+        #expect(upload.uploaded == [1, 2] && upload.phase == .uploading)
+    }
+
+    @Test func givesUpIfASessionChangesItsPartLayout() {
+        var upload = uploading([1])
+        upload.reconcileOnLaunch()
+        var changed = session(upload)
+        changed = UploadSession(
+            id: changed.id, clientUploadID: changed.clientUploadID, status: .open, contentType: "image/jpeg",
+            size: size, partSize: 1024 * 1024 * 1024, partCount: 1, createdAt: t0
+        )
+        upload.apply(.progressRead(UploadProgress(session: changed, uploadedParts: [])), now: t0)
         #expect(upload.phase == .failed(.gaveUp))
+    }
+
+    @Test func finishesAfterAFewAmbiguousAnswers() {
+        var upload = uploading([1, 2, 3])
+        var now = t0
+        var answers: [CompleteOutcome] = [.incomplete(uploadedParts: [1, 3]), .notOpen, .incomplete(uploadedParts: [1, 2])]
+        for _ in 0 ..< 30 {
+            if upload.isFinished { break }
+            switch upload.nextAction(now: now) {
+            case let .uploadParts(_, parts): upload.sendParts(Set(parts), now: now)
+            case .complete:
+                let answer = answers.isEmpty
+                    ? .completed(session(upload, status: .completed, momentID: "m1")) : answers.removeFirst()
+                upload.apply(.completeAnswered(answer), now: now)
+            case .readSession: upload.apply(.progressRead(UploadProgress(session: session(upload), uploadedParts: [1, 2, 3])), now: now)
+            case let .wait(until): now = until
+            default: Issue.record("unexpected action")
+            }
+        }
+        #expect(upload.phase == .done(momentID: "m1"))
+    }
+
+    @Test func offlineNeverShortensALongerWait() {
+        var upload = item()
+        upload.failRequest(.tooManyAttempts(retryAfterSeconds: 600), now: t0)
+        upload.failRequest(.transport(.notConnectedToInternet), now: t0)
+        #expect(upload.retryAt == t0.addingTimeInterval(600))
+    }
+
+    @Test func countsOtherTransportErrorsTowardGivingUp() {
+        var upload = item()
+        upload.failRequest(.transport(.secureConnectionFailed), now: t0)
+        upload.failRequest(.transport(nil), now: t0)
+        #expect(upload.attempts == 2)
     }
 
     @Test func refusesASessionForAnotherFile() {
@@ -182,14 +256,14 @@ private func uploading(_ parts: Set<Int> = []) -> QueuedUpload {
         for _ in 0 ..< 50 {
             if upload.isFinished { break }
             switch upload.nextAction(now: now) {
-            case let .uploadParts(_, parts): upload.apply(.partsUploaded(Set(parts)), now: now)
+            case let .uploadParts(_, parts): upload.sendParts(Set(parts), now: now)
             case .complete: upload.apply(.completeAnswered(.incomplete(uploadedParts: [])), now: now)
             case let .wait(until): now = until
             default: Issue.record("unexpected action")
             }
         }
         #expect(upload.phase == .failed(.gaveUp))
-        #expect(upload.rounds == 0 || upload.rounds == QueuedUpload.maxRounds)
+        #expect(upload.rounds == QueuedUpload.maxRounds)
     }
 
     @Test func givesUpOnAnEndlessNotOpenOpenCycle() {
@@ -218,10 +292,10 @@ private func uploading(_ parts: Set<Int> = []) -> QueuedUpload {
 
     @Test func backsOffOnRetryableErrors() {
         var upload = item()
-        upload.apply(.requestFailed(.storageUnavailable), now: t0)
+        upload.failRequest(.storageUnavailable, now: t0)
         #expect(upload.nextAction(now: t0) == .wait(until: t0.addingTimeInterval(5)))
         for expected in [10.0, 20, 40, 80] {
-            upload.apply(.requestFailed(.rateLimited), now: t0)
+            upload.failRequest(.rateLimited, now: t0)
             #expect(upload.retryAt == t0.addingTimeInterval(expected))
         }
         upload.apply(.sessionStarted(session(upload)), now: t0)
@@ -230,29 +304,29 @@ private func uploading(_ parts: Set<Int> = []) -> QueuedUpload {
 
     @Test func givesUpAfterMaxAttempts() {
         var upload = item()
-        for _ in 1 ..< QueuedUpload.maxAttempts { upload.apply(.requestFailed(.rateLimited), now: t0) }
+        for _ in 1 ..< QueuedUpload.maxAttempts { upload.failRequest(.rateLimited, now: t0) }
         #expect(upload.retryAt == t0.addingTimeInterval(QueuedUpload.maxBackoff))
         #expect(!upload.isFinished)
-        upload.apply(.requestFailed(.rateLimited), now: t0)
+        upload.failRequest(.rateLimited, now: t0)
         #expect(upload.phase == .failed(.gaveUp))
     }
 
     @Test func waitsOutOfflineSpellsWithoutGivingUp() {
         var upload = item()
-        for _ in 0 ..< 100 { upload.apply(.requestFailed(.transport(.notConnectedToInternet)), now: t0) }
+        for _ in 0 ..< 100 { upload.failRequest(.transport(.notConnectedToInternet), now: t0) }
         #expect(!upload.isFinished && upload.attempts == 0)
         #expect(upload.retryAt == t0.addingTimeInterval(QueuedUpload.offlineWait))
     }
 
     @Test func ignoresItsOwnCancelledRequests() {
         var upload = item()
-        upload.apply(.requestFailed(.transport(.cancelled)), now: t0)
+        upload.failRequest(.transport(.cancelled), now: t0)
         #expect(upload == item().withSameIDs(as: upload))
     }
 
     @Test func clampsAFarFutureRetryTime() {
         var upload = item()
-        upload.apply(.requestFailed(.storageUnavailable), now: t0.addingTimeInterval(86_400))
+        upload.failRequest(.storageUnavailable, now: t0.addingTimeInterval(86_400))
         #expect(upload.nextAction(now: t0) == .wait(until: t0.addingTimeInterval(QueuedUpload.maxBackoff)))
     }
 
@@ -270,7 +344,7 @@ private func uploading(_ parts: Set<Int> = []) -> QueuedUpload {
     ])
     func stopsOnTerminalErrors(error: MomentsAPIError, failure: QueuedUpload.Failure) {
         var upload = item()
-        upload.apply(.requestFailed(error), now: t0)
+        upload.failRequest(error, now: t0)
         #expect(upload.phase == .failed(failure))
         #expect(upload.nextAction(now: t0) == .none)
     }
@@ -292,10 +366,10 @@ private func uploading(_ parts: Set<Int> = []) -> QueuedUpload {
 
     @Test func ignoresOutOfPhaseEvents() {
         var upload = item()
-        upload.apply(.partsUploaded([1]), now: t0)
+        upload.sendParts([1], now: t0)
         upload.apply(.completeAnswered(.notOpen), now: t0)
         #expect(upload == item().withSameIDs(as: upload))
-        upload.apply(.requestFailed(.uploadsClosed), now: t0)
+        upload.failRequest(.uploadsClosed, now: t0)
         upload.apply(.sessionStarted(session(upload)), now: t0)
         #expect(upload.phase == .failed(.uploadsClosed))
     }
@@ -314,7 +388,7 @@ private func uploading(_ parts: Set<Int> = []) -> QueuedUpload {
 
     @Test func survivesARoundTripThroughJSON() throws {
         var upload = uploading([2])
-        upload.apply(.requestFailed(.storageUnavailable), now: t0)
+        upload.failRequest(.storageUnavailable, now: t0)
         let data = try JSONEncoder().encode(upload)
         #expect(try JSONDecoder().decode(QueuedUpload.self, from: data) == upload)
         #expect(!String(decoding: data, as: UTF8.self).contains("http"))
@@ -326,11 +400,14 @@ private func uploading(_ parts: Set<Int> = []) -> QueuedUpload {
         ("\"partCount\":3", "\"partCount\":99999"),
         ("\"attempts\":1", "\"attempts\":9223372036854775807"),
         ("\"schemaVersion\":1", "\"schemaVersion\":2"),
+        ("\"rounds\":0", "\"rounds\":99"),
+        ("\"restarts\":0", "\"restarts\":-1"),
+        ("\"uploaded\":[2]", "\"uploaded\":[2,7]"),
         ("\"id\":\"u1\"", "\"id\":\"..\\/x\""),
     ])
     func refusesTamperedRecords(original: String, tampered: String) throws {
         var upload = uploading([2])
-        upload.apply(.requestFailed(.storageUnavailable), now: t0)
+        upload.failRequest(.storageUnavailable, now: t0)
         let json = String(decoding: try JSONEncoder().encode(upload), as: UTF8.self)
         #expect(json.contains(original), "fixture drifted: \(original)")
         let bad = Data(json.replacingOccurrences(of: original, with: tampered).utf8)
@@ -339,8 +416,45 @@ private func uploading(_ parts: Set<Int> = []) -> QueuedUpload {
 }
 
 private extension QueuedUpload {
+    /// A failure of a request made under the current client id.
+    mutating func failRequest(_ error: MomentsAPIError, now: Date) {
+        apply(.requestFailed(error, clientUploadID: clientUploadID), now: now)
+    }
+
+    /// Parts of the current session reached storage.
+    mutating func sendParts(_ parts: Set<Int>, now: Date) {
+        apply(.partsUploaded(parts, sessionID: session?.id ?? "none"), now: now)
+    }
+
     /// A fresh item sharing `other`'s ids, to compare "nothing changed".
     func withSameIDs(as other: QueuedUpload) -> QueuedUpload {
         QueuedUpload(id: other.id, eventSlug: eventSlug, file: file, caption: caption, createdAt: createdAt)
     }
 }
+
+@Suite struct QueuedUploadDecodingTests {
+    @Test func refusesAnUnsafeMomentIDOrAPhaseWithoutASession() throws {
+        var done = item()
+        done.apply(.sessionStarted(session(done, status: .completed, momentID: "m1")), now: t0)
+        let json = String(decoding: try JSONEncoder().encode(done), as: UTF8.self)
+        #expect(json.contains("\"momentID\":\"m1\""))
+        let badID = Data(json.replacingOccurrences(of: "\"momentID\":\"m1\"", with: "\"momentID\":\"..\\/x\"").utf8)
+        #expect(throws: DecodingError.self) { try JSONDecoder().decode(QueuedUpload.self, from: badID) }
+
+        let fresh = String(decoding: try JSONEncoder().encode(item()), as: UTF8.self)
+        #expect(fresh.contains("\"prepared\":{}"))
+        let checking = Data(fresh.replacingOccurrences(of: "\"prepared\":{}", with: "\"checking\":{}").utf8)
+        #expect(throws: DecodingError.self) { try JSONDecoder().decode(QueuedUpload.self, from: checking) }
+    }
+
+    @Test func reconcileIsANoOpWithoutASessionOrOnceFinished() {
+        var fresh = item()
+        fresh.reconcileOnLaunch()
+        #expect(fresh.phase == .prepared)
+        var done = item()
+        done.apply(.sessionStarted(session(done, status: .completed)), now: t0)
+        done.reconcileOnLaunch()
+        #expect(done.phase == .done(momentID: nil))
+    }
+}
+

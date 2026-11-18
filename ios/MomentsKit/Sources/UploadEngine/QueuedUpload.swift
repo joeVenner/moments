@@ -103,6 +103,9 @@ public struct QueuedUpload: Codable, Sendable, Hashable, Identifiable {
         case unavailable
         /// Kept failing; the guest may try again.
         case gaveUp
+        /// The server no longer knows this upload. It may have finished and
+        /// been removed by the host, so it is never started over.
+        case sessionLost
     }
 
     /// Why the bytes were refused, as a closed set (a server string is
@@ -201,15 +204,17 @@ public extension QueuedUpload {
         case none
     }
 
-    /// What happened since the last action.
+    /// What happened since the last action. Events that carry an id are
+    /// dropped when it isn't the item's current one, so a late answer from
+    /// a superseded request can't change a newer session.
     enum Event: Sendable {
         case sessionStarted(UploadSession)
         case progressRead(UploadProgress)
-        /// These parts reached storage.
-        case partsUploaded(Set<Int>)
+        /// These parts of session `sessionID` reached storage.
+        case partsUploaded(Set<Int>, sessionID: String)
         case completeAnswered(CompleteOutcome)
-        /// The last request failed.
-        case requestFailed(MomentsAPIError)
+        /// A request made under `clientUploadID` failed.
+        case requestFailed(MomentsAPIError, clientUploadID: UUID)
     }
 
     func nextAction(now: Date) -> Action {
@@ -239,17 +244,19 @@ public extension QueuedUpload {
             guard session == nil, started.clientUploadID == clientUploadID else { return }
             adopt(started, uploaded: [], now: now)
         case let .progressRead(progress):
-            guard progress.session.clientUploadID == clientUploadID,
-                  session == nil || progress.session.id == session?.id
+            // Only the read we asked for while checking.
+            guard phase == .checking, let session, progress.session.clientUploadID == clientUploadID,
+                  progress.session.id == session.id
             else { return }
             adopt(progress.session, uploaded: progress.uploadedParts, now: now)
-        case let .partsUploaded(parts):
-            guard phase == .uploading, let session else { return }
+        case let .partsUploaded(parts, sessionID):
+            guard phase == .uploading, let session, session.id == sessionID else { return }
             record(parts, of: session)
         case let .completeAnswered(outcome):
             guard phase == .finishing || phase == .uploading, session != nil else { return }
             answer(outcome, now: now)
-        case let .requestFailed(error):
+        case let .requestFailed(error, requestClientID):
+            guard requestClientID == clientUploadID else { return }
             fail(error, now: now)
         }
     }
@@ -268,12 +275,15 @@ public extension QueuedUpload {
     mutating func retryByGuest() {
         guard case let .failed(failure) = phase else { return }
         switch failure {
-        case .uploadsClosed, .eventGone, .refused, .rejected:
+        case .uploadsClosed, .eventGone, .refused, .rejected, .sessionLost:
             return
         case .accessLost, .appTooOld, .unavailable, .gaveUp:
             attempts = 0
             rounds = 0
             retryAt = nil
+            // Without a session (never opened, or confirmed cancelled) a
+            // fresh start is safe, so the restart budget starts over too.
+            if session == nil { restarts = 0 }
             phase = session == nil ? .prepared : .checking
         }
     }
@@ -292,8 +302,7 @@ private extension QueuedUpload {
         case .unknown:
             // Perhaps a newer server's "finishing": wait and look again,
             // never restart (that could duplicate the moment).
-            guard let ref = sessionRef(for: server) else { return giveUp() }
-            take(ref)
+            guard let ref = sessionRef(for: server), take(ref) else { return giveUp() }
             ambiguous(now: now)
             if case .failed = phase { return }
             phase = .checking
@@ -303,7 +312,8 @@ private extension QueuedUpload {
             guard UploadPlan.matches(server, size: file.size, contentType: file.contentType),
                   let ref = sessionRef(for: server)
             else { return restart() }
-            take(ref)
+            // The same session can't change its part layout.
+            guard take(ref) else { return giveUp() }
             attempts = 0
             uploaded = serverParts.filter { $0 >= 1 && $0 <= ref.partCount }
             phase = UploadPlan.missingParts(partCount: ref.partCount, uploaded: uploaded).isEmpty ? .finishing : .uploading
@@ -311,9 +321,12 @@ private extension QueuedUpload {
     }
 
     /// Records the session; a different one starts its own round count.
-    mutating func take(_ ref: SessionRef) {
-        if session != ref { rounds = 0 }
+    /// False when the known session came back with another part layout.
+    mutating func take(_ ref: SessionRef) -> Bool {
+        if let session, session.id == ref.id { return session == ref }
+        rounds = 0
         session = ref
+        return true
     }
 
     mutating func record(_ parts: Set<Int>, of session: SessionRef) {
@@ -327,7 +340,8 @@ private extension QueuedUpload {
     mutating func answer(_ outcome: CompleteOutcome, now: Date) {
         switch outcome {
         case let .completed(server):
-            guard server.clientUploadID == clientUploadID else { return }
+            guard server.clientUploadID == clientUploadID, server.status == .completed, server.id == session?.id
+            else { return }
             phase = .done(momentID: server.momentID.flatMap(Self.validID))
         case let .incomplete(serverParts):
             // Every "parts missing" counts, so a server that always says it
@@ -354,7 +368,8 @@ private extension QueuedUpload {
             // The app cancelled its own request: not a failure.
             if code == .cancelled { return }
             if let code, Self.offlineCodes.contains(code) {
-                retryAt = now.addingTimeInterval(Self.offlineWait)
+                // Never shortens a longer wait already set.
+                retryAt = max(retryAt ?? .distantPast, now.addingTimeInterval(Self.offlineWait))
                 return
             }
         }
@@ -381,7 +396,8 @@ private extension QueuedUpload {
         case .uploadNotFound:
             // Our session is gone. It may have finished and been purged
             // with a removed moment, so never start over blind.
-            giveUp()
+            phase = .failed(.sessionLost)
+            retryAt = nil
         case let .tooManyAttempts(seconds):
             retryAt = now.addingTimeInterval(TimeInterval(min(max(seconds, 1), Int(Self.maxBackoff))))
         case .uploadsClosed: phase = .failed(.uploadsClosed)
@@ -416,7 +432,12 @@ private extension QueuedUpload {
     /// The server confirmed this id's session is unusable: a new id opens a
     /// fresh session (bounded, so a server that keeps cancelling can't loop).
     mutating func restart() {
-        guard restarts < Self.maxRestarts else { return giveUp() }
+        guard restarts < Self.maxRestarts else {
+            // The old session is unusable either way; a guest retry starts fresh.
+            session = nil
+            uploaded = []
+            return giveUp()
+        }
         restarts += 1
         clientUploadID = UUID()
         session = nil
@@ -482,6 +503,12 @@ extension QueuedUpload {
         rounds = try c.decode(Int.self, forKey: .rounds)
         retryAt = try c.decodeIfPresent(Date.self, forKey: .retryAt)
 
+        if case let .done(momentID?) = phase, Self.validID(momentID) == nil {
+            throw DecodingError.dataCorruptedError(forKey: .phase, in: c, debugDescription: "invalid moment id")
+        }
+        if session == nil, phase == .finishing || phase == .checking {
+            throw DecodingError.dataCorruptedError(forKey: .phase, in: c, debugDescription: "phase needs a session")
+        }
         let sessionIsValid: Bool = if let ref = session {
             Self.validID(ref.id) != nil && ref.partCount == UploadPlan.partCount(size: file.size, partSize: ref.partSize)
                 && uploaded.allSatisfy { $0 >= 1 && $0 <= ref.partCount }
