@@ -1642,11 +1642,17 @@ export default {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) => app.fetch(request, env, ctx),
   scheduled: async (_controller: ScheduledController, env: Env, ctx: ExecutionContext) => {
     // Sequential: both spend the invocation's subrequest budget on R2 calls.
-    // Finalize before the orphan sweep, so a finished upload is kept, not aborted.
+    // Sequential (they share the subrequest budget); finalize before the orphan
+    // sweep so a finished upload is kept, not aborted. A failing stage logs and
+    // lets the next one run.
+    const stage = (name: string, run: () => Promise<unknown>) => () =>
+      run().catch((err: unknown) =>
+        console.error(JSON.stringify({ scope: "cron", event: "stage_failed", stage: name, error: err instanceof Error ? err.name : "unknown" }))
+      );
     ctx.waitUntil(
-      cleanupExpiredEvents(env)
-        .then(() => finalizeReadyUploads(env))
-        .then(() => abortOrphanUploads(env))
+      stage("cleanup", () => cleanupExpiredEvents(env))()
+        .then(stage("finalize", () => finalizeReadyUploads(env)))
+        .then(stage("orphans", () => abortOrphanUploads(env)))
     );
     ctx.waitUntil(pruneAccessFailures(env));
   },
