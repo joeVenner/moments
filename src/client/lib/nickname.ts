@@ -43,6 +43,18 @@ export function guestTokenHeaders(slug: string): Record<string, string> {
   return token ? { "X-Guest-Token": token } : {};
 }
 
+/**
+ * The token header for a call about a saved upload: the token saved with it,
+ * which is its owner's (a rejoin keeps the same token, while the page's may
+ * since belong to another guest joined in this browser). Rows saved before
+ * tokens were kept fall back to the page's. Works in the upload service
+ * worker, which has no localStorage.
+ */
+export function uploadTokenHeaders(upload: { slug: string; guestToken?: string | null }): Record<string, string> {
+  const token = upload.guestToken || getGuestToken(upload.slug);
+  return token ? { "X-Guest-Token": token } : {};
+}
+
 export function setGuestToken(slug: string, token: string): void {
   try {
     localStorage.setItem(guestTokenKey(slug), token);

@@ -1,6 +1,6 @@
 import { Upload, type DetailedError } from "tus-js-client";
 import type { MomentData } from "./types";
-import { guestTokenHeaders } from "./nickname";
+import { getGuestToken, guestTokenHeaders, uploadTokenHeaders } from "./nickname";
 import {
   deleteUpload,
   deleteUploadFile,
@@ -65,6 +65,7 @@ async function runStreamUpload(opts: StreamUploadOptions, localId: string): Prom
     fileLastModified: opts.file.lastModified,
     caption: opts.caption || null,
     uploaderName: opts.uploaderName,
+    guestToken: getGuestToken(opts.slug),
     completedParts: {},
     status: "queued",
     createdAt: Date.now(),
@@ -72,6 +73,8 @@ async function runStreamUpload(opts: StreamUploadOptions, localId: string): Prom
     lastError: null,
   };
   state.backend = "stream";
+  // Rows saved before tokens were kept: fill it in (never overwrite the owner's).
+  state.guestToken ??= getGuestToken(opts.slug);
   await saveUpload(state);
   if (cancelledStreamUploads.has(localId)) {
     await deleteUpload(localId);
@@ -171,7 +174,7 @@ async function runStreamUpload(opts: StreamUploadOptions, localId: string): Prom
             `/api/events/${encodeURIComponent(opts.slug)}/moments/stream/complete`,
             {
               method: "POST",
-              headers: { "Content-Type": "application/json", ...guestTokenHeaders(opts.slug) },
+              headers: { "Content-Type": "application/json", ...uploadTokenHeaders(state) },
               body: JSON.stringify({
                 stream_uid: streamUid,
                 uploader_name: opts.uploaderName,
@@ -259,7 +262,7 @@ export async function cancelStreamUpload(upload: PersistedUpload): Promise<void>
   if (upload.streamUid || upload.streamSessionId) {
     await jsonRequest(`/api/events/${encodeURIComponent(upload.slug)}/moments/stream/abort`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...guestTokenHeaders(upload.slug) },
+      headers: { "Content-Type": "application/json", ...uploadTokenHeaders(upload) },
       body: JSON.stringify({
         stream_uid: upload.streamUid,
         session_id: upload.streamSessionId,
