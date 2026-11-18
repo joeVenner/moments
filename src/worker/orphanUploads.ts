@@ -1,6 +1,6 @@
 /**
  * Aborts R2 multipart sessions nobody will finish. Parts of an unfinished
- * upload are billed storage that no object listing shows, so the daily cron
+ * upload are billed storage that no object listing shows, so the hourly cron
  * reaps them instead of waiting on the bucket's lifecycle rule.
  */
 
@@ -8,6 +8,7 @@ import { PURGE_AT_SQL, UPLOAD_FINISH_GRACE_MINUTES, UPLOADS_CLOSE_AT_SQL } from 
 import { abortMultipartUpload } from "./multipartPresign";
 import { isR2Configured } from "./presign";
 import type { Env } from "./types";
+import { UPLOAD_SESSION_TTL_HOURS } from "./uploadSessions";
 
 
 /**
@@ -46,7 +47,7 @@ export type AbortFn = (env: Env, key: string, uploadId: string) => Promise<void>
 
 /**
  * Open sessions to reap, in random order: abandoned (older than
- * ORPHAN_UPLOAD_AGE_HOURS) or still open past the event's upload close plus
+ * ORPHAN_UPLOAD_AGE_HOURS; app sessions after UPLOAD_SESSION_TTL_HOURS) or still open past the event's upload close plus
  * the finish grace. Purged events' sessions are aborted by cleanupEvent;
  * any it could not abort stay open and are picked up here.
  */
@@ -58,6 +59,9 @@ export async function findOrphanUploads(db: D1Database, limit: number): Promise<
         WHERE u.status = 'open'
           AND ${R2_SESSION_SQL}
           AND (u.created_at <= datetime('now', '-${ORPHAN_UPLOAD_AGE_HOURS} hours')
+               -- App sessions (client id) expire sooner; the app opens a new one.
+               OR (u.client_upload_id IS NOT NULL
+                   AND u.created_at <= datetime('now', '-${UPLOAD_SESSION_TTL_HOURS} hours'))
                OR (${UPLOADS_CLOSE_AT_SQL} IS NOT NULL
                    AND ${UPLOADS_CLOSE_AT_SQL} <= datetime('now', '-${UPLOAD_FINISH_GRACE_MINUTES} minutes')))
         -- Random, not oldest first: rows that fail every run cannot starve the rest.
@@ -132,7 +136,7 @@ async function deleteUnregisteredObjects(env: Env, ids: readonly string[]): Prom
   }
 }
 
-/** Daily cron entry point: reaps up to ORPHAN_ABORT_BATCH orphaned sessions. */
+/** Hourly cron entry point: reaps up to ORPHAN_ABORT_BATCH orphaned sessions. */
 export async function abortOrphanUploads(env: Env, abort: AbortFn = abortMultipartUpload): Promise<AbortSummary> {
   if (!isR2Configured(env)) return { aborted: 0, failed: 0 };
   const summary = await abortUploadSessions(env, await findOrphanUploads(env.DB, ORPHAN_ABORT_BATCH), abort);
