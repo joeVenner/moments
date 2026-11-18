@@ -12,6 +12,9 @@ export interface Env {
   ADMIN_USER: string;
   ADMIN_PASSWORD: string;
   ADMIN_AUTH_LIMITER: RateLimit;
+  /** Per event and device (guest session, else IP). Optional so tests and
+   * older configs run without it; production config declares it. */
+  REACTION_LIMITER?: RateLimit;
   // Optional: AI banner generation is inert (returns 501) when unset.
   OPENAI_API_KEY?: string;
   // Optional: presigned large direct-to-R2 uploads are inert (returns 501)
