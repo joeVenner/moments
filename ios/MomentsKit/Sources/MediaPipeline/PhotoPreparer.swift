@@ -147,6 +147,8 @@ public enum PhotoPreparer {
     /// file ends with the IEND chunk. Other formats rely on the decoder.
     static func hasCompleteEnding(_ source: URL, type: UTType) -> Bool {
         guard type == .jpeg || type == .png else { return true }
+        // Mapped, so a large file costs no memory; the source must be the
+        // caller's own stable copy (a file shrinking under a map faults).
         guard let data = try? Data(contentsOf: source, options: .alwaysMapped) else { return false }
         if type == .png {
             return data.suffix(12) == Data([0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82])
@@ -156,21 +158,32 @@ public enum PhotoPreparer {
 
     /// Walks the JPEG's segments (skipping each by its length, so an
     /// embedded thumbnail inside APP1 is never mistaken for the image) and
-    /// its entropy-coded scans until the end-of-image marker.
+    /// its entropy-coded scans until the end-of-image marker. Stray bytes
+    /// between segments are skipped, as decoders do. A file that ends
+    /// before the marker is refused, even if a decoder would show it.
     static func jpegReachesEnd(_ data: Data) -> Bool {
         data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Bool in
             let bytes = raw.bindMemory(to: UInt8.self)
             let count = bytes.count
-            guard count >= 4, bytes[0] == 0xFF, bytes[1] == 0xD8 else { return false }
+            guard let base = bytes.baseAddress, count >= 4, bytes[0] == 0xFF, bytes[1] == 0xD8 else { return false }
+            /// The index of the next 0xFF at or after `from`, or `count`.
+            func nextFF(_ from: Int) -> Int {
+                guard from < count, let found = memchr(base + from, 0xFF, count - from) else { return count }
+                return base.distance(to: found.assumingMemoryBound(to: UInt8.self))
+            }
             var index = 2
-            while index + 1 < count {
-                guard bytes[index] == 0xFF else { return false }
+            while true {
+                index = nextFF(index)
+                guard index + 1 < count else { return false }
                 let marker = bytes[index + 1]
                 // Fill bytes before a marker.
                 if marker == 0xFF { index += 1; continue }
                 if marker == 0xD9 { return true }
-                // Markers without a length.
-                if marker == 0x01 || (0xD0 ... 0xD7).contains(marker) { index += 2; continue }
+                // Markers without a length (and a stray stuffed byte).
+                if marker == 0x00 || marker == 0x01 || marker == 0xD8 || (0xD0 ... 0xD7).contains(marker) {
+                    index += 2
+                    continue
+                }
                 guard index + 3 < count else { return false }
                 let length = Int(bytes[index + 2]) << 8 | Int(bytes[index + 3])
                 guard length >= 2 else { return false }
@@ -178,12 +191,14 @@ public enum PhotoPreparer {
                 guard marker == 0xDA else { continue }
                 // Scan data: an 0xFF is followed by 0x00 (a stuffed byte) or
                 // a restart marker until the next real marker.
-                while index + 1 < count {
-                    if bytes[index] == 0xFF, bytes[index + 1] != 0x00, !(0xD0 ... 0xD7).contains(bytes[index + 1]) { break }
-                    index += 1
+                while true {
+                    index = nextFF(index)
+                    guard index + 1 < count else { return false }
+                    let next = bytes[index + 1]
+                    if next == 0x00 || (0xD0 ... 0xD7).contains(next) { index += 2; continue }
+                    break
                 }
             }
-            return false
         }
     }
 

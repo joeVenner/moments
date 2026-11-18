@@ -311,6 +311,36 @@ struct PhotoPreparerTests {
         _ = try PhotoPreparer.prepare(source: paddedURL, destination: folder.url.appending(path: "b.jpg"))
     }
 
+    @Test(arguments: [
+        // SOI, APP0, SOS, scan with stuffing and a restart, EOI.
+        ([0xFF, 0xD8, 0xFF, 0xE0, 0, 4, 1, 2, 0xFF, 0xDA, 0, 2, 9, 0xFF, 0, 8, 0xFF, 0xD0, 7, 0xFF, 0xD9], true),
+        // Progressive: two scans with a table between.
+        ([0xFF, 0xD8, 0xFF, 0xDA, 0, 2, 1, 2, 0xFF, 0xC4, 0, 3, 5, 0xFF, 0xDA, 0, 2, 3, 0xFF, 0xD9], true),
+        // Fill bytes at the end of a scan; stray zeros between segments.
+        ([0xFF, 0xD8, 0, 0, 0xFF, 0xDA, 0, 2, 1, 0xFF, 0xFF, 0xD9], true),
+        // A second JPEG after the first (MPF).
+        ([0xFF, 0xD8, 0xFF, 0xDA, 0, 2, 1, 0xFF, 0xD9, 0xFF, 0xD8, 0xFF, 0xDA, 0, 2], true),
+        // An Exif thumbnail's EOI inside APP1 doesn't count.
+        ([0xFF, 0xD8, 0xFF, 0xE1, 0, 6, 0xFF, 0xD9, 0, 0, 0xFF, 0xDA, 0, 2, 1, 2], false),
+        // Truncated scan, missing EOI, zero length, length past the end, not a JPEG.
+        ([0xFF, 0xD8, 0xFF, 0xDA, 0, 2, 1, 2, 3], false),
+        ([0xFF, 0xD8, 0xFF, 0xE0, 0, 0, 0xFF, 0xD9], false),
+        ([0xFF, 0xD8, 0xFF, 0xE0, 0x7F, 0xFF, 0xFF, 0xD9], false),
+        ([0x89, 0x50, 0x4E, 0x47, 0xFF, 0xD9], false),
+    ] as [([UInt8], Bool)])
+    func findsTheEndOfTheMainImage(bytes: [UInt8], complete: Bool) {
+        #expect(PhotoPreparer.jpegReachesEnd(Data(bytes)) == complete)
+    }
+
+    @Test func leftoverSweepLeavesLinksAlone() throws {
+        let folder = try Folder()
+        let target = folder.url.appending(path: "target")
+        try Data("keep".utf8).write(to: target)
+        try FileManager.default.createSymbolicLink(at: folder.url.appending(path: ".x.preparing"), withDestinationURL: target)
+        PhotoPreparer.removeLeftovers(in: folder.url)
+        #expect(Set(folder.files) == [".x.preparing", "target"])
+    }
+
     @Test func removesLeftoversOfInterruptedWrites() throws {
         let folder = try Folder()
         try Data("x".utf8).write(to: folder.url.appending(path: ".\(UUID().uuidString).preparing"))
