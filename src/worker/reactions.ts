@@ -42,6 +42,7 @@ export interface SetReactionInput {
  * Known limits until GUEST_TOKENS_ENFORCED (and server-made ids): omitting
  * the token skips this, and a token holder who learned another device's
  * random, never-returned id before that device bound it could bind it first.
+ * (Leaving the event then also deletes the hearts under that id.)
  */
 export async function bindReactor(
   db: D1Database,
