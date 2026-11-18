@@ -935,6 +935,7 @@ describe("upload sessions", () => {
     const caption = await start(token, { client_upload_id: "00000000-0000-4000-8000-000000000003", caption: "hi\u0007" });
     expect(caption.status).toBe(400);
     expect((await start(token, { client_upload_id: "00000000-0000-4000-8000-000000000004", caption: "line one\nline two" })).status).toBe(201);
+    expect((await start(token, { client_upload_id: "00000000-0000-4000-8000-000000000005", caption: "a\r\nb" })).status).toBe(201);
   });
 
   it("logs R2 failures without the response body", async () => {

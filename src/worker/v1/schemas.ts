@@ -247,8 +247,8 @@ export const StartUploadRequestSchema = z
       .string()
       .trim()
       .max(MAX_CAPTION_LENGTH)
-      // Plain text: no control characters other than line breaks.
-      .refine((value) => !/[\u0000-\u0009\u000B-\u001F\u007F]/.test(value), "caption has control characters")
+      // Plain text: no control characters other than line breaks (LF, CR).
+      .refine((value) => !/[\u0000-\u0009\u000B\u000C\u000E-\u001F\u007F]/.test(value), "caption has control characters")
       .optional(),
     filename: z.string().max(255).optional().openapi({ description: "Original name; only sanitized letters survive in the key" }),
   })
