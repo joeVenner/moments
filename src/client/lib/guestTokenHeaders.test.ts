@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { toggleMomentReaction, uploadMoment } from "./api";
+import { listHighlights, listMoments, toggleMomentReaction, uploadMoment } from "./api";
 import { abortResumableUpload } from "./multipartUpload";
 import { guestTokenHeaders, setGuestToken } from "./nickname";
 
@@ -48,6 +48,14 @@ describe("guest token on web requests", () => {
     fetchMock.mockClear();
     await toggleMomentReaction("party", "m1");
     expect(sentToken(fetchMock)).toBe("tok-1");
+  });
+
+  it("goes with reads that report the guest's hearts", async () => {
+    setGuestToken("party", "tok-1");
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({ moments: [] }), { status: 200 }));
+    await listMoments("party");
+    await listHighlights("party");
+    expect(sentTokens(fetchMock)).toEqual(["tok-1", "tok-1"]);
   });
 
   it("goes with multipart calls", async () => {

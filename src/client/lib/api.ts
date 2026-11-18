@@ -90,7 +90,8 @@ export function listMoments(
   if (opts?.uploaderName) params.set("uploader_name", opts.uploaderName);
   params.set("reactor_id", getReactionId());
   const qs = params.toString();
-  return fetch(`/api/events/${slug}/moments${qs ? `?${qs}` : ""}`).then((r) =>
+  // The token makes `reacted` this guest's hearts (the server ignores reactor_id then).
+  return fetch(`/api/events/${slug}/moments${qs ? `?${qs}` : ""}`, { headers: guestTokenHeaders(slug) }).then((r) =>
     asJson<{
       moments: MomentData[];
       hasMore: boolean;
@@ -102,7 +103,7 @@ export function listMoments(
 
 export function listHighlights(slug: string) {
   const params = new URLSearchParams({ reactor_id: getReactionId() });
-  return fetch(`/api/events/${encodeURIComponent(slug)}/highlights?${params}`).then((response) =>
+  return fetch(`/api/events/${encodeURIComponent(slug)}/highlights?${params}`, { headers: guestTokenHeaders(slug) }).then((response) =>
     asJson<{ moments: MomentData[] }>(response)
   );
 }
