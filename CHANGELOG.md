@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Website: returning guests who never received their guest identity (they joined before it existed, or their join failed on the network) now get it in the background, so their nickname stays theirs once identities are required.
 - iOS: the app is available in French. Every screen, message and VoiceOver label is translated, with proper plural forms. `npm run ios:strings:check` flags any new app text that has no translation.
 - iOS: a "Your uploads" screen for each event shows every photo and video as waiting, uploading (with a percentage), finishing, shared or failed. Fixable failures get "Try again", and finished items can be swiped away. A button in the event's top bar shows how many are under way and flags failures. It appears once uploads are connected in the app.
 - Guests can leave an event from the app ("Leave event" in the event menu). It deletes the photos and videos they shared from the app, cancels their unfinished uploads, and frees their nickname. It works even after the event's PIN changed. Anything shared from the website under the same name stays, and the confirmation says so.
