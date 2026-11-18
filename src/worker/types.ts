@@ -120,6 +120,8 @@ export interface UploadRow {
   upload_id: string;
   content_type: string | null;
   size_bytes: number;
+  /** Set on v1 (app) sessions, which only the v1 routes may finish or abort. */
+  client_upload_id: string | null;
   status: "open" | "completed" | "aborted";
   created_at: string;
   completed_at: string | null;

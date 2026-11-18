@@ -4,6 +4,7 @@ import { HTTPException } from "hono/http-exception";
 import { areUploadsOpen, canFinishUploads, getActiveEventBySlug, sqlTimestamp, toPublicEvent, UPLOADS_CLOSED } from "../events";
 import { isR2Configured } from "../presign";
 import { R2RequestError } from "../multipartPresign";
+import { finalizeUpload, r2FinalizeBackend } from "../uploadFinalize";
 import {
   abortUpload,
   getOwnedUpload,
@@ -54,6 +55,8 @@ import {
   StartUploadRequestSchema,
   UploadHeadersSchema,
   UploadParamSchema,
+  UploadCompleteConflictSchema,
+  UploadRejectedSchema,
   UploadSessionSchema,
   UploadStatusSchema,
   ReactionHeadersSchema,
@@ -308,6 +311,24 @@ const partUrlsRoute = createRoute({
   },
 });
 
+const completeUploadRoute = createRoute({
+  method: "post",
+  path: "/events/{slug}/uploads/{id}/complete",
+  operationId: "completeUpload",
+  tags: ["Uploads"],
+  summary: "Finish a session on the server once its parts are uploaded (idempotent)",
+  description:
+    "Call after the last part (from the background, one call is enough). The server checks every part's size, assembles the file, checks its type and creates the moment. A daily sweep finishes sessions nobody nudged. Safe to retry: a completed session returns 200 again.",
+  request: { params: UploadParamSchema, headers: UploadHeadersSchema },
+  responses: {
+    200: json(UploadSessionSchema, "Completed; moment_id is the new moment"),
+    409: json(UploadCompleteConflictSchema, "`upload_incomplete`: parts missing (see uploaded_parts); `upload_not_open`: aborted, queue the item again"),
+    422: json(UploadRejectedSchema, "`upload_rejected`: the bytes don't match the session; it was aborted, queue the item again"),
+    ...uploadErrors,
+    404: json(ErrorSchema, "No live event with this slug, or `upload_not_found`"),
+  },
+});
+
 const accessRoute = createRoute({
   method: "post",
   path: "/events/{slug}/access",
@@ -537,6 +558,8 @@ function toUploadSession(row: UploadSessionRow) {
     part_size: row.part_size,
     part_count: partCount(row),
     created_at: row.created_at,
+    completed_at: row.completed_at,
+    moment_id: row.moment_id,
   };
 }
 
@@ -670,6 +693,39 @@ v1.openapi(abortUploadRoute, async (c) => {
     return c.json(toUploadSession(result.session), 200);
   } catch (err) {
     logUploadError("v1_upload_abort_failed", { eventId: event.id, uploadRecordId: session.id }, err);
+    return c.json(STORAGE_UNAVAILABLE, 502);
+  }
+});
+
+v1.openapi(completeUploadRoute, async (c) => {
+  const event = c.get("event");
+  const guest = await uploadGuest(c);
+  if (!guest) return c.json(GUEST_REQUIRED, 403);
+  const session = await getOwnedUpload(c.env.DB, { eventId: event.id, participantId: guest.participant.id, uploadId: c.req.valid("param").id });
+  if (!session) return c.json(UPLOAD_NOT_FOUND, 404);
+  if (session.status === "completed") {
+    // Without a moment it was deleted since (moderation): finished, not retryable.
+    return session.moment_id ? c.json(toUploadSession(session), 200) : c.json(UPLOAD_NOT_OPEN, 409);
+  }
+  if (session.status === "aborted") return c.json(UPLOAD_NOT_OPEN, 409);
+  if (!canFinishUploads(event)) return c.json(UPLOADS_CLOSED, 403);
+  if (!isR2Configured(c.env)) return c.json(UPLOADS_UNAVAILABLE, 501);
+  if (await isUploadLimited(c, guest.sessionId)) return c.json(RATE_LIMITED, 429);
+  try {
+    const result = await finalizeUpload(c.env.DB, r2FinalizeBackend(c.env), session);
+    switch (result.kind) {
+      case "completed":
+        return c.json(toUploadSession(result.session), 200);
+      case "incomplete":
+        return c.json({ error: "parts are missing", code: "upload_incomplete", uploaded_parts: result.uploadedParts }, 409);
+      case "rejected":
+        console.warn(JSON.stringify({ scope: "upload", event: "v1_upload_rejected", eventId: event.id, uploadRecordId: session.id, reason: result.reason }));
+        return c.json({ error: "the uploaded file doesn't match", code: "upload_rejected", reason: result.reason }, 422);
+      case "not_open":
+        return c.json(UPLOAD_NOT_OPEN, 409);
+    }
+  } catch (err) {
+    logUploadError("v1_upload_complete_failed", { eventId: event.id, uploadRecordId: session.id }, err);
     return c.json(STORAGE_UNAVAILABLE, 502);
   }
 });

@@ -46,6 +46,7 @@ import {
 import { deleteMomentMedia } from "./moderation";
 import { cleanupEvent, cleanupExpiredEvents, pruneAccessFailures } from "./lifecycle";
 import { abortOrphanUploads } from "./orphanUploads";
+import { finalizeReadyUploads } from "./uploadFinalize";
 import { attemptEventAccess } from "./accessAttempt";
 import {
   CHANGES_MAX_LIMIT,
@@ -723,6 +724,8 @@ async function getOpenUpload(
     .first<UploadRow>();
 }
 
+const V1_SESSION_ERROR = { error: "this upload is managed by the app API", code: "v1_upload_session" } as const;
+
 async function getUpload(
   db: D1Database,
   eventId: string,
@@ -1254,6 +1257,8 @@ app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
   }
   const upload = await getUpload(c.env.DB, event.id, uploadId, key);
   if (!upload) return c.json({ error: "upload not found" }, 404);
+  // App sessions finish through v1, which checks part sizes and file bytes.
+  if (upload.client_upload_id) return c.json(V1_SESSION_ERROR, 409);
   const existingMoment = await getMomentForUpload(c.env.DB, event.id, key);
   if (existingMoment) {
     if (upload.status !== "completed") {
@@ -1379,6 +1384,8 @@ app.post("/api/events/:slug/moments/multipart/abort", async (c) => {
   if (!registrationKeyBelongsToEvent(event.id, key)) {
     return c.json({ error: "key does not belong to this event" }, 400);
   }
+  const upload = await getUpload(c.env.DB, event.id, uploadId, key);
+  if (upload?.client_upload_id) return c.json(V1_SESSION_ERROR, 409);
 
   try {
     await abortMultipartUpload(c.env, key, uploadId);
@@ -1389,7 +1396,9 @@ app.post("/api/events/:slug/moments/multipart/abort", async (c) => {
     });
     return c.json({ error: err instanceof Error ? err.message : "abort failed" }, 502);
   }
-  await c.env.DB.prepare("UPDATE uploads SET status = 'aborted' WHERE upload_id = ? AND key = ? AND event_id = ?")
+  await c.env.DB.prepare(
+    "UPDATE uploads SET status = 'aborted' WHERE upload_id = ? AND key = ? AND event_id = ? AND client_upload_id IS NULL"
+  )
     .bind(uploadId, key, event.id)
     .run();
   logUpload("info", "multipart_aborted", { eventId: event.id });
@@ -1633,7 +1642,18 @@ export default {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) => app.fetch(request, env, ctx),
   scheduled: async (_controller: ScheduledController, env: Env, ctx: ExecutionContext) => {
     // Sequential: both spend the invocation's subrequest budget on R2 calls.
-    ctx.waitUntil(cleanupExpiredEvents(env).then(() => abortOrphanUploads(env)));
+    // Sequential (they share the subrequest budget); finalize before the orphan
+    // sweep so a finished upload is kept, not aborted. A failing stage logs and
+    // lets the next one run.
+    const stage = (name: string, run: () => Promise<unknown>) => () =>
+      run().catch((err: unknown) =>
+        console.error(JSON.stringify({ scope: "cron", event: "stage_failed", stage: name, error: err instanceof Error ? err.name : "unknown" }))
+      );
+    ctx.waitUntil(
+      stage("cleanup", () => cleanupExpiredEvents(env))()
+        .then(stage("finalize", () => finalizeReadyUploads(env)))
+        .then(stage("orphans", () => abortOrphanUploads(env)))
+    );
     ctx.waitUntil(pruneAccessFailures(env));
   },
 } satisfies ExportedHandler<Env>;

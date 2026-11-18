@@ -265,8 +265,29 @@ export const UploadSessionSchema = z
     part_size: z.number().int().openapi({ description: "Bytes per part; every part but the last is exactly this size" }),
     part_count: z.number().int(),
     created_at: timestamp,
+    completed_at: timestamp.nullable(),
+    moment_id: z.string().nullable().openapi({ description: "The moment this upload became, once completed" }),
   })
   .openapi("UploadSession");
+
+export const UploadCompleteConflictSchema = z
+  .object({
+    error: z.string(),
+    code: z.string().openapi({ description: "`upload_incomplete` or `upload_not_open`" }),
+    uploaded_parts: z
+      .array(z.number().int())
+      .optional()
+      .openapi({ description: "With `upload_incomplete`: parts R2 has; upload the rest, then complete again" }),
+  })
+  .openapi("UploadCompleteConflict");
+
+export const UploadRejectedSchema = z
+  .object({
+    error: z.string(),
+    code: z.string().openapi({ description: "`upload_rejected`" }),
+    reason: z.string().openapi({ description: "`part_size_mismatch`, `object_mismatch` or `signature_mismatch`; more may be added" }),
+  })
+  .openapi("UploadRejected");
 
 export const UploadStatusSchema = z
   .object({

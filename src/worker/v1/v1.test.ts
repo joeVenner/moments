@@ -16,6 +16,8 @@ import {
   PartUrlsSchema,
   ReactionSchema,
   TooManyAttemptsSchema,
+  UploadCompleteConflictSchema,
+  UploadRejectedSchema,
   UploadSessionSchema,
   UploadStatusSchema,
 } from "./schemas";
@@ -959,6 +961,136 @@ describe("upload sessions", () => {
     const res = await call(`/events/party/uploads/${id}`, authed(token));
     expect(res.status).toBe(429);
     expect(limit.mock.calls[0][0].key).toMatch(/^event-1:guest:/);
+  });
+});
+
+describe("completing an upload", () => {
+  const CLIENT_ID = "6f1c2a7e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
+  const PART = 8 * 1024 * 1024;
+  const SIZE = 2 * PART + 100;
+  const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  let listedParts: string;
+  let assembled: { size: number; type: string; start: Uint8Array } | null;
+  let s3Calls: string[];
+
+  beforeEach(() => {
+    listedParts = [1, 2, 3]
+      .map((n) => `<Part><PartNumber>${n}</PartNumber><ETag>"e${n}"</ETag><Size>${n === 3 ? 100 : PART}</Size></Part>`)
+      .join("");
+    assembled = { size: SIZE, type: "image/jpeg", start: JPEG };
+    s3Calls = [];
+    let objectExists = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = input instanceof Request ? input : new Request(input, init);
+        const url = new URL(request.url);
+        if (request.method === "POST" && url.searchParams.has("uploads")) {
+          return new Response("<InitiateMultipartUploadResult><UploadId>mp-1</UploadId></InitiateMultipartUploadResult>");
+        }
+        if (request.method === "GET" && url.searchParams.has("uploadId")) {
+          s3Calls.push("listParts");
+          return new Response(`<ListPartsResult><IsTruncated>false</IsTruncated>${listedParts}</ListPartsResult>`);
+        }
+        if (request.method === "POST" && url.searchParams.has("uploadId")) {
+          s3Calls.push("complete");
+          objectExists = true;
+          return new Response("<CompleteMultipartUploadResult><ETag>x</ETag></CompleteMultipartUploadResult>");
+        }
+        if (request.method === "DELETE") return new Response(null, { status: 204 });
+        return new Response("unexpected", { status: 500 });
+      })
+    );
+    const bucket = {
+      head: vi.fn(async () => (objectExists && assembled ? { size: assembled.size, httpMetadata: { contentType: assembled.type } } : null)),
+      get: vi.fn(async () => (objectExists && assembled ? { arrayBuffer: async () => assembled!.start.buffer } : null)),
+      delete: vi.fn(async () => {
+        objectExists = false;
+      }),
+    };
+    extraEnv = {
+      R2_ACCESS_KEY_ID: "test-key",
+      R2_SECRET_ACCESS_KEY: "test-secret",
+      R2_S3_ENDPOINT: "https://r2.example.com",
+      R2_BUCKET_NAME: "moments-media",
+      BUCKET: bucket as unknown as R2Bucket,
+    };
+  });
+
+  async function openUpload(): Promise<{ token: string; id: string }> {
+    const token = ((await (await join("party", { nickname: "Sara" })).json()) as { guest_token: string }).guest_token;
+    const res = await call("/events/party/uploads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Guest-Token": token },
+      body: JSON.stringify({ client_upload_id: CLIENT_ID, content_type: "image/jpeg", size: SIZE, caption: "Cake" }),
+    });
+    return { token, id: ((await res.json()) as { id: string }).id };
+  }
+
+  const complete = (token: string, id: string) =>
+    call(`/events/party/uploads/${id}/complete`, { method: "POST", headers: { "X-Guest-Token": token } });
+
+  it("creates the moment once and answers replays without touching R2", async () => {
+    const { token, id } = await openUpload();
+    const res = await complete(token, id);
+    expect(res.status).toBe(200);
+    const session = exact(UploadSessionSchema, await res.json());
+    expect(session.status).toBe("completed");
+    expect(session.moment_id).toBeTruthy();
+    expect(session.completed_at).toBeTruthy();
+    const feed = exact(FeedPageSchema, await (await call("/events/party/feed")).json());
+    expect(feed.moments.map((m) => m.id)).toEqual([session.moment_id]);
+    expect(feed.moments[0]).toMatchObject({ caption: "Cake", uploader_name: "Sara" });
+
+    s3Calls = [];
+    const again = await complete(token, id);
+    expect(again.status).toBe(200);
+    expect(((await again.json()) as { moment_id: string }).moment_id).toBe(session.moment_id);
+    expect(s3Calls).toEqual([]);
+  });
+
+  it("answers 409, not a server error, once the moment was deleted", async () => {
+    const { token, id } = await openUpload();
+    expect((await complete(token, id)).status).toBe(200);
+    sqlite.raw.prepare("DELETE FROM moments").run();
+    const res = await complete(token, id);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "upload_not_open" });
+  });
+
+  it("says which parts are missing", async () => {
+    const { token, id } = await openUpload();
+    listedParts = `<Part><PartNumber>2</PartNumber><ETag>"e2"</ETag><Size>${PART}</Size></Part>`;
+    const res = await complete(token, id);
+    expect(res.status).toBe(409);
+    expect(exact(UploadCompleteConflictSchema, await res.json())).toEqual({
+      error: "parts are missing",
+      code: "upload_incomplete",
+      uploaded_parts: [2],
+    });
+    expect(s3Calls).toEqual(["listParts"]);
+  });
+
+  it("rejects a file whose bytes aren't what it claimed, and refuses it afterwards", async () => {
+    const { token, id } = await openUpload();
+    assembled = { size: SIZE, type: "image/jpeg", start: new TextEncoder().encode("<!doctype html>.") };
+    const res = await complete(token, id);
+    expect(res.status).toBe(422);
+    expect(exact(UploadRejectedSchema, await res.json())).toMatchObject({ code: "upload_rejected", reason: "signature_mismatch" });
+    const again = await complete(token, id);
+    expect(again.status).toBe(409);
+    expect(await again.json()).toMatchObject({ code: "upload_not_open" });
+    expect(Number((sqlite.raw.prepare("SELECT COUNT(*) AS n FROM moments").get() as { n: number }).n)).toBe(0);
+  });
+
+  it("is private to the guest and closes with the finishing grace", async () => {
+    const { token, id } = await openUpload();
+    const lea = ((await (await join("party", { nickname: "Lea" })).json()) as { guest_token: string }).guest_token;
+    expect((await complete(lea, id)).status).toBe(404);
+    sqlite.raw.prepare("UPDATE events SET uploads_close_at = datetime('now', '-31 minutes') WHERE id = 'event-1'").run();
+    const late = await complete(token, id);
+    expect(late.status).toBe(403);
+    expect(await late.json()).toMatchObject({ code: "uploads_closed" });
   });
 });
 

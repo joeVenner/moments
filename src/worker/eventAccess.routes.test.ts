@@ -98,7 +98,10 @@ describe("private event gate", () => {
     const env = makeEnv(state);
     expect((await call(env, "/api/events/party")).status).toBe(401);
     expect((await call(env, "/api/events/party/moments")).status).toBe(401);
-    expect((await call(env, "/media/events/event-1/moments/photo.jpg")).status).toBe(401);
+    const media = await call(env, "/media/events/event-1/moments/photo.jpg");
+    expect(media.status).toBe(401);
+    // Every /media answer forbids type sniffing (uploads are served with their declared type).
+    expect(media.headers.get("X-Content-Type-Options")).toBe("nosniff");
   });
 
   it("rejects a wrong credential", async () => {

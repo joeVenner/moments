@@ -143,6 +143,8 @@ export async function presignPartUrl(
 export interface R2Part {
   partNumber: number;
   etag: string;
+  /** Bytes R2 holds for the part (ListParts only; absent when a client sends parts). */
+  size?: number;
 }
 
 /**
@@ -200,6 +202,20 @@ export async function abortMultipartUpload(
   }
 }
 
+const DIGITS = /^\d+$/;
+
+/** One ListParts <Part>; a malformed one throws rather than reading as missing. */
+function parsePart(xml: string): R2Part {
+  const field = (name: string) => new RegExp(`<${name}>([^<]*)</${name}>`).exec(xml)?.[1];
+  const partNumber = field("PartNumber");
+  const etag = field("ETag");
+  const size = field("Size");
+  if (!partNumber || !DIGITS.test(partNumber) || etag === undefined || (size !== undefined && !DIGITS.test(size))) {
+    throw new Error("listParts: malformed part in response");
+  }
+  return size === undefined ? { partNumber: Number(partNumber), etag } : { partNumber: Number(partNumber), etag, size: Number(size) };
+}
+
 /**
  * List already-uploaded parts for a multipart upload — the resume source of
  * truth. Used on reload/revisit to skip parts the client doesn't need to re-PUT.
@@ -224,11 +240,9 @@ export async function listParts(
       throw await r2Error("listParts", res);
     }
     const xml = await res.text();
-    // Each <Part><PartNumber>N</PartNumber><ETag>"..."</ETag>...</Part>
-    const partRe = /<Part>\s*<PartNumber>(\d+)<\/PartNumber>\s*<ETag>([^<]*)<\/ETag>/g;
-    let m: RegExpExecArray | null;
-    while ((m = partRe.exec(xml)) !== null) {
-      parts.push({ partNumber: parseInt(m[1], 10), etag: m[2] });
+    // Each <Part> holds PartNumber, ETag and Size (any order, maybe LastModified too).
+    for (const block of xml.matchAll(/<Part>([\s\S]*?)<\/Part>/g)) {
+      parts.push(parsePart(block[1]));
     }
     const truncated = /<IsTruncated>true<\/IsTruncated>/.test(xml);
     if (!truncated) break;

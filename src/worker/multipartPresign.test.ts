@@ -141,14 +141,35 @@ describe("listParts", () => {
     });
     const parts = await listParts(envWithR2(), KEY, "upl-1");
     expect(parts).toEqual([
-      { partNumber: 1, etag: '"a"' },
-      { partNumber: 2, etag: '"b"' },
-      { partNumber: 3, etag: '"c"' },
+      { partNumber: 1, etag: '"a"', size: 8388608 },
+      { partNumber: 2, etag: '"b"', size: 8388608 },
+      { partNumber: 3, etag: '"c"', size: 1234 },
     ]);
     expect(fn).toHaveBeenCalledTimes(2);
     // Second call must continue from the marker R2 gave us.
     const secondUrl = new URL((fn.mock.calls[1][0] as Request).url);
     expect(secondUrl.searchParams.get("part-number-marker")).toBe("2");
+  });
+
+  it("reads fields in any order, as S3 sends them", async () => {
+    stubFetch(
+      () =>
+        new Response(
+          `<ListPartsResult><IsTruncated>false</IsTruncated><Part><PartNumber>1</PartNumber>` +
+            `<LastModified>2026-11-18T10:00:00.000Z</LastModified><Size>5</Size><ETag>"x"</ETag></Part></ListPartsResult>`
+        )
+    );
+    expect(await listParts(envWithR2(), KEY, "upl-1")).toEqual([{ partNumber: 1, etag: '"x"', size: 5 }]);
+  });
+
+  it("throws on a malformed part instead of reading it as missing", async () => {
+    stubFetch(
+      () =>
+        new Response(
+          `<ListPartsResult><IsTruncated>false</IsTruncated><Part><PartNumber>1</PartNumber><ETag>"x"</ETag><Size>big</Size></Part></ListPartsResult>`
+        )
+    );
+    await expect(listParts(envWithR2(), KEY, "upl-1")).rejects.toThrow("malformed part");
   });
 
   it("returns an empty list for an upload with no parts yet", async () => {
