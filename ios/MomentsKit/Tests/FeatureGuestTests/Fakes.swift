@@ -18,6 +18,10 @@ final class FakeService: MomentsService, @unchecked Sendable {
     private(set) var pageCalls: [(before: Int?, reactorID: String?, credentials: EventCredentials)] = []
     private(set) var changesCalls: [Int] = []
     var reactionResults: [Result<ReactionState, Error>] = []
+    var highlightsResults: [Result<[Moment], Error>] = []
+    var leaderboardResults: [Result<[LeaderboardEntry], Error>] = []
+    private(set) var highlightsCalls: [(reactorID: String?, credentials: EventCredentials)] = []
+    private(set) var leaderboardCalls = 0
     private(set) var reactionCalls: [(reacted: Bool, momentID: String, reactorID: String)] = []
     /// Runs before a reaction request answers (to hold it open).
     var beforeReaction: (@Sendable () async -> Void)?
@@ -30,6 +34,12 @@ final class FakeService: MomentsService, @unchecked Sendable {
     }
     func join(slug: String, nickname: String, avatarSeed: String?, credentials: EventCredentials) async throws -> JoinResult {
         try lock.withLock { joinCalls.append((nickname, credentials)); return try joinResults.removeFirst().get() }
+    }
+    func highlights(slug: String, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> [Moment] {
+        try lock.withLock { highlightsCalls.append((reactorID, credentials)); return try highlightsResults.removeFirst().get() }
+    }
+    func leaderboard(slug: String, credentials: EventCredentials) async throws -> [LeaderboardEntry] {
+        try lock.withLock { leaderboardCalls += 1; return try leaderboardResults.removeFirst().get() }
     }
     func setReaction(
         _ reacted: Bool, slug: String, momentID: String, reactorID: String, credentials: EventCredentials

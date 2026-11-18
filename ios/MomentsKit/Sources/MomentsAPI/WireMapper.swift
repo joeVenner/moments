@@ -98,6 +98,20 @@ struct WireMapper: Sendable {
         )
     }
 
+    /// Rows we can't read are left out.
+    func highlights(_ wire: Components.Schemas.Highlights) -> [Moment] {
+        wire.moments.compactMap(moment)
+    }
+
+    func leaderboard(_ wire: Components.Schemas.Leaderboard) -> [LeaderboardEntry] {
+        wire.entries.map {
+            LeaderboardEntry(
+                participantID: $0.participantId, nickname: $0.nickname, avatarSeed: $0.avatarSeed,
+                totalPoints: max(0, $0.totalPoints), momentCount: max(0, $0.momentCount), rank: max(1, $0.rank)
+            )
+        }
+    }
+
     func feedPage(_ wire: Components.Schemas.FeedPage) -> FeedPage {
         let moments = wire.moments.compactMap(moment)
         return FeedPage(
