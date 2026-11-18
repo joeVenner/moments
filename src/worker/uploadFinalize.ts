@@ -120,13 +120,13 @@ async function register(db: D1Database, backend: FinalizeBackend, session: Uploa
   await db.batch([
     db
       .prepare(
-        `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type)
-         SELECT ?, ?, ?, ?, ?, ?, ?, ?
+        `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type, participant_id)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
           WHERE EXISTS (${OPEN_IN_LIVE_EVENT})`
       )
       .bind(
         crypto.randomUUID(), session.event_id, session.uploader_name, `/media/${session.key}`, session.caption,
-        pointsForContentType(session.content_type), object.size, session.content_type, session.id
+        pointsForContentType(session.content_type), object.size, session.content_type, session.participant_id, session.id
       ),
     db
       .prepare(`UPDATE uploads SET status = 'completed', completed_at = datetime('now') WHERE id = ? AND EXISTS (${OPEN_IN_LIVE_EVENT})`)

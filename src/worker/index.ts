@@ -67,6 +67,7 @@ import {
 } from "./guestIdentity";
 import { isJoinLimited, JOIN_RATE_LIMITED, JOIN_RETRY_AFTER_SECONDS } from "./joinLimit";
 import { gateReaction, REACTOR_ID_PATTERN, setReaction, viewerReactorId } from "./reactions";
+import { guestMoment, mayFinishUpload, resolveWebUploader } from "./webUploader";
 import { cleanWebCaption } from "./captionText";
 import {
   MAX_PIN_LENGTH,
@@ -541,14 +542,22 @@ app.post("/api/events/:slug/moments", async (c) => {
   // New uploads only; sessions opened before the close may still finish.
   if (!event.uploads_open) return c.json(UPLOADS_CLOSED, 403);
 
-  const body = await c.req.parseBody();
-  const uploaderName =
-    typeof body.uploader_name === "string" ? body.uploader_name.trim() : "";
+  // Parsed lazily: an enforced request without a token is refused unread.
+  let parsed: Awaited<ReturnType<typeof c.req.parseBody>> | undefined;
+  const readBody = async () => (parsed ??= await c.req.parseBody());
+  const uploader = await resolveWebUploader(c.env, {
+    eventId: event.id,
+    token: c.req.header(GUEST_TOKEN_HEADER),
+    clientName: async () => (await readBody()).uploader_name,
+  });
+  if (!uploader.ok) return c.json(uploader.body, uploader.status);
+  const { uploaderName, participantId } = uploader;
+  const body = await readBody();
   const caption = typeof body.caption === "string" ? cleanWebCaption(body.caption) : null;
   const file = body.file instanceof File ? body.file : null;
 
-  if (!uploaderName || !file || file.size === 0) {
-    return c.json({ error: "uploader_name and file are required" }, 400);
+  if (!file || file.size === 0) {
+    return c.json({ error: "file is required" }, 400);
   }
 
   let mediaUrl: string;
@@ -562,10 +571,10 @@ app.post("/api/events/:slug/moments", async (c) => {
   const points = pointsForContentType(file.type);
   const id = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type, participant_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
-    .bind(id, event.id, uploaderName, mediaUrl, caption, points, file.size, file.type || null)
+    .bind(id, event.id, uploaderName, mediaUrl, caption, points, file.size, file.type || null, participantId)
     .run();
 
   // Defensive: guarantees a participant row exists even if the client somehow
@@ -577,7 +586,7 @@ app.post("/api/events/:slug/moments", async (c) => {
     .bind(id)
     .first<MomentRow>();
 
-  return c.json({ moment, points_awarded: points }, 201);
+  return c.json({ moment: moment && guestMoment(moment), points_awarded: points }, 201);
 });
 
 app.get("/api/events/:slug/highlights", async (c) => {
@@ -821,10 +830,15 @@ app.post("/api/events/:slug/moments/stream/session", async (c) => {
     content_type?: unknown;
     size?: unknown;
   } | null;
-  const uploaderName = typeof body?.uploader_name === "string" ? body.uploader_name.trim() : "";
+  const uploader = await resolveWebUploader(c.env, {
+    eventId: event.id,
+    token: c.req.header(GUEST_TOKEN_HEADER),
+    clientName: () => body?.uploader_name,
+  });
+  if (!uploader.ok) return c.json(uploader.body, uploader.status);
+  const { uploaderName, participantId } = uploader;
   const contentType = typeof body?.content_type === "string" ? body.content_type.toLowerCase() : "";
   const size = typeof body?.size === "number" ? body.size : NaN;
-  if (!uploaderName) return c.json({ error: "uploader_name is required" }, 400);
   if (!contentType.startsWith("video/") || !isAllowedContentType(contentType)) {
     return c.json({ error: "unsupported video type" }, 400);
   }
@@ -833,10 +847,10 @@ app.post("/api/events/:slug/moments/stream/session", async (c) => {
   }
   const sessionId = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO uploads (id, event_id, uploader_name, key, upload_id, content_type, size_bytes, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'open')`
+    `INSERT INTO uploads (id, event_id, uploader_name, key, upload_id, content_type, size_bytes, status, participant_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)`
   )
-    .bind(sessionId, event.id, uploaderName, `stream-session/${sessionId}`, sessionId, contentType, size)
+    .bind(sessionId, event.id, uploaderName, `stream-session/${sessionId}`, sessionId, contentType, size, participantId)
     .run();
   return c.json({ session_id: sessionId });
 });
@@ -949,14 +963,21 @@ app.post("/api/events/:slug/moments/stream/complete", async (c) => {
   if (!streamUid || !uploaderName) return c.json({ error: "stream_uid and uploader_name are required" }, 400);
 
   const upload = await getUpload(c.env.DB, event.id, streamUid, `stream/${streamUid}`);
-  if (!upload || upload.uploader_name !== uploaderName) return c.json({ error: "upload not found" }, 404);
+  // App sessions never finish here.
+  if (!upload || upload.client_upload_id) return c.json({ error: "upload not found" }, 404);
+  const token = c.req.header(GUEST_TOKEN_HEADER);
+  if (!(await mayFinishUpload(c.env, { eventId: event.id, token, row: upload, clientName: uploaderName }))) {
+    return c.json({ error: "upload not found" }, 404);
+  }
   const mediaUrl = streamMediaUrl(c.env, streamUid);
   const existingMoment = await c.env.DB.prepare("SELECT * FROM moments WHERE event_id = ? AND media_url = ?")
     .bind(event.id, mediaUrl)
     .first<MomentRow>();
   if (existingMoment) {
+    // A replay; a moment hidden meanwhile isn't handed back.
+    if (existingMoment.moderation_status !== "approved") return c.json({ error: "upload not found" }, 404);
     const [signedExisting] = await signMomentsForEvent(c.env, event, [existingMoment]);
-    return c.json({ moment: signedExisting, points_awarded: existingMoment.points_awarded });
+    return c.json({ moment: guestMoment(signedExisting), points_awarded: existingMoment.points_awarded });
   }
   if (upload.status !== "open") return c.json({ error: "upload is not open" }, 409);
 
@@ -1007,15 +1028,16 @@ app.post("/api/events/:slug/moments/stream/complete", async (c) => {
   const points = pointsForContentType(upload.content_type ?? "video/mp4");
   const momentId = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type, participant_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
-    .bind(momentId, event.id, uploaderName, mediaUrl, caption, points, upload.size_bytes, upload.content_type)
+    // The row's name and owner, set when the session opened (never the body's).
+    .bind(momentId, event.id, upload.uploader_name, mediaUrl, caption, points, upload.size_bytes, upload.content_type, upload.participant_id)
     .run();
   await c.env.DB.prepare(
     "UPDATE uploads SET status = 'completed', completed_at = datetime('now') WHERE id = ?"
   ).bind(upload.id).run();
-  await upsertParticipant(c.env.DB, event.id, uploaderName);
+  await upsertParticipant(c.env.DB, event.id, upload.uploader_name);
   const moment = await c.env.DB.prepare("SELECT * FROM moments WHERE id = ?").bind(momentId).first<MomentRow>();
   logUpload("info", "stream_upload_completed", {
     eventId: event.id,
@@ -1025,7 +1047,7 @@ app.post("/api/events/:slug/moments/stream/complete", async (c) => {
   });
   if (!moment) return c.json({ error: "moment not found" }, 500);
   const [signedMoment] = await signMomentsForEvent(c.env, event, [moment]);
-  return c.json({ moment: signedMoment, points_awarded: points }, 201);
+  return c.json({ moment: signedMoment && guestMoment(signedMoment), points_awarded: points }, 201);
 });
 
 app.post("/api/events/:slug/moments/stream/abort", async (c) => {
@@ -1078,12 +1100,17 @@ app.post("/api/events/:slug/moments/multipart/init", async (c) => {
     filename?: unknown;
   } | null;
 
-  const uploaderName = typeof body?.uploader_name === "string" ? body.uploader_name.trim() : "";
+  const uploader = await resolveWebUploader(c.env, {
+    eventId: event.id,
+    token: c.req.header(GUEST_TOKEN_HEADER),
+    clientName: () => body?.uploader_name,
+  });
+  if (!uploader.ok) return c.json(uploader.body, uploader.status);
+  const { uploaderName, participantId } = uploader;
   const contentType = typeof body?.content_type === "string" ? body.content_type.toLowerCase() : "";
   const size = typeof body?.size === "number" ? body.size : NaN;
   const filename = typeof body?.filename === "string" ? body.filename : "upload";
 
-  if (!uploaderName) return c.json({ error: "uploader_name is required" }, 400);
   if (!isAllowedContentType(contentType)) return c.json({ error: "Unsupported file type" }, 400);
   if (!Number.isFinite(size) || size <= 0 || size > MAX_DIRECT_UPLOAD_BYTES) {
     return c.json({ error: "File too large (max 512MB)" }, 400);
@@ -1105,10 +1132,10 @@ app.post("/api/events/:slug/moments/multipart/init", async (c) => {
 
   const id = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO uploads (id, event_id, uploader_name, key, upload_id, content_type, size_bytes, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'open')`
+    `INSERT INTO uploads (id, event_id, uploader_name, key, upload_id, content_type, size_bytes, status, participant_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)`
   )
-    .bind(id, event.id, uploaderName, key, uploadId, contentType || null, size)
+    .bind(id, event.id, uploaderName, key, uploadId, contentType || null, size, participantId)
     .run();
   logUpload("info", "multipart_initialized", {
     eventId: event.id,
@@ -1279,6 +1306,10 @@ app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
   if (!upload) return c.json({ error: "upload not found" }, 404);
   // App sessions finish through v1, which checks part sizes and file bytes.
   if (upload.client_upload_id) return c.json(V1_SESSION_ERROR, 409);
+  const token = c.req.header(GUEST_TOKEN_HEADER);
+  if (!(await mayFinishUpload(c.env, { eventId: event.id, token, row: upload, clientName: uploaderName }))) {
+    return c.json({ error: "upload not found" }, 404);
+  }
   const existingMoment = await getMomentForUpload(c.env.DB, event.id, key);
   if (existingMoment) {
     if (upload.status !== "completed") {
@@ -1291,7 +1322,8 @@ app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
       uploadRecordId: upload.id,
       momentId: existingMoment.id,
     });
-    return c.json({ moment: existingMoment, points_awarded: existingMoment.points_awarded });
+    if (existingMoment.moderation_status !== "approved") return c.json({ error: "upload not found" }, 404);
+    return c.json({ moment: guestMoment(existingMoment), points_awarded: existingMoment.points_awarded });
   }
   let validated: { contentType: string; size: number } | Response | undefined;
   if (upload.status !== "open") {
@@ -1360,17 +1392,18 @@ app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
   const points = pointsForContentType(validated.contentType);
   const id = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type, participant_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
-    .bind(id, event.id, uploaderName, `/media/${key}`, caption, points, validated.size, validated.contentType || null)
+    // The row's name and owner, set at init (never the body's).
+    .bind(id, event.id, upload.uploader_name, `/media/${key}`, caption, points, validated.size, validated.contentType || null, upload.participant_id)
     .run();
   await c.env.DB.prepare(
     "UPDATE uploads SET status = 'completed', completed_at = datetime('now') WHERE id = ?"
   )
     .bind(upload.id)
     .run();
-  await upsertParticipant(c.env.DB, event.id, uploaderName);
+  await upsertParticipant(c.env.DB, event.id, upload.uploader_name);
 
   const moment = await c.env.DB.prepare("SELECT * FROM moments WHERE id = ?")
     .bind(id)
@@ -1382,7 +1415,7 @@ app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
     sizeBytes: validated.size,
     contentType: validated.contentType,
   });
-  return c.json({ moment, points_awarded: points }, 201);
+  return c.json({ moment: moment && guestMoment(moment), points_awarded: points }, 201);
 });
 
 // Cancel: frees the storage held by uploaded parts. Always call on give-up.

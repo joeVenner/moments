@@ -139,6 +139,8 @@ describe("finalizeUpload", () => {
     expect(moments()).toEqual([
       { uploader_name: "Sara", caption: "Cake", points_awarded: 1, size_bytes: SIZE, mime_type: "image/jpeg", media_url: `/media/${session.key}` },
     ]);
+    // The moment belongs to the session's guest.
+    expect(sqlite.raw.prepare("SELECT participant_id FROM moments").get()).toEqual({ participant_id: "p1" });
   });
 
   it("is idempotent: a replay returns the same moment", async () => {

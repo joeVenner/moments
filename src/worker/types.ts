@@ -82,6 +82,8 @@ export interface MomentRow {
   size_bytes: number | null;
   mime_type: string | null;
   moderation_status: "approved" | "hidden";
+  /** The guest who shared it (0020); never sent to guests (webUploader.ts guestMoment). */
+  participant_id?: string | null;
   /** Global upload order (migration 0011, trigger-assigned). */
   seq?: number | null;
   /** Bumped on insert, hide/unhide and caption edits. */
@@ -124,6 +126,8 @@ export interface UploadRow {
   size_bytes: number;
   /** Set on v1 (app) sessions, which only the v1 routes may finish or abort. */
   client_upload_id: string | null;
+  /** The guest who opened it (from their token); null for tokenless web rows. */
+  participant_id: string | null;
   status: "open" | "completed" | "aborted";
   created_at: string;
   completed_at: string | null;
