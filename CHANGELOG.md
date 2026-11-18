@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- iOS: the app is available in French. Every screen, message and VoiceOver label is translated, with proper plural forms. `npm run ios:strings:check` flags any new app text that has no translation.
 - iOS: a "Your uploads" screen for each event shows every photo and video as waiting, uploading (with a percentage), finishing, shared or failed. Fixable failures get "Try again", and finished items can be swiped away. A button in the event's top bar shows how many are under way and flags failures. It appears once uploads are connected in the app.
 - Guests can leave an event from the app ("Leave event" in the event menu). It deletes the photos and videos they shared from the app, cancels their unfinished uploads, and frees their nickname. It works even after the event's PIN changed. Anything shared from the website under the same name stays, and the confirmation says so.
 - Joining an event is now rate limited per event and network (60 a minute), on both the website and the app, so one network can't create guests in bulk. Guests returning with their saved identity are never limited. A limited join gets "Too many people are joining from this network. Try again in a minute."; the app shows this on the name step, and a returning guest keeps their identity and can try again.
@@ -61,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- iOS: VoiceOver now says "3 new moments" instead of reading out formatting code when new moments arrive.
 - Website: when joining is refused ("too many people are joining from this network" or a taken nickname), the join form now stays open and says why. Before, the guest entered without their guest identity.
 - Captions can no longer hide text-direction override characters, which could make a caption read differently than it is (for example a file name that seems to end in .txt). The app refuses them and says so; the website silently removes them. Emoji and Arabic, Persian or Hebrew text are unaffected.
 - A purge no longer forgets upload sessions it failed to abort in R2: their rows stay (without guest data) until the daily sweeper aborts them.- Event slugs no longer end in a dash (or contain `--` with a suffix) when a long title is cut at a separator.
