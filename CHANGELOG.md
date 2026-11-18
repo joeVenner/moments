@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- A "leave and delete what I shared" request for the website (`POST /api/events/:slug/leave`); the button comes next.
+- Website guests can "Leave" an event from the guest bar: after a confirmation, everything they shared from that browser is deleted, their nickname is freed, and the browser forgets them (saved uploads, nickname and identity).
 
 - Website: returning guests who never received their guest identity (they joined before it existed, or their join failed on the network) now get it in the background, so their nickname stays theirs once identities are required.
 - iOS: the app is available in French. Every screen, message and VoiceOver label is translated, with proper plural forms. `npm run ios:strings:check` flags any new app text that has no translation.
