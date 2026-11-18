@@ -46,6 +46,12 @@ export interface PersistedUpload {
   fileLastModified: number;
   caption: string | null;
   uploaderName: string;
+  /**
+   * The guest's token when the upload started, so the upload service worker
+   * (no localStorage) can still prove whose upload it is. Same origin and
+   * lifetime as the localStorage copy; deleted with the row.
+   */
+  guestToken?: string | null;
   /** partNumber → R2 ETag (quoted, passed verbatim to Complete). */
   completedParts: Record<number, string>;
   status: UploadStatus;

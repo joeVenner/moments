@@ -4,7 +4,7 @@ import worker from "./index";
 import { createSqliteD1, type SqliteD1 } from "./testing/sqliteD1";
 import type { Env } from "./types";
 import { streamMediaUrl } from "./stream";
-import { mayFinishUpload, resolveWebUploader } from "./webUploader";
+import { mayFinishUpload, mayUseUpload, resolveWebUploader } from "./webUploader";
 
 let sqlite: SqliteD1;
 let put: ReturnType<typeof vi.fn>;
@@ -240,6 +240,71 @@ describe("web complete routes", () => {
       expect((await complete(kind, "Sara")).status).toBe(404);
       sqlite.raw.prepare("UPDATE moments SET moderation_status = 'approved'").run();
       expect((await complete(kind, "Sara")).status).toBe(200);
+    });
+  }
+});
+
+describe("mayUseUpload", () => {
+  it("checks the owner on owned rows only", async () => {
+    const sara = await join("Sara");
+    const lina = await join("Lina");
+    const may = (participant_id: string | null, token: string | null, enforced = false) =>
+      mayUseUpload({ DB: sqlite.db, GUEST_TOKENS_ENFORCED: enforced ? "true" : undefined }, { eventId: "ev1", token, row: { participant_id } });
+    expect(await may(sara.participantId, sara.token)).toBe(true);
+    expect(await may(sara.participantId, lina.token)).toBe(false);
+    expect(await may(sara.participantId, null)).toBe(true);
+    expect(await may(sara.participantId, null, true)).toBe(false);
+    expect(await may(null, lina.token)).toBe(true);
+  });
+});
+
+describe("web follow-up upload routes", () => {
+  const KEY = "events/ev1/moments/a.jpg";
+  function openRow(participantId: string | null, kind: "multipart" | "stream") {
+    const [uploadId, key] = kind === "multipart" ? ["mp-1", KEY] : ["uid1", "stream/uid1"];
+    sqlite.raw
+      .prepare(
+        `INSERT INTO uploads (id, event_id, uploader_name, key, upload_id, size_bytes, status, participant_id)
+         VALUES ('row1', 'ev1', 'Sara', ?, ?, 10, 'open', ?)`
+      )
+      .run(key, uploadId, participantId);
+  }
+  type Run = (token?: string, overrides?: Partial<Env>) => Response | Promise<Response>;
+  const tokenHeader = (t?: string): Record<string, string> => (t ? { "X-Guest-Token": t } : {});
+  const routes: Array<[string, "multipart" | "stream", Run]> = [
+    ["part-url", "multipart", (t, o) => call("/api/events/party/moments/multipart/part-url", jsonPost({ upload_id: "mp-1", key: KEY, part_number: 1 }, t), o)],
+    ["status", "multipart", (t, o) => call(`/api/events/party/moments/multipart/status?upload_id=mp-1&key=${encodeURIComponent(KEY)}`, { headers: tokenHeader(t) }, o)],
+    ["abort", "multipart", (t, o) => call("/api/events/party/moments/multipart/abort", jsonPost({ upload_id: "mp-1", key: KEY }, t), o)],
+    ["stream abort", "stream", (t, o) => call("/api/events/party/moments/stream/abort", jsonPost({ stream_uid: "uid1" }, t), o)],
+  ];
+  const refused = async (res: Response | Promise<Response>) => {
+    const r = await res;
+    return r.status === 404 && ((await r.json()) as { error?: string }).error === "upload not found";
+  };
+
+  for (const [name, kind, run] of routes) {
+    it(`${name}: another guest's token is refused before anything happens; the owner's goes through`, async () => {
+      const sara = await join("Sara");
+      const lina = await join("Lina");
+      openRow(sara.participantId, kind);
+      expect(await refused(run(lina.token))).toBe(true);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(sqlite.raw.prepare("SELECT status FROM uploads").get()).toEqual({ status: "open" });
+      expect(await refused(run(sara.token))).toBe(false);
+    });
+
+    it(`${name}: an owned row takes tokenless calls only until enforcement`, async () => {
+      const sara = await join("Sara");
+      openRow(sara.participantId, kind);
+      expect(await refused(run(undefined, ENFORCED))).toBe(true);
+      expect(await refused(run(sara.token, ENFORCED))).toBe(false);
+      expect(await refused(run(undefined))).toBe(false);
+    });
+
+    it(`${name}: a row opened without a token takes any caller`, async () => {
+      const lina = await join("Lina");
+      openRow(null, kind);
+      expect(await refused(run(lina.token))).toBe(false);
     });
   }
 });

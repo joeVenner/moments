@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listHighlights, listMoments, toggleMomentReaction, uploadMoment } from "./api";
 import { abortResumableUpload } from "./multipartUpload";
-import { guestTokenHeaders, setGuestToken } from "./nickname";
+import { guestTokenHeaders, setGuestToken, uploadTokenHeaders } from "./nickname";
 
 function memoryStorage(): Storage {
   const store = new Map<string, string>();
@@ -34,6 +34,26 @@ describe("guest token on web requests", () => {
     setGuestToken("party", "tok-1");
     expect(guestTokenHeaders("party")).toEqual({ "X-Guest-Token": "tok-1" });
     expect(guestTokenHeaders("other")).toEqual({});
+  });
+
+  it("for a saved upload, sends its owner's saved token, else the page's", () => {
+    expect(uploadTokenHeaders({ slug: "party", guestToken: "saved" })).toEqual({ "X-Guest-Token": "saved" });
+    expect(uploadTokenHeaders({ slug: "party" })).toEqual({});
+    expect(uploadTokenHeaders({ slug: "party", guestToken: null })).toEqual({});
+    // Another guest joined in this browser since: the upload stays its owner's.
+    setGuestToken("party", "someone-else");
+    expect(uploadTokenHeaders({ slug: "party", guestToken: "saved" })).toEqual({ "X-Guest-Token": "saved" });
+    // Rows saved before tokens were kept use the page's.
+    expect(uploadTokenHeaders({ slug: "party", guestToken: null })).toEqual({ "X-Guest-Token": "someone-else" });
+    // The service worker has no localStorage: only the saved token can go.
+    vi.stubGlobal("localStorage", undefined);
+    expect(uploadTokenHeaders({ slug: "party", guestToken: "saved" })).toEqual({ "X-Guest-Token": "saved" });
+  });
+
+  it("forwards the saved token when aborting a saved upload", async () => {
+    setGuestToken("party", "someone-else");
+    await expect(abortResumableUpload("party", "up-1", "k", "owner")).rejects.toThrow(/indexedDB/);
+    expect(sentTokens(fetchMock)).toEqual(["owner"]);
   });
 
   it("is empty where storage is missing (service worker) or blocked", () => {
