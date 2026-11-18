@@ -2,7 +2,7 @@ import { Hono, type Context } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import type { Env, EventRow, MomentRow, LeaderboardEntry, UploadRow } from "./types";
 import { slugify, randomSuffix } from "./slugify";
-import { putMedia, pointsForContentType, sanitizeFilename, isAllowedContentType, MAX_UPLOAD_BYTES } from "./storage";
+import { putMedia, pointsForContentType, isAllowedContentType, MAX_UPLOAD_BYTES, momentKey } from "./storage";
 import {
   isR2Configured,
   registrationKeyBelongsToEvent,
@@ -1066,7 +1066,7 @@ app.post("/api/events/:slug/moments/multipart/init", async (c) => {
     return c.json({ error: "File too large (max 512MB)" }, 400);
   }
 
-  const key = `events/${event.id}/moments/${crypto.randomUUID()}-${sanitizeFilename(filename)}`;
+  const key = momentKey(event.id, filename);
   let uploadId: string;
   try {
     uploadId = await createMultipartUpload(c.env, key, contentType);

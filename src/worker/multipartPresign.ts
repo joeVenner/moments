@@ -35,8 +35,29 @@ export const MULTIPART_MIN_PART_BYTES = 5 * 1024 * 1024;
 export const MULTIPART_PART_BYTES = 8 * 1024 * 1024;
 
 /** How many parts a file splits into (last part may be smaller). */
-export function partCountForSize(size: number): number {
-  return Math.max(1, Math.ceil(size / MULTIPART_PART_BYTES));
+export function partCountForSize(size: number, partSize: number = MULTIPART_PART_BYTES): number {
+  return Math.max(1, Math.ceil(size / partSize));
+}
+
+/**
+ * An R2 S3 call that failed. Carries the status and S3 error code only: the
+ * response body can echo the object key, which embeds the file's name, so it
+ * must never reach logs or clients.
+ */
+export class R2RequestError extends Error {
+  constructor(
+    readonly operation: string,
+    readonly status: number,
+    readonly code: string | null
+  ) {
+    super(`${operation} failed (${status}${code ? ` ${code}` : ""})`);
+    this.name = "R2RequestError";
+  }
+}
+
+async function r2Error(operation: string, res: Response): Promise<R2RequestError> {
+  const body = await res.text().catch(() => "");
+  return new R2RequestError(operation, res.status, /<Code>([A-Za-z0-9]{1,64})<\/Code>/.exec(body)?.[1] ?? null);
 }
 
 /** Presigned UploadPart URL lifetime — long enough for one chunk on slow mobile. */
@@ -87,7 +108,7 @@ export async function createMultipartUpload(
     aws: {},
   });
   if (!res.ok) {
-    throw new Error(`createMultipartUpload failed (${res.status}): ${await res.text()}`);
+    throw await r2Error("createMultipartUpload", res);
   }
   const xml = await res.text();
   const uploadId = xml.match(/<UploadId>([^<]+)<\/UploadId>/)?.[1];
@@ -150,7 +171,7 @@ export async function completeMultipartUpload(
     aws: {},
   });
   if (!res.ok) {
-    throw new Error(`completeMultipartUpload failed (${res.status}): ${await res.text()}`);
+    throw await r2Error("completeMultipartUpload", res);
   }
   // R2 returns the final composite ETag (etag-N form); not strictly needed but
   // return it for parity with the single-PUT path.
@@ -175,7 +196,7 @@ export async function abortMultipartUpload(
   });
   if (!res.ok && res.status !== 404) {
     // 404 = already gone (completed or auto-expired); treat as success.
-    throw new Error(`abortMultipartUpload failed (${res.status}): ${await res.text()}`);
+    throw await r2Error("abortMultipartUpload", res);
   }
 }
 
@@ -200,7 +221,7 @@ export async function listParts(
       aws: {},
     });
     if (!res.ok) {
-      throw new Error(`listParts failed (${res.status}): ${await res.text()}`);
+      throw await r2Error("listParts", res);
     }
     const xml = await res.text();
     // Each <Part><PartNumber>N</PartNumber><ETag>"..."</ETag>...</Part>
