@@ -42,11 +42,22 @@ export async function resolveWebUploader(
 }
 
 /**
- * Whether a follow-up call (complete) may finish this row. A guest's row:
- * their token, or, until enforcement, no token at all (the upload service
- * worker can't send one yet); never another guest's. A tokenless row: the
- * name it was opened with.
+ * Whether a follow-up call (part URL, status, complete, abort) may act on this
+ * row. A guest's row: their token, or, until enforcement, no token at all (an
+ * old upload service worker that saved none); never another guest's. Rows
+ * opened without a token have no owner to check here.
  */
+export async function mayUseUpload(
+  env: GuestEnv,
+  input: { eventId: string; token: string | null | undefined; row: { participant_id: string | null } }
+): Promise<boolean> {
+  if (input.row.participant_id === null) return true;
+  const session = await resolveGuestSession(env.DB, input.eventId, input.token);
+  if (session) return session.participant.id === input.row.participant_id;
+  return env.GUEST_TOKENS_ENFORCED !== "true";
+}
+
+/** mayUseUpload, and a tokenless row also needs the name it was opened with. */
 export async function mayFinishUpload(
   env: GuestEnv,
   input: {
@@ -56,11 +67,8 @@ export async function mayFinishUpload(
     clientName: string;
   }
 ): Promise<boolean> {
-  const { row } = input;
-  if (row.participant_id === null) return row.uploader_name === input.clientName;
-  const session = await resolveGuestSession(env.DB, input.eventId, input.token);
-  if (session) return session.participant.id === row.participant_id;
-  return env.GUEST_TOKENS_ENFORCED !== "true";
+  if (input.row.participant_id === null) return input.row.uploader_name === input.clientName;
+  return mayUseUpload(env, input);
 }
 
 /** A moment as guests may see it: without the owner's participant id. */
