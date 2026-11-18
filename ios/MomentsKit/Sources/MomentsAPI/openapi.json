@@ -320,6 +320,71 @@
         ],
         "description": "For private events each `/media/...` URL carries an `at` query parameter: a signature for that one object, valid 6-12 hours and revoked when the host changes access. Use the URL as given (cache by path); refresh the feed for new signatures."
       },
+      "Highlights": {
+        "type": "object",
+        "properties": {
+          "moments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Moment"
+            },
+            "description": "Most-hearted first, newest first among ties"
+          }
+        },
+        "required": [
+          "moments"
+        ]
+      },
+      "Leaderboard": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardEntry"
+            },
+            "description": "Best first; earlier joiners first among ties. At most 500 guests"
+          }
+        },
+        "required": [
+          "entries"
+        ]
+      },
+      "LeaderboardEntry": {
+        "type": "object",
+        "properties": {
+          "participant_id": {
+            "type": "string"
+          },
+          "nickname": {
+            "type": "string"
+          },
+          "avatar_seed": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "total_points": {
+            "type": "integer"
+          },
+          "moment_count": {
+            "type": "integer"
+          },
+          "rank": {
+            "type": "integer",
+            "description": "1-based; equal points share a rank (1, 1, 3)"
+          }
+        },
+        "required": [
+          "participant_id",
+          "nickname",
+          "avatar_seed",
+          "total_points",
+          "moment_count",
+          "rank"
+        ]
+      },
       "FeedChanges": {
         "type": "object",
         "properties": {
@@ -686,6 +751,220 @@
           },
           "426": {
             "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error (415, 5xx, ...)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{slug}/highlights": {
+      "get": {
+        "operationId": "getHighlights",
+        "tags": [
+          "Guest"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "slug",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "required": false,
+            "name": "reactor_id",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "Access grant; required for private events only"
+            },
+            "required": false,
+            "description": "Access grant; required for private events only",
+            "name": "x-event-access",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The event's most-hearted visible moments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Highlights"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Private event; send a grant from the access endpoint in X-Event-Access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live event with this slug",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: too many requests from this network; slow down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error (415, 5xx, ...)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{slug}/leaderboard": {
+      "get": {
+        "operationId": "getLeaderboard",
+        "tags": [
+          "Guest"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "slug",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "Access grant; required for private events only"
+            },
+            "required": false,
+            "description": "Access grant; required for private events only",
+            "name": "x-event-access",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Guests ranked by points from visible moments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Leaderboard"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Private event; send a grant from the access endpoint in X-Event-Access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live event with this slug",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: too many requests from this network; slow down",
             "content": {
               "application/json": {
                 "schema": {

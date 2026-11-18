@@ -58,6 +58,14 @@
         "limit": 60,
         "period": 60
       }
+    },
+    {
+      "name": "GUEST_READ_LIMITER",
+      "namespace_id": "1003",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
     }
   ]
 }
