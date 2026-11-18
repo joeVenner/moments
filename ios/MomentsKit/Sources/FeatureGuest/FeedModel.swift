@@ -27,6 +27,9 @@ public final class FeedModel {
     }
 
     public static let pageSize = 60
+    /// Requests one moment's sender may make before giving up (each answer
+    /// that doesn't settle costs one; guards against a misbehaving server).
+    static let maxReactionRequests = 5
     /// Changes batches drained per poll before waiting for the next one.
     static let maxBatchesPerPoll = 5
 
@@ -43,6 +46,8 @@ public final class FeedModel {
     public private(set) var moments: [Moment] = []
     /// Arrived since the guest last looked; shown on the "new moments" pill.
     public private(set) var newMomentCount = 0
+    /// Bumped when a reaction is refused and rolled back (for an error haptic).
+    public private(set) var reactionFailureCount = 0
 
     /// Moments newer than this aren't shown until revealed; nil shows all.
     @ObservationIgnored private var revealedThroughSeq: Int?
@@ -52,6 +57,9 @@ public final class FeedModel {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var olderTask: Task<Void, Never>?
     @ObservationIgnored private var currentSync: Task<Bool, Never>?
+    /// One sender per moment; it keeps sending until the guest's latest
+    /// intent is what the server has.
+    @ObservationIgnored private var reactionSenders: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private let grantCache: GrantCache
 
     @ObservationIgnored private let service: any MomentsService
@@ -216,6 +224,89 @@ public final class FeedModel {
         }
     }
 
+    // MARK: - Reactions
+
+    /// Hearts or un-hearts a moment at once; the request follows. Taps while
+    /// a request is in flight are coalesced: the last one wins.
+    @discardableResult
+    public func setReacted(_ reacted: Bool, onMomentID id: String) -> Task<Void, Never>? {
+        guard phase == .loaded, feed.setReacted(reacted, forMomentID: id) else { return reactionSenders[id] }
+        updateVisible()
+        if let running = reactionSenders[id] { return running }
+        let task = Task { [self] in
+            await sendReactions(forMomentID: id)
+            reactionSenders[id] = nil
+        }
+        reactionSenders[id] = task
+        return task
+    }
+
+    @discardableResult
+    public func toggleReaction(onMomentID id: String) -> Task<Void, Never>? {
+        guard let moment = feed.moments.first(where: { $0.id == id }) else { return nil }
+        return setReacted(!moment.hasReacted, onMomentID: id)
+    }
+
+    private enum ReactionSendError: Error {
+        /// The server answered with the opposite of what was asked.
+        case mismatchedAnswer
+        case tooManyRequests
+    }
+
+    /// Sends the moment's current intent until the server agrees with it.
+    /// No request is in flight at the top of the loop, so the server's last
+    /// known state is the pending snapshot.
+    private func sendReactions(forMomentID id: String) async {
+        var requests = 0
+        while feed.hasUnsentReaction(forMomentID: id), !feed.discardUnsentReactionIfUnchanged(forMomentID: id),
+              let wanted = feed.moments.first(where: { $0.id == id })?.hasReacted {
+            do {
+                guard requests < Self.maxReactionRequests else { throw ReactionSendError.tooManyRequests }
+                requests += 1
+                let state = try await service.setReaction(
+                    wanted, slug: slug.value, momentID: id, reactorID: reactorID, credentials: credentials()
+                )
+                guard state.reacted == wanted else { throw ReactionSendError.mismatchedAnswer }
+                let settled = feed.confirmReaction(forMomentID: id, reacted: state.reacted, reactionCount: state.reactionCount)
+                updateVisible()
+                if settled { return }
+            } catch {
+                feed.rollbackReaction(forMomentID: id)
+                updateVisible()
+                reactionFailed(error)
+                return
+            }
+        }
+        updateVisible()
+    }
+
+    private func reactionFailed(_ error: any Error) {
+        switch error {
+        case is CancellationError:
+            return
+        case MomentsAPIError.accessRequired, MomentsAPIError.eventNotFound:
+            // The whole screen changes; no extra haptic.
+            handle(error, isBackground: true)
+        case MomentsAPIError.momentNotFound:
+            // Hidden or deleted meanwhile: a sync takes it off the grid.
+            reactionFailureCount += 1
+            Task { await poll() }
+        default:
+            // guestRequired can only happen once tokens are enforced, when the
+            // join flow will have issued one; until then it rolls back like
+            // any refusal.
+            reactionFailureCount += 1
+            if !(error is MomentsAPIError) {
+                logger.error("reaction failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    /// Senders stop once the feed is over (access lost, event gone).
+    private func stopReactionSenders() {
+        for task in reactionSenders.values { task.cancel() }
+    }
+
     // MARK: - Steps
 
     private func replaceWithFirstPage(revealAll: Bool) async throws {
@@ -278,8 +369,10 @@ public final class FeedModel {
         case MomentsAPIError.accessRequired:
             phase = .accessLost
             grantCache.clear()
+            stopReactionSenders()
         case MomentsAPIError.eventNotFound:
             phase = .failed(.eventGone)
+            stopReactionSenders()
         default:
             if !(error is MomentsAPIError) {
                 logger.error("feed step failed: \(String(describing: error), privacy: .public)")

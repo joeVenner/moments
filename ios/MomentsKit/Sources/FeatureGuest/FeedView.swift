@@ -195,6 +195,21 @@ struct MomentThumbnail: View {
                         .padding(Spacing.xxs)
                 }
             }
+            .overlay(alignment: .bottomLeading) {
+                if moment.reactionCount > 0 {
+                    HStack(spacing: 2) {
+                        Image(systemName: moment.hasReacted ? "heart.fill" : "heart")
+                            .foregroundStyle(moment.hasReacted ? MomentsColor.accent : MomentsColor.text)
+                        Text(verbatim: "\(moment.reactionCount)")
+                            .foregroundStyle(MomentsColor.text)
+                    }
+                    .font(MomentsFont.number(.caption2))
+                    .padding(.horizontal, Spacing.xxs)
+                    .padding(.vertical, 2)
+                    .background(MomentsColor.background.opacity(0.6), in: Capsule())
+                    .padding(Spacing.xxs)
+                }
+            }
             .clipped()
             .contentShape(Rectangle())
             // Scrolling a failed thumbnail back into view retries it.
@@ -202,6 +217,8 @@ struct MomentThumbnail: View {
             .accessibilityElement()
             .accessibilityLabel(accessibilityLabel)
             .accessibilityAddTraits(.isImage)
+            // Same view either way (a conditional modifier would reset the cell's state).
+            .accessibilityValue(heartsValue)
             .task(id: LoadKey(url: thumbnailURL, attempt: attempt)) { await load() }
     }
 
@@ -229,6 +246,12 @@ struct MomentThumbnail: View {
         case let (true, caption?): return Text("Video by \(name): \(caption)")
         case let (false, caption?): return Text("Photo by \(name): \(caption)")
         }
+    }
+
+    private var heartsValue: Text {
+        let count = moment.reactionCount
+        if moment.hasReacted { return Text("^[\(count) heart](inflect: true), including yours") }
+        return count > 0 ? Text("^[\(count) heart](inflect: true)") : Text(verbatim: "")
     }
 
     private func load() async {

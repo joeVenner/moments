@@ -146,23 +146,84 @@ private func loaded(_ page: [Moment], nextBefore: Int? = nil, cursor: Int = 10) 
 }
 
 @Suite struct FeedStateReactionTests {
-    @Test func togglesOptimisticallyOneRequestAtATime() {
+    @Test func togglesOptimistically() {
         var feed = loaded([moment("a", seq: 1)])
         let accepted1 = feed.setReacted(true, forMomentID: "a")
         #expect(accepted1)
         #expect(feed.moments.first?.reactionCount == 1)
-        // Still in flight: a second toggle is refused, not queued.
-        let accepted2 = feed.setReacted(false, forMomentID: "a")
+        #expect(feed.hasUnsentReaction(forMomentID: "a"))
+        let accepted2 = feed.setReacted(true, forMomentID: "a")
         #expect(accepted2 == false)
         let accepted3 = feed.setReacted(true, forMomentID: "missing")
         #expect(accepted3 == false)
-        feed.confirmReaction(forMomentID: "a")
-        let accepted4 = feed.setReacted(true, forMomentID: "a")
-        #expect(accepted4 == false)
+        let settled = feed.confirmReaction(forMomentID: "a", reacted: true, reactionCount: 1)
+        #expect(settled)
+        #expect(feed.hasUnsentReaction(forMomentID: "a") == false)
         let accepted5 = feed.setReacted(false, forMomentID: "a")
         #expect(accepted5)
         #expect(feed.moments.first?.reactionCount == 0)
         #expect(feed.moments.first?.hasReacted == false)
+    }
+
+    @Test func aToggleInFlightAsksForTheNewIntent() {
+        var feed = loaded([moment("a", seq: 1, reactions: 3)])
+        feed.setReacted(true, forMomentID: "a")
+        // Changed their mind while the add was in flight.
+        let accepted = feed.setReacted(false, forMomentID: "a")
+        #expect(accepted)
+        #expect(feed.moments.first?.reactionCount == 3)
+        // The add landed (others reacted too): not settled, send the removal.
+        let settled1 = feed.confirmReaction(forMomentID: "a", reacted: true, reactionCount: 6)
+        #expect(settled1 == false)
+        #expect(feed.moments.first?.hasReacted == false)
+        #expect(feed.moments.first?.reactionCount == 5)
+        #expect(feed.hasUnsentReaction(forMomentID: "a"))
+        let settled2 = feed.confirmReaction(forMomentID: "a", reacted: false, reactionCount: 5)
+        #expect(settled2)
+        #expect(feed.moments.first?.reactionCount == 5)
+    }
+
+    @Test func aFailureAfterAnUnsettledAnswerRestoresThatAnswer() {
+        var feed = loaded([moment("a", seq: 1, reactions: 3)])
+        feed.setReacted(true, forMomentID: "a")
+        feed.setReacted(false, forMomentID: "a")
+        feed.confirmReaction(forMomentID: "a", reacted: true, reactionCount: 4)
+        // The removal failed: the server still has the heart.
+        feed.rollbackReaction(forMomentID: "a")
+        #expect(feed.moments.first?.hasReacted == true)
+        #expect(feed.moments.first?.reactionCount == 4)
+    }
+
+    @Test func aNewToggleIsNotDroppedByAStaleSyncAfterAnOldConfirmation() {
+        var feed = loaded([moment("a", seq: 1, reactions: 3)], cursor: 10)
+        feed.setReacted(true, forMomentID: "a")
+        feed.confirmReaction(forMomentID: "a", reacted: true, reactionCount: 4)
+        feed.applyChanges(upserts: [], removed: [], cursor: 11, hasMore: false)
+        // Un-heart; the next sync was read before this request landed.
+        feed.setReacted(false, forMomentID: "a")
+        feed.confirmReaction(forMomentID: "a", reacted: false, reactionCount: 3)
+        feed.applyChanges(upserts: [moment("a", seq: 1, changeSeq: 12, reactions: 4, hasReacted: true)], removed: [], cursor: 12, hasMore: false)
+        #expect(feed.moments.first?.hasReacted == false)
+        #expect(feed.moments.first?.reactionCount == 3)
+    }
+
+    @Test func discardsAToggleBackToTheServerStateBeforeSending() {
+        var feed = loaded([moment("a", seq: 1, reactions: 3)])
+        feed.setReacted(true, forMomentID: "a")
+        let unchanged1 = feed.discardUnsentReactionIfUnchanged(forMomentID: "a")
+        #expect(unchanged1 == false)
+        feed.setReacted(false, forMomentID: "a")
+        let unchanged2 = feed.discardUnsentReactionIfUnchanged(forMomentID: "a")
+        #expect(unchanged2)
+        #expect(feed.hasUnsentReaction(forMomentID: "a") == false)
+        #expect(feed.moments.first?.reactionCount == 3)
+    }
+
+    @Test func confirmingWithNothingPendingSettles() {
+        var feed = loaded([moment("a", seq: 1, reactions: 3)])
+        let settled = feed.confirmReaction(forMomentID: "a", reacted: true, reactionCount: 9)
+        #expect(settled)
+        #expect(feed.moments.first?.reactionCount == 3)
     }
 
     @Test func keepsAPendingToggleAgainstServerEchoes() {
@@ -179,7 +240,7 @@ private func loaded(_ page: [Moment], nextBefore: Int? = nil, cursor: Int = 10) 
     @Test func confirmedTogglesSurviveOneStaleSyncThenTakeServerValues() {
         var feed = loaded([moment("a", seq: 1, reactions: 3)], cursor: 10)
         feed.setReacted(true, forMomentID: "a")
-        feed.confirmReaction(forMomentID: "a")
+        feed.confirmReaction(forMomentID: "a", reacted: true, reactionCount: 4)
         // Read before the POST landed: must not flicker the heart back.
         feed.applyChanges(upserts: [moment("a", seq: 1, reactions: 3)], removed: [], cursor: 11, hasMore: false)
         #expect(feed.moments.first?.hasReacted == true)
@@ -195,7 +256,7 @@ private func loaded(_ page: [Moment], nextBefore: Int? = nil, cursor: Int = 10) 
     @Test func confirmedTogglesAlsoSurviveOneStaleRefresh() {
         var feed = loaded([moment("a", seq: 1, reactions: 3)], cursor: 10)
         feed.setReacted(true, forMomentID: "a")
-        feed.confirmReaction(forMomentID: "a")
+        feed.confirmReaction(forMomentID: "a", reacted: true, reactionCount: 4)
         feed.replace(withFirstPage: [moment("a", seq: 1, reactions: 3)], nextBefore: nil, cursor: 11)
         #expect(feed.moments.first?.reactionCount == 4)
         feed.replace(withFirstPage: [moment("a", seq: 1, reactions: 4, hasReacted: true)], nextBefore: nil, cursor: 12)
