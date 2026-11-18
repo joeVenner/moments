@@ -33,7 +33,7 @@ import { getLeaderboard } from "../leaderboard";
 import { GUEST_TOKEN_HEADER, joinEventAsGuest, resolveGuestSession, toPublicParticipant } from "../guestIdentity";
 import { isJoinLimited, JOIN_RATE_LIMITED, JOIN_RETRY_AFTER_SECONDS } from "../joinLimit";
 import { leaveEvent } from "../guestLeave";
-import { type ReactionState, setReaction } from "../reactions";
+import { gateReaction, type ReactionState, setReaction } from "../reactions";
 import { signMomentsForEvent, STREAM_SIGNING_UNAVAILABLE, StreamSigningError } from "../streamSigning";
 import { withGuestMediaGrant, withGuestMediaGrants } from "../mediaAccess";
 import type { Env, EventRow } from "../types";
@@ -553,16 +553,14 @@ async function applyReaction(
   reacted: boolean
 ): Promise<ReactionOutcome> {
   const event = c.get("event");
-  const session = await resolveGuestSession(c.env.DB, event.id, c.req.header(GUEST_TOKEN_HEADER));
-  if (c.env.GUEST_TOKENS_ENFORCED === "true" && !session) {
-    return { ok: false, status: 403, body: { error: "join the event first", code: "guest_required" } };
-  }
-  if (c.env.REACTION_LIMITER) {
-    const who = session ? `guest:${session.sessionId}` : `ip:${c.req.header("CF-Connecting-IP") ?? "unknown"}`;
-    const { success } = await c.env.REACTION_LIMITER.limit({ key: `${event.id}:${who}` });
-    if (!success) return { ok: false, status: 429, body: { error: "too many reactions", code: "rate_limited" } };
-  }
-  const state = await setReaction(c.env.DB, { eventId: event.id, momentId, reactorId, reacted });
+  const gate = await gateReaction(c.env, {
+    eventId: event.id,
+    token: c.req.header(GUEST_TOKEN_HEADER),
+    clientIp: c.req.header("CF-Connecting-IP"),
+    reactorId,
+  });
+  if (!gate.ok) return { ok: false, status: gate.status, body: gate.body };
+  const state = await setReaction(c.env.DB, { eventId: event.id, momentId, reactorId: gate.reactorId, reacted });
   if (!state) return { ok: false, status: 404, body: { error: "moment not found", code: "moment_not_found" } };
   return { ok: true, state };
 }

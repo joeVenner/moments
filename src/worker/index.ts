@@ -66,6 +66,7 @@ import {
   type PublicParticipant,
 } from "./guestIdentity";
 import { isJoinLimited, JOIN_RATE_LIMITED, JOIN_RETRY_AFTER_SECONDS } from "./joinLimit";
+import { gateReaction, REACTOR_ID_PATTERN, setReaction } from "./reactions";
 import { cleanWebCaption } from "./captionText";
 import {
   MAX_PIN_LENGTH,
@@ -587,29 +588,25 @@ app.post("/api/events/:slug/moments/:id/reactions", async (c) => {
   const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
   const body = (await c.req.json().catch(() => null)) as { reactor_id?: unknown } | null;
-  const reactorId = typeof body?.reactor_id === "string" ? body.reactor_id.slice(0, 100) : "";
-  if (!reactorId) return c.json({ error: "reactor_id is required" }, 400);
-  const moment = await c.env.DB.prepare(
-    "SELECT id FROM moments WHERE id = ? AND event_id = ? AND moderation_status = 'approved'"
-  ).bind(c.req.param("id"), event.id).first<{ id: string }>();
-  if (!moment) return c.json({ error: "moment not found" }, 404);
+  const reactorId = typeof body?.reactor_id === "string" ? body.reactor_id : "";
+  // Same shape as v1 (web ids are UUIDs); never server-made keys.
+  if (!REACTOR_ID_PATTERN.test(reactorId)) return c.json({ error: "reactor_id is required" }, 400);
+  const gate = await gateReaction(c.env, {
+    eventId: event.id,
+    token: c.req.header(GUEST_TOKEN_HEADER),
+    clientIp: c.req.header("CF-Connecting-IP"),
+    reactorId,
+  });
+  if (!gate.ok) return c.json(gate.body, gate.status);
+  // A toggle is "set the opposite of now"; setReaction makes the write
+  // idempotent, so a double tap can't hit the UNIQUE constraint.
+  const momentId = c.req.param("id");
   const existing = await c.env.DB.prepare(
-    "SELECT id FROM moment_reactions WHERE moment_id = ? AND reactor_id = ?"
-  ).bind(moment.id, reactorId).first<{ id: string }>();
-  let reacted: boolean;
-  if (existing) {
-    await c.env.DB.prepare("DELETE FROM moment_reactions WHERE id = ?").bind(existing.id).run();
-    reacted = false;
-  } else {
-    await c.env.DB.prepare(
-      "INSERT INTO moment_reactions (id, moment_id, event_id, reactor_id) VALUES (?, ?, ?, ?)"
-    ).bind(crypto.randomUUID(), moment.id, event.id, reactorId).run();
-    reacted = true;
-  }
-  const count = await c.env.DB.prepare(
-    "SELECT COUNT(*) AS count FROM moment_reactions WHERE moment_id = ?"
-  ).bind(moment.id).first<{ count: number }>();
-  return c.json({ reacted, reaction_count: count?.count ?? 0 });
+    "SELECT 1 AS found FROM moment_reactions WHERE moment_id = ? AND event_id = ? AND reactor_id = ?"
+  ).bind(momentId, event.id, gate.reactorId).first<{ found: number }>();
+  const state = await setReaction(c.env.DB, { eventId: event.id, momentId, reactorId: gate.reactorId, reacted: !existing });
+  if (!state) return c.json({ error: "moment not found" }, 404);
+  return c.json(state);
 });
 
 app.get("/api/admin/events/:slug/moments", async (c) => {

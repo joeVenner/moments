@@ -108,9 +108,11 @@ export function listHighlights(slug: string) {
 }
 
 export function toggleMomentReaction(slug: string, momentId: string) {
+  const token = getGuestToken(slug);
   return fetch(`/api/events/${encodeURIComponent(slug)}/moments/${encodeURIComponent(momentId)}/reactions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    // The guest token ties this device's hearts to the guest (see worker reactions.ts).
+    headers: { "Content-Type": "application/json", ...(token ? { "X-Guest-Token": token } : {}) },
     body: JSON.stringify({ reactor_id: getReactionId() }),
   }).then((response) => asJson<{ reacted: boolean; reaction_count: number }>(response));
 }
