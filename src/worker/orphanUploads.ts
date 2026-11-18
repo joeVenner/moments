@@ -106,8 +106,30 @@ export async function abortUploadSessions(
         env.DB.prepare("UPDATE uploads SET status = 'aborted' WHERE id = ? AND status = 'open'").bind(id)
       )
     );
+    await deleteUnregisteredObjects(env, abortedIds);
   }
   return { aborted: abortedIds.length, failed };
+}
+
+/**
+ * A session can be open with its object already assembled (the worker died
+ * between Complete and registering the moment). Once aborted, nothing will
+ * register it, so its object goes too, unless a moment uses it.
+ */
+async function deleteUnregisteredObjects(env: Env, ids: readonly string[]): Promise<void> {
+  const { results } = await env.DB.prepare(
+    `SELECT u.key FROM uploads u
+      WHERE u.id IN (${ids.map(() => "?").join(", ")}) AND u.status = 'aborted' AND ${R2_SESSION_SQL}
+        AND NOT EXISTS (SELECT 1 FROM moments m WHERE m.event_id = u.event_id AND m.media_url = '/media/' || u.key)`
+  )
+    .bind(...ids)
+    .all<{ key: string }>();
+  if (results.length === 0 || !env.BUCKET) return;
+  try {
+    await env.BUCKET.delete(results.map((row) => row.key));
+  } catch (err) {
+    console.error(JSON.stringify({ scope: "upload", event: "orphan_object_delete_failed", error: err instanceof Error ? err.name : "unknown" }));
+  }
 }
 
 /** Daily cron entry point: reaps up to ORPHAN_ABORT_BATCH orphaned sessions. */

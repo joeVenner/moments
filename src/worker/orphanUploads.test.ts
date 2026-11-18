@@ -132,6 +132,15 @@ describe("abortOrphanUploads", () => {
     expect([status("a"), status("b"), status("keep")]).toEqual(["aborted", "aborted", "open"]);
   });
 
+  it("deletes an aborted session's assembled object unless a moment uses it", async () => {
+    sqlite.raw
+      .prepare("INSERT INTO moments (id, event_id, uploader_name, media_url) VALUES ('m1', 'live', 'Sara', '/media/events/live/moments/b-a.jpg')")
+      .run();
+    const testEnv = env();
+    await abortOrphanUploads(testEnv, vi.fn(async () => undefined));
+    expect(testEnv.BUCKET.delete).toHaveBeenCalledWith(["events/live/moments/a-a.jpg"]);
+  });
+
   it("leaves failed aborts open for the next run and logs no keys", async () => {
     const abort = vi.fn(async (_env: Env, key: string) => {
       if (key.includes("/a-")) throw new Error("R2 500 for events/live/moments/a-a.jpg");
