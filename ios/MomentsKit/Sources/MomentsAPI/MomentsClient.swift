@@ -110,6 +110,10 @@ public protocol MomentsService: Sendable {
     func setReaction(
         _ reacted: Bool, slug: String, momentID: String, reactorID: String, credentials: EventCredentials
     ) async throws -> ReactionState
+    /// Most-hearted visible moments, best first.
+    func highlights(slug: String, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> [Moment]
+    /// Guests ranked by points, best first.
+    func leaderboard(slug: String, credentials: EventCredentials) async throws -> [LeaderboardEntry]
 }
 
 /// The app's API client: the generated v1 client plus the version header,
@@ -240,6 +244,44 @@ public struct MomentsClient: MomentsService {
             case let .badRequest(response): throw Self.error(400, try? response.body.json.code)
             case let .unauthorized(response): throw Self.error(401, try? response.body.json.code)
             case let .notFound(response): throw Self.error(404, try? response.body.json.code)
+            case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+            case let .default(status, response): throw Self.error(status, try? response.body.json.code)
+            }
+        }
+    }
+
+    public func highlights(
+        slug: String, limit: Int? = nil, reactorID: String? = nil, credentials: EventCredentials = .init()
+    ) async throws -> [Moment] {
+        try await perform {
+            let output = try await client.getHighlights(
+                path: .init(slug: slug),
+                query: .init(limit: limit, reactorId: reactorID),
+                headers: .init(xEventAccess: credentials.accessGrant)
+            )
+            switch output {
+            case let .ok(response): return mapper.highlights(try response.body.json)
+            case let .badRequest(response): throw Self.error(400, try? response.body.json.code)
+            case let .unauthorized(response): throw Self.error(401, try? response.body.json.code)
+            case let .notFound(response): throw Self.error(404, try? response.body.json.code)
+            case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
+            case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+            case let .default(status, response): throw Self.error(status, try? response.body.json.code)
+            }
+        }
+    }
+
+    public func leaderboard(slug: String, credentials: EventCredentials = .init()) async throws -> [LeaderboardEntry] {
+        try await perform {
+            let output = try await client.getLeaderboard(
+                path: .init(slug: slug),
+                headers: .init(xEventAccess: credentials.accessGrant)
+            )
+            switch output {
+            case let .ok(response): return mapper.leaderboard(try response.body.json)
+            case let .unauthorized(response): throw Self.error(401, try? response.body.json.code)
+            case let .notFound(response): throw Self.error(404, try? response.body.json.code)
+            case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
             case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
             case let .default(status, response): throw Self.error(status, try? response.body.json.code)
             }

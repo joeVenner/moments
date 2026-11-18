@@ -20,7 +20,7 @@ struct ViewerRequest: Identifiable, Equatable {
 /// The viewer owns its position; the feed's request only presents it, so
 /// closing never blanks the page while the cover animates away.
 struct MomentViewer: View {
-    let model: FeedModel
+    let model: any MomentBrowsing
     let images: ThumbnailLoader
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -32,7 +32,7 @@ struct MomentViewer: View {
     /// Bumped by every heart tap, for the haptic.
     @State private var heartTaps = 0
 
-    init(model: FeedModel, images: ThumbnailLoader, start: Moment.ID) {
+    init(model: any MomentBrowsing, images: ThumbnailLoader, start: Moment.ID) {
         self.model = model
         self.images = images
         _current = State(initialValue: start)
@@ -86,13 +86,12 @@ struct MomentViewer: View {
             isZoomed = false
             isPlaying = false
             // Paging toward the end keeps older moments coming.
-            if let moment = moments.first(where: { $0.id == id }) { model.loadOlderIfNeeded(near: moment) }
+            if let moment = moments.first(where: { $0.id == id }) { model.momentShown(moment) }
         }
         // The moment on screen was hidden or deleted, or access ended.
         .onChange(of: index == nil) { _, isGone in if isGone { close() } }
-        // While loaded, the feed only leaves `.loaded` for access lost or a
-        // deleted event (transient errors keep the grid), both final here.
-        .onChange(of: model.phase) { _, phase in if phase != .loaded { close() } }
+        // Access lost or the event deleted.
+        .onChange(of: model.isBrowsable) { _, browsable in if !browsable { close() } }
     }
 
     private func close() {

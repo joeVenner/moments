@@ -58,6 +58,28 @@ public struct Event: Sendable, Hashable, Identifiable {
     }
 }
 
+/// One guest's place on the event leaderboard.
+public struct LeaderboardEntry: Sendable, Hashable, Identifiable {
+    public let participantID: String
+    public let nickname: String
+    public let avatarSeed: String?
+    public let totalPoints: Int
+    public let momentCount: Int
+    /// 1-based; guests with equal points share a rank (1, 1, 3).
+    public let rank: Int
+
+    public var id: String { participantID }
+
+    public init(participantID: String, nickname: String, avatarSeed: String? = nil, totalPoints: Int, momentCount: Int, rank: Int) {
+        self.participantID = participantID
+        self.nickname = nickname
+        self.avatarSeed = avatarSeed
+        self.totalPoints = totalPoints
+        self.momentCount = momentCount
+        self.rank = rank
+    }
+}
+
 public struct Participant: Sendable, Hashable, Identifiable {
     public let id: String
     public let eventID: String

@@ -18,6 +18,10 @@ final class FakeService: MomentsService, @unchecked Sendable {
     private(set) var pageCalls: [(before: Int?, reactorID: String?, credentials: EventCredentials)] = []
     private(set) var changesCalls: [Int] = []
     var reactionResults: [Result<ReactionState, Error>] = []
+    var highlightsResults: [Result<[Moment], Error>] = []
+    var leaderboardResults: [Result<[LeaderboardEntry], Error>] = []
+    private(set) var highlightsCalls: [(reactorID: String?, credentials: EventCredentials)] = []
+    private(set) var leaderboardCalls = 0
     private(set) var reactionCalls: [(reacted: Bool, momentID: String, reactorID: String)] = []
     /// Runs before a reaction request answers (to hold it open).
     var beforeReaction: (@Sendable () async -> Void)?
@@ -31,6 +35,20 @@ final class FakeService: MomentsService, @unchecked Sendable {
     func join(slug: String, nickname: String, avatarSeed: String?, credentials: EventCredentials) async throws -> JoinResult {
         try lock.withLock { joinCalls.append((nickname, credentials)); return try joinResults.removeFirst().get() }
     }
+    /// Runs before a highlights request answers (to hold it open).
+    var beforeHighlights: (@Sendable () async -> Void)?
+    /// Answers reactions even when the caller was cancelled (like a request
+    /// that already reached the server).
+    var reactionsIgnoreCancellation = false
+
+    func highlights(slug: String, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> [Moment] {
+        let result = lock.withLock { highlightsCalls.append((reactorID, credentials)); return highlightsResults.removeFirst() }
+        if let beforeHighlights { await beforeHighlights() }
+        return try result.get()
+    }
+    func leaderboard(slug: String, credentials: EventCredentials) async throws -> [LeaderboardEntry] {
+        try lock.withLock { leaderboardCalls += 1; return try leaderboardResults.removeFirst().get() }
+    }
     func setReaction(
         _ reacted: Bool, slug: String, momentID: String, reactorID: String, credentials: EventCredentials
     ) async throws -> ReactionState {
@@ -39,7 +57,7 @@ final class FakeService: MomentsService, @unchecked Sendable {
             return reactionResults.isEmpty ? .success(ReactionState(reacted: reacted, reactionCount: reacted ? 1 : 0)) : reactionResults.removeFirst()
         }
         if let beforeReaction { await beforeReaction() }
-        try Task.checkCancellation()
+        if !reactionsIgnoreCancellation { try Task.checkCancellation() }
         return try result.get()
     }
     /// Runs before a page request answers (to hold it open in race tests).

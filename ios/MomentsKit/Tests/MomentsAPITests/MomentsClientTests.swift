@@ -88,6 +88,38 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
         }
     }
 
+    @Test func fetchesHighlightsSkippingUnreadableRows() async throws {
+        let stub = StubTransport(json: """
+            {"moments":[\(Fixtures.moment(id: "m1")),\(Fixtures.moment(id: "bad", kind: "hologram"))]}
+            """)
+        let moments = try await client(stub).highlights(
+            slug: "party", limit: 20, reactorID: "me", credentials: .init(accessGrant: "grant-1")
+        )
+        #expect(moments.map(\.id) == ["m1"])
+        let request = try #require(stub.requests.first?.request)
+        let query = URLComponents(string: try #require(request.path))?.queryItems ?? []
+        #expect(Set(query) == [URLQueryItem(name: "limit", value: "20"), URLQueryItem(name: "reactor_id", value: "me")])
+        #expect(request.headerFields[HTTPField.Name("X-Event-Access")!] == "grant-1")
+    }
+
+    @Test func fetchesTheLeaderboard() async throws {
+        let stub = StubTransport(json: """
+            {"entries":[{"participant_id":"p1","nickname":"Sara","avatar_seed":null,"total_points":10,"moment_count":2,"rank":1}]}
+            """)
+        let entries = try await client(stub).leaderboard(slug: "party")
+        #expect(entries == [LeaderboardEntry(participantID: "p1", nickname: "Sara", totalPoints: 10, momentCount: 2, rank: 1)])
+    }
+
+    @Test func readEndpointsMapRateLimits() async throws {
+        let json = #"{"error":"x","code":"rate_limited"}"#
+        await #expect(throws: MomentsAPIError.rateLimited) {
+            _ = try await client(StubTransport(status: 429, json: json)).highlights(slug: "p")
+        }
+        await #expect(throws: MomentsAPIError.rateLimited) {
+            _ = try await client(StubTransport(status: 429, json: json)).leaderboard(slug: "p")
+        }
+    }
+
     @Test func passesFeedQuery() async throws {
         let stub = StubTransport(json: #"{"moments":[],"next_before":null,"cursor":7}"#)
         let page = try await client(stub).feedPage(slug: "party", before: 10, limit: 30, reactorID: "me")

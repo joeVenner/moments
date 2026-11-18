@@ -349,3 +349,75 @@ private func loaded(_ page: [Moment], nextBefore: Int? = nil, cursor: Int = 10) 
         #expect(split.effectivePurgeAfter == .distantFuture)
     }
 }
+
+@Suite struct HighlightsStateTests {
+    private func hearted(_ id: String, _ count: Int, seq: Int) -> Moment {
+        moment(id, seq: seq, reactions: count)
+    }
+
+    @Test func keepsTheServerOrderAndDropsDuplicates() {
+        var highlights = HighlightsState()
+        #expect(highlights.hasLoaded == false)
+        highlights.replace(with: [hearted("b", 9, seq: 1), hearted("a", 4, seq: 7), hearted("b", 9, seq: 1)])
+        #expect(highlights.moments.map(\.id) == ["b", "a"])
+        #expect(highlights.hasLoaded)
+    }
+
+    @Test func pendingTogglesSurviveAReloadOfTheSameMoment() {
+        var highlights = HighlightsState()
+        highlights.replace(with: [hearted("a", 4, seq: 1)])
+        highlights.setReacted(true, forMomentID: "a")
+        // Read before the request landed.
+        highlights.replace(with: [hearted("a", 4, seq: 1), hearted("c", 1, seq: 3)])
+        #expect(highlights.moments.first?.hasReacted == true)
+        #expect(highlights.moments.first?.reactionCount == 5)
+        highlights.rollbackReaction(forMomentID: "a")
+        #expect(highlights.moments.first?.reactionCount == 4)
+    }
+
+    @Test func aMomentThatLeftTheListForgetsItsToggle() {
+        var highlights = HighlightsState()
+        highlights.replace(with: [hearted("a", 4, seq: 1)])
+        highlights.setReacted(true, forMomentID: "a")
+        highlights.replace(with: [hearted("c", 1, seq: 3)])
+        #expect(highlights.hasUnsentReaction(forMomentID: "a") == false)
+        highlights.replace(with: [hearted("a", 6, seq: 1)])
+        #expect(highlights.moments.first?.reactionCount == 6)
+    }
+
+    @Test func removesHiddenMoments() {
+        var highlights = HighlightsState()
+        highlights.replace(with: [hearted("a", 4, seq: 1), hearted("b", 2, seq: 2)])
+        highlights.setReacted(true, forMomentID: "a")
+        highlights.remove(["a"])
+        #expect(highlights.moments.map(\.id) == ["b"])
+        #expect(highlights.hasUnsentReaction(forMomentID: "a") == false)
+    }
+}
+
+@Suite struct ServerReactionSyncTests {
+    @Test func appliesStateFromElsewhereOnlyWhenNothingIsPending() {
+        var feed = loaded([moment("a", seq: 1, reactions: 3), moment("b", seq: 2, reactions: 1)])
+        feed.applyServerReaction(forMomentID: "a", reacted: true, reactionCount: 4)
+        #expect(feed.moments.first { $0.id == "a" }?.hasReacted == true)
+        #expect(feed.moments.first { $0.id == "a" }?.reactionCount == 4)
+        feed.setReacted(true, forMomentID: "b")
+        feed.applyServerReaction(forMomentID: "b", reacted: false, reactionCount: 0)
+        #expect(feed.moments.first { $0.id == "b" }?.hasReacted == true)
+        #expect(feed.moments.first { $0.id == "b" }?.reactionCount == 2)
+        feed.applyServerReaction(forMomentID: "missing", reacted: true, reactionCount: 1)
+    }
+
+    @Test func newerStateFromElsewhereReplacesAConfirmedToggleAndSurvivesAStaleSync() {
+        var feed = loaded([moment("a", seq: 1, reactions: 3)], cursor: 10)
+        feed.setReacted(true, forMomentID: "a")
+        feed.confirmReaction(forMomentID: "a", reacted: true, reactionCount: 4)
+        // Un-hearted from highlights.
+        feed.applyServerReaction(forMomentID: "a", reacted: false, reactionCount: 3)
+        #expect(feed.moments.first?.hasReacted == false)
+        // A sync read before that landed still shows the heart.
+        feed.applyChanges(upserts: [moment("a", seq: 1, changeSeq: 11, reactions: 4, hasReacted: true)], removed: [], cursor: 11, hasMore: false)
+        #expect(feed.moments.first?.hasReacted == false)
+        #expect(feed.moments.first?.reactionCount == 3)
+    }
+}
