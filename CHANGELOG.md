@@ -61,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New event PINs must be 6 to 20 characters. Existing shorter PINs keep working.
 - Setting a new PIN, or making a public event private again, revokes all previously issued access and rotates the invitation link.
 
+- Large website uploads that keep going in the background (after the tab is closed or the phone locks) now carry the guest's identity, so they still finish once identities are required. Only the guest who started an upload can continue, finish or cancel it.
 - Website uploads now belong to the guest who made them. A guest who joined always uploads under their own nickname, whatever name the page sends, so nobody can post photos as someone else. Once guest identities are required, the website refuses uploads from visitors who haven't joined, before anything is stored.
 - Hearts now belong to the guest, not the device. A guest who joined reacts as themselves on the website and in the app: the server decides whose heart it is, so a client can no longer send hearts on another guest's behalf, and a guest sees their hearts on every device where they joined. Leaving an event takes back that guest's hearts. Clients without a guest identity keep their device id only until guest identities are required.
 ### Fixed
