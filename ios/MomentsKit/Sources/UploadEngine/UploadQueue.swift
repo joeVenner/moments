@@ -2,9 +2,14 @@ import Foundation
 import MomentsAPI
 import MomentsDomain
 
-/// Sends parts of a staged file to storage. The real one (background
-/// URLSession) comes next; tests use a fake.
+/// Sends parts of a staged file to storage: `BackgroundPartUploader` in the
+/// app, `URLSessionPartUploader` where background sessions aren't allowed.
 public protocol PartUploader: Sendable {
+    /// Called once by `UploadQueue.load()`, before anything uploads: picks
+    /// up work an earlier launch left running and deletes part files
+    /// nothing is sending (they hold photo bytes).
+    func recover() async throws
+
     /// Sends these parts, read from `file` (opened and checked by the
     /// queue; never reopen the path), and returns the ones storage accepted.
     /// Throws a `MomentsAPIError` for failures the queue should react to.
@@ -70,6 +75,7 @@ public actor UploadQueue {
     private var sleeper: Task<Void, Never>?
     private var isRunning = false
     private var isLoaded = false
+    private var isLoading = false
 
     /// Saves that failed; the item stays current in memory and the next
     /// change saves it again.
@@ -104,17 +110,19 @@ public actor UploadQueue {
     /// before sending anything (storage may be ahead of the record).
     /// Call once, before enqueueing or running.
     @discardableResult
-    public func load() throws -> QueueStore.Loaded {
-        guard !isLoaded else { throw EnqueueError.alreadyLoaded }
-        let loaded = try store.load()
-        isLoaded = true
-        // Part files left by a crash hold photo bytes; nothing is uploading
-        // yet, so they can all go.
+    public func load() async throws -> QueueStore.Loaded {
+        guard !isLoaded, !isLoading else { throw EnqueueError.alreadyLoaded }
+        // Before the records are read: until `isLoaded`, nothing can be
+        // enqueued and there is nothing to run.
+        isLoading = true
+        defer { isLoading = false }
         do {
-            try staging.clearPartFiles()
+            try await partUploader.recover()
         } catch {
             cleanupFailures += 1
         }
+        let loaded = try store.load()
+        isLoaded = true
         unloaded = loaded.deferred + loaded.overflow
         for var item in loaded.items {
             let before = item
