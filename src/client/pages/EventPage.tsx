@@ -63,7 +63,18 @@ async function mapSettledWithConcurrency<T, R>(
   return results;
 }
 
+/**
+ * Keyed on the slug so moving from one event to another (/e/a → /e/b, which
+ * React Router renders with the same element) starts with fresh state.
+ * Before, the previous event's "not found", access prompt, tab, upload state
+ * and in-flight join could carry over into the next one.
+ */
 export default function EventPage() {
+  const { slug } = useParams<{ slug: string }>();
+  return <EventPageForSlug key={slug} />;
+}
+
+function EventPageForSlug() {
   const { t } = useI18n();
   const { slug } = useParams<{ slug: string }>();
   const [event, setEvent] = useState<EventData | null>(null);
