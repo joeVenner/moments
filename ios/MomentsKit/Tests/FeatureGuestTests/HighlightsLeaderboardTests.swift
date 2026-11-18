@@ -160,6 +160,13 @@ private final class Clock: @unchecked Sendable {
     }
 }
 
+@Suite struct InitialsAvatarTests {
+    @Test(arguments: [("sara", "S"), ("  élodie", "É"), ("👩🏽‍🚀 Ana", "👩🏽‍🚀"), ("", "?"), ("   ", "?")])
+    func takesTheFirstWholeCharacter(_ nickname: String, _ expected: String) {
+        #expect(InitialsAvatar.initial(of: nickname) == expected)
+    }
+}
+
 @Suite @MainActor struct HighlightsLoadingTests {
     private func makeModel(clock: Clock = Clock()) -> (HighlightsModel, FakeService) {
         let service = FakeService()
