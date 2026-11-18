@@ -29,11 +29,8 @@ public struct StagingArea: Sendable {
     /// file can't be swapped between checking and reading; keep the handle
     /// for the whole upload and treat a short read as a failure.
     public func open(_ file: QueuedUpload.StagedFile) throws(Problem) -> FileHandle {
-        let base = Self.canonical(root)
         let candidate = Self.canonical(root.appending(path: file.relativePath, directoryHint: .notDirectory))
-        let basePath = base.path(percentEncoded: false)
-        let prefix = basePath.hasSuffix("/") ? basePath : basePath + "/"
-        guard candidate.path(percentEncoded: false).hasPrefix(prefix) else { throw .outsideStaging }
+        guard isInside(candidate) else { throw .outsideStaging }
 
         switch FileReader.open(candidate) {
         case let .opened(handle, info):
@@ -46,6 +43,20 @@ public struct StagingArea: Sendable {
         case .notAFile: throw .notAFile
         case .unreadable: throw .unreadable
         }
+    }
+
+    /// Deletes a staged file once its item is done or discarded. Only
+    /// inside the folder; a link is removed itself, never its target.
+    public func remove(_ file: QueuedUpload.StagedFile) throws(Problem) {
+        let path = root.appending(path: file.relativePath, directoryHint: .notDirectory)
+        guard isInside(Self.canonical(path)) else { throw .outsideStaging }
+        guard unlink(path.path(percentEncoded: false)) == 0 || errno == ENOENT else { throw .unreadable }
+    }
+
+    private func isInside(_ candidate: URL) -> Bool {
+        let basePath = Self.canonical(root).path(percentEncoded: false)
+        let prefix = basePath.hasSuffix("/") ? basePath : basePath + "/"
+        return candidate.path(percentEncoded: false).hasPrefix(prefix)
     }
 
     /// Symlinks resolved and `.`/`..` removed. Applied to both sides so
