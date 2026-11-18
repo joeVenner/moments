@@ -1,5 +1,6 @@
 import { Upload, type DetailedError } from "tus-js-client";
 import type { MomentData } from "./types";
+import { guestTokenHeaders } from "./nickname";
 import {
   deleteUpload,
   deleteUploadFile,
@@ -83,7 +84,7 @@ async function runStreamUpload(opts: StreamUploadOptions, localId: string): Prom
         `/api/events/${encodeURIComponent(opts.slug)}/moments/stream/session`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...guestTokenHeaders(opts.slug) },
           body: JSON.stringify({
             uploader_name: opts.uploaderName,
             content_type: opts.file.type,
@@ -111,6 +112,8 @@ async function runStreamUpload(opts: StreamUploadOptions, localId: string): Prom
 
   return new Promise<CompleteResponse>((resolve, reject) => {
     let lastProgressSave = 0;
+    // No guest token here on purpose: tus-js-client sends `headers` to the
+    // Stream upload URL too, and the session id already ties tus to the guest.
     const upload = new Upload(opts.file, {
       endpoint: `/api/events/${encodeURIComponent(opts.slug)}/moments/stream/tus?session=${encodeURIComponent(state.streamSessionId!)}`,
       uploadUrl: state.streamUploadUrl ?? null,
@@ -168,7 +171,7 @@ async function runStreamUpload(opts: StreamUploadOptions, localId: string): Prom
             `/api/events/${encodeURIComponent(opts.slug)}/moments/stream/complete`,
             {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { "Content-Type": "application/json", ...guestTokenHeaders(opts.slug) },
               body: JSON.stringify({
                 stream_uid: streamUid,
                 uploader_name: opts.uploaderName,
@@ -256,7 +259,7 @@ export async function cancelStreamUpload(upload: PersistedUpload): Promise<void>
   if (upload.streamUid || upload.streamSessionId) {
     await jsonRequest(`/api/events/${encodeURIComponent(upload.slug)}/moments/stream/abort`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...guestTokenHeaders(upload.slug) },
       body: JSON.stringify({
         stream_uid: upload.streamUid,
         session_id: upload.streamSessionId,

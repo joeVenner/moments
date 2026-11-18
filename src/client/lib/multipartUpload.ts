@@ -10,6 +10,7 @@ import {
   type PersistedUpload,
 } from "./uploadStore";
 import { requestPageUploadResume, requestUploadBackgroundSync } from "./uploadSync";
+import { guestTokenHeaders } from "./nickname";
 
 /**
  * Resumable chunked uploader for large videos (the >25 MB path).
@@ -183,7 +184,7 @@ async function runResumableUpload(
   } else {
     const init = await jsonReq<InitResponse>(`/api/events/${slug}/moments/multipart/init`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...guestTokenHeaders(slug) },
       body: JSON.stringify({
         uploader_name: uploaderName,
         content_type: file.type,
@@ -257,7 +258,7 @@ async function runResumableUpload(
         `/api/events/${slug}/moments/multipart/status?upload_id=${encodeURIComponent(
           state.uploadId
         )}&key=${encodeURIComponent(state.key)}`,
-        { method: "GET" }
+        { method: "GET", headers: guestTokenHeaders(slug) }
       );
       if (s.status === "completed" && s.moment && typeof s.points_awarded === "number") {
         return { moment: s.moment, points_awarded: s.points_awarded };
@@ -285,7 +286,7 @@ async function runResumableUpload(
           `/api/events/${slug}/moments/multipart/part-url`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...guestTokenHeaders(slug) },
             body: JSON.stringify({ upload_id: state.uploadId, key: state.key, part_number: partNumber }),
           }
         );
@@ -366,7 +367,7 @@ async function runResumableUpload(
       `/api/events/${slug}/moments/multipart/complete`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...guestTokenHeaders(slug) },
         body: JSON.stringify({
           upload_id: state.uploadId,
           key: state.key,
@@ -474,7 +475,7 @@ export async function cancelResumableUpload(upload: PersistedUpload): Promise<vo
 export async function abortResumableUpload(slug: string, uploadId: string, key: string): Promise<void> {
   await jsonReq(`/api/events/${slug}/moments/multipart/abort`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...guestTokenHeaders(slug) },
     body: JSON.stringify({ upload_id: uploadId, key }),
   }).catch(() => {}); // best-effort — R2 may already have reaped it
   // Drop any persisted row for this upload.
