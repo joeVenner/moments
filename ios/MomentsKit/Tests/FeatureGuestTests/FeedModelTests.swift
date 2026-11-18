@@ -278,3 +278,138 @@ private final class Clock: @unchecked Sendable {
     var now: Date { lock.withLock { current } }
     func advance(by seconds: TimeInterval) { lock.withLock { current += seconds } }
 }
+
+@Suite @MainActor struct FeedModelReactionTests {
+    private func loadedModel(reactions: Int = 2) async -> (FeedModel, FakeService) {
+        let (model, service) = makeModel()
+        var first = moment(1)
+        first = Moment(
+            id: first.id, eventID: "e1", uploaderName: "Lea", pointsAwarded: 1, createdAt: .distantPast,
+            seq: 1, changeSeq: 1, reactionCount: reactions, media: first.media
+        )
+        service.pageResults = [.success(FeedPage(moments: [first], nextBefore: nil, cursor: 10))]
+        await model.loadFirstPage()
+        return (model, service)
+    }
+
+    @Test func heartsAtOnceThenTakesTheServerCount() async {
+        let (model, service) = await loadedModel()
+        service.reactionResults = [.success(ReactionState(reacted: true, reactionCount: 7))]
+        let task = model.toggleReaction(onMomentID: "m1")
+        #expect(model.moments.first?.hasReacted == true)
+        #expect(model.moments.first?.reactionCount == 3)
+        await task?.value
+        #expect(service.reactionCalls.map(\.reacted) == [true])
+        #expect(service.reactionCalls.first?.reactorID == "r1")
+        #expect(model.moments.first?.reactionCount == 7)
+    }
+
+    @Test func rapidTapsSettleOnTheLastIntent() async {
+        let (model, service) = await loadedModel()
+        let started = Gate()
+        let release = Gate()
+        service.beforeReaction = {
+            await started.open()
+            await release.wait()
+        }
+        service.reactionResults = [
+            .success(ReactionState(reacted: true, reactionCount: 3)),
+            .success(ReactionState(reacted: false, reactionCount: 2)),
+        ]
+        let task = model.toggleReaction(onMomentID: "m1")
+        await started.wait()
+        // Un-heart, heart, un-heart while the first request is in flight.
+        model.toggleReaction(onMomentID: "m1")
+        model.toggleReaction(onMomentID: "m1")
+        let same = model.toggleReaction(onMomentID: "m1")
+        #expect(same == task)
+        #expect(model.moments.first?.hasReacted == false)
+        await release.open()
+        await task?.value
+        #expect(service.reactionCalls.map(\.reacted) == [true, false])
+        #expect(model.moments.first?.hasReacted == false)
+        #expect(model.moments.first?.reactionCount == 2)
+    }
+
+    @Test func aRefusedReactionRollsBack() async {
+        let (model, service) = await loadedModel()
+        service.reactionResults = [.failure(MomentsAPIError.rateLimited)]
+        await model.toggleReaction(onMomentID: "m1")?.value
+        #expect(model.moments.first?.hasReacted == false)
+        #expect(model.moments.first?.reactionCount == 2)
+        #expect(model.reactionFailureCount == 1)
+        #expect(model.phase == .loaded)
+        // A later tap tries again.
+        await model.toggleReaction(onMomentID: "m1")?.value
+        #expect(model.moments.first?.hasReacted == true)
+    }
+
+    @Test func lostAccessEndsTheFeed() async {
+        let (model, service) = await loadedModel()
+        service.reactionResults = [.failure(MomentsAPIError.accessRequired)]
+        await model.toggleReaction(onMomentID: "m1")?.value
+        #expect(model.phase == .accessLost)
+    }
+
+    @Test func aHiddenMomentStopsTheSender() async {
+        let (model, service) = await loadedModel()
+        let started = Gate()
+        let release = Gate()
+        service.beforeReaction = {
+            await started.open()
+            await release.wait()
+        }
+        service.reactionResults = [.success(ReactionState(reacted: true, reactionCount: 3))]
+        service.changesResults = [.success(FeedChanges(upserts: [], removed: ["m1"], cursor: 11, hasMore: false))]
+        let task = model.toggleReaction(onMomentID: "m1")
+        await started.wait()
+        model.toggleReaction(onMomentID: "m1")
+        await model.poll()
+        await release.open()
+        await task?.value
+        #expect(service.reactionCalls.count == 1)
+        #expect(model.moments.isEmpty)
+    }
+
+    @Test func aWrongAnswerIsAFailureNotALoop() async {
+        let (model, service) = await loadedModel()
+        service.reactionResults = Array(repeating: .success(ReactionState(reacted: false, reactionCount: 2)), count: 10)
+        await model.toggleReaction(onMomentID: "m1")?.value
+        #expect(service.reactionCalls.count == 1)
+        #expect(model.moments.first?.hasReacted == false)
+        #expect(model.reactionFailureCount == 1)
+    }
+
+    @Test func onThenOffBeforeSendingSendsNothing() async {
+        let (model, service) = await loadedModel()
+        let task = model.toggleReaction(onMomentID: "m1")
+        model.toggleReaction(onMomentID: "m1")
+        await task?.value
+        #expect(service.reactionCalls.isEmpty)
+        #expect(model.moments.first?.reactionCount == 2)
+    }
+
+    @Test func aGoneMomentSyncsTheFeed() async {
+        let (model, service) = await loadedModel()
+        service.reactionResults = [.failure(MomentsAPIError.momentNotFound)]
+        service.changesResults = [.success(FeedChanges(upserts: [], removed: ["m1"], cursor: 11, hasMore: false))]
+        await model.toggleReaction(onMomentID: "m1")?.value
+        for _ in 0..<50 where !model.moments.isEmpty { await Task.yield() }
+        #expect(service.changesCalls == [10])
+        #expect(model.moments.isEmpty)
+        #expect(model.reactionFailureCount == 1)
+    }
+
+    @Test func lostAccessHasNoExtraHaptic() async {
+        let (model, service) = await loadedModel()
+        service.reactionResults = [.failure(MomentsAPIError.accessRequired)]
+        await model.toggleReaction(onMomentID: "m1")?.value
+        #expect(model.reactionFailureCount == 0)
+    }
+
+    @Test func ignoresUnknownMomentsAndUnloadedFeeds() async {
+        let (model, service) = makeModel()
+        #expect(model.toggleReaction(onMomentID: "m1") == nil)
+        #expect(service.reactionCalls.isEmpty)
+    }
+}

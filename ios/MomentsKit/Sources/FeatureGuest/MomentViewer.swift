@@ -13,8 +13,9 @@ struct ViewerRequest: Identifiable, Equatable {
     let id: Moment.ID
 }
 
-/// Full-screen moments: swipe sideways between them, pinch or double-tap to
-/// zoom, swipe down to close. Videos play inline.
+/// Full-screen moments: swipe sideways between them, pinch to zoom,
+/// double-tap to heart (or to zoom back out), swipe down to close. Videos
+/// play inline.
 ///
 /// The viewer owns its position; the feed's request only presents it, so
 /// closing never blanks the page while the cover animates away.
@@ -22,11 +23,14 @@ struct MomentViewer: View {
     let model: FeedModel
     let images: ThumbnailLoader
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var current: Moment.ID?
     @State private var isZoomed = false
     @State private var isPlaying = false
     @State private var dismissDrag: CGFloat = 0
     @State private var showsChrome = true
+    /// Bumped by every heart tap, for the haptic.
+    @State private var heartTaps = 0
 
     init(model: FeedModel, images: ThumbnailLoader, start: Moment.ID) {
         self.model = model
@@ -49,7 +53,8 @@ struct MomentViewer: View {
                             ViewerPage(
                                 moment: moment, images: images, isCurrent: moment.id == current,
                                 isZoomed: $isZoomed, isPlaying: $isPlaying, dismissDrag: $dismissDrag,
-                                close: close, toggleChrome: { showsChrome.toggle() }
+                                close: close, toggleChrome: { showsChrome.toggle() },
+                                heart: { heart(moment) }, toggleReaction: { toggleReaction(moment) }
                             )
                             .containerRelativeFrame([.horizontal, .vertical])
                             .id(moment.id)
@@ -75,6 +80,8 @@ struct MomentViewer: View {
         }
         .momentsAnimation(value: showsChrome)
         .statusBarHidden(!showsChrome)
+        .sensoryFeedback(.impact(weight: .light), trigger: heartTaps)
+        .sensoryFeedback(.error, trigger: model.reactionFailureCount)
         .onChange(of: current) { _, id in
             isZoomed = false
             isPlaying = false
@@ -90,6 +97,17 @@ struct MomentViewer: View {
 
     private func close() {
         dismiss()
+    }
+
+    /// Double-tap: only ever adds a heart, like other photo apps.
+    private func heart(_ moment: Moment) {
+        heartTaps += 1
+        model.setReacted(true, onMomentID: moment.id)
+    }
+
+    private func toggleReaction(_ moment: Moment) {
+        heartTaps += 1
+        model.toggleReaction(onMomentID: moment.id)
     }
 
     private func chrome(moment: Moment, position: Int, total: Int, isPlaying: Bool) -> some View {
@@ -108,8 +126,41 @@ struct MomentViewer: View {
             }
             .padding(.horizontal, Spacing.md)
             Spacer()
-            if !isPlaying { details(moment) }
+            if !isPlaying {
+                HStack(alignment: .bottom, spacing: 0) {
+                    details(moment)
+                    reactionButton(moment)
+                }
+                .background(
+                    LinearGradient(
+                        colors: [MomentsColor.background.opacity(0), MomentsColor.background.opacity(0.85)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    .ignoresSafeArea(edges: .bottom)
+                )
+            }
         }
+    }
+
+    private func reactionButton(_ moment: Moment) -> some View {
+        Button { toggleReaction(moment) } label: {
+            VStack(spacing: Spacing.xxs) {
+                Image(systemName: moment.hasReacted ? "heart.fill" : "heart")
+                    .font(MomentsFont.heading())
+                    .foregroundStyle(moment.hasReacted ? MomentsColor.accent : MomentsColor.text)
+                    .contentTransition(.symbolEffect(.replace))
+                    .animation(Motion.animation(Motion.standard, reduceMotion: reduceMotion), value: moment.hasReacted)
+                Text(verbatim: "\(moment.reactionCount)")
+                    .font(MomentsFont.number(.caption))
+                    .foregroundStyle(MomentsColor.text)
+                    .opacity(moment.reactionCount > 0 ? 1 : 0)
+            }
+            .frame(minWidth: Radius.minimumTapTarget, minHeight: Radius.minimumTapTarget)
+            .padding(Spacing.md)
+        }
+        .accessibilityLabel(Text("Heart"))
+        .accessibilityValue(Text(moment.hasReacted ? "On, ^[\(moment.reactionCount) heart](inflect: true)" : "Off, ^[\(moment.reactionCount) heart](inflect: true)"))
+        .accessibilityAddTraits(.isToggle)
     }
 
     private func counter(position: Int, total: Int) -> some View {
@@ -136,13 +187,6 @@ struct MomentViewer: View {
             }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Spacing.md)
-        .background(
-            LinearGradient(
-                colors: [MomentsColor.background.opacity(0), MomentsColor.background.opacity(0.85)],
-                startPoint: .top, endPoint: .bottom
-            )
-            .ignoresSafeArea(edges: .bottom)
-        )
         // The page already reads the uploader and caption.
         .accessibilityHidden(true)
     }
@@ -158,6 +202,9 @@ private struct ViewerPage: View {
     @Binding var dismissDrag: CGFloat
     let close: () -> Void
     let toggleChrome: () -> Void
+    /// Double-tap on an unzoomed page.
+    let heart: () -> Void
+    let toggleReaction: () -> Void
 
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -169,6 +216,10 @@ private struct ViewerPage: View {
     @State private var basePan: CGSize = .zero
     @State private var player: AVPlayer?
     @State private var videoFailed = false
+    /// Bumped by each double-tap heart; each bump replays the burst.
+    @State private var bursts = 0
+
+    private static let burstHeartSize: CGFloat = 96
 
     /// The largest viewer image decoded, whatever the screen.
     private static let maxPixelSize = 2400
@@ -181,10 +232,11 @@ private struct ViewerPage: View {
         GeometryReader { geometry in
             content
                 .frame(width: geometry.size.width, height: geometry.size.height)
+                .overlay { heartBurst }
                 .scaleEffect(scale)
                 .offset(x: pan.width, y: pan.height + (isCurrent ? max(0, dismissDrag) : 0))
                 .contentShape(Rectangle())
-                .onTapGesture(count: 2) { toggleZoom(in: geometry.size) }
+                .onTapGesture(count: 2, perform: doubleTap)
                 .onTapGesture(count: 1, perform: toggleChrome)
                 .gesture(magnify(in: geometry.size), isEnabled: isPhoto)
                 .simultaneousGesture(drag(in: geometry.size), isEnabled: player == nil)
@@ -193,6 +245,7 @@ private struct ViewerPage: View {
                 .task(id: player.map(ObjectIdentifier.init)) { await watchPlayback() }
                 .accessibilityAction(named: Text("Zoom in")) { if isPhoto, scale == 1 { toggleZoom(in: geometry.size) } }
                 .accessibilityAction(named: Text("Zoom out")) { if scale > 1 { resetZoom() } }
+                .accessibilityAction(named: Text(moment.hasReacted ? "Remove heart" : "Heart"), toggleReaction)
         }
         .onChange(of: isCurrent) { _, current in
             if !current {
@@ -296,6 +349,45 @@ private struct ViewerPage: View {
             }
     }
 
+    /// Zoomed: back to fit. Otherwise: heart it, with a burst.
+    private func doubleTap() {
+        if scale > ViewerGestures.minimumScale {
+            withAnimation(Motion.animation(Motion.standard, reduceMotion: reduceMotion)) { resetZoom() }
+            return
+        }
+        heart()
+        bursts += 1
+    }
+
+    /// A big heart that pops in and out; under Reduce Motion it only
+    /// appears and fades, without growing.
+    private var heartBurst: some View {
+        let grows = !reduceMotion
+        return Image(systemName: "heart.fill")
+            .font(.system(size: Self.burstHeartSize))
+            .foregroundStyle(MomentsColor.accent)
+            .shadow(color: MomentsColor.background.opacity(0.4), radius: 8)
+            .keyframeAnimator(initialValue: BurstFrame(), trigger: bursts) { heart, frame in
+                heart.scaleEffect(frame.scale).opacity(frame.opacity)
+            } keyframes: { _ in
+                KeyframeTrack(\.scale) {
+                    if grows {
+                        LinearKeyframe(0.4, duration: 0.01)
+                        SpringKeyframe(1, duration: 0.3, spring: .bouncy)
+                    } else {
+                        LinearKeyframe(1, duration: 0.01)
+                    }
+                }
+                KeyframeTrack(\.opacity) {
+                    LinearKeyframe(1, duration: 0.01)
+                    LinearKeyframe(1, duration: 0.5)
+                    LinearKeyframe(0, duration: 0.15)
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
     private func toggleZoom(in size: CGSize) {
         guard isPhoto else { return }
         withAnimation(Motion.animation(Motion.standard, reduceMotion: reduceMotion)) {
@@ -394,5 +486,10 @@ private struct ViewerPage: View {
         case let (true, caption?): return Text("Photo by \(name): \(caption)")
         }
     }
+}
+/// The burst's animated values; at rest it is invisible.
+private struct BurstFrame {
+    var scale: CGFloat = 1
+    var opacity: Double = 0
 }
 #endif
