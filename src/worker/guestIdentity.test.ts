@@ -167,7 +167,7 @@ describe("POST /api/events/:slug/participants", () => {
 
   function postJoin(target: Env, nickname: string, token?: string) {
     const ctx = { waitUntil: vi.fn(), passThroughOnException: vi.fn() } as unknown as ExecutionContext;
-    const headers: Record<string, string> = token ? { "X-Guest-Token": token } : {};
+    const headers: Record<string, string> = { "CF-Connecting-IP": "203.0.113.9", ...(token ? { "X-Guest-Token": token } : {}) };
     return worker.fetch(
       new Request("https://moments.test/api/events/party/participants", {
         method: "POST",
@@ -178,6 +178,25 @@ describe("POST /api/events/:slug/participants", () => {
       ctx
     );
   }
+
+  it("rate limits joins per event and IP before creating anyone", async () => {
+    const limit = vi.fn().mockResolvedValueOnce({ success: false }).mockResolvedValue({ success: true });
+    const target = env({ JOIN_LIMITER: { limit } as unknown as RateLimit });
+    const refused = await postJoin(target, "Sara");
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get("Retry-After")).toBe("60");
+    expect(await refused.json()).toMatchObject({ code: "rate_limited" });
+    const first = await postJoin(target, "Sara");
+    expect(first.status).toBe(200);
+    const token = ((await first.json()) as { guest_token?: string }).guest_token ?? "";
+    expect(token).toMatch(/^gt_/);
+    limit.mockClear();
+    limit.mockResolvedValue({ success: false });
+    expect((await postJoin(target, "Sara", token)).status).toBe(200);
+    expect(limit).not.toHaveBeenCalled();
+    expect((await postJoin(target, "Sam", token)).status).toBe(429);
+    expect(limit).toHaveBeenCalledWith({ key: "event-1:ip:203.0.113.9" });
+  });
 
   it("returns a guest token on first join and none when re-joining with it", async () => {
     const first = await postJoin(env(), "Sara");

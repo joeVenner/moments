@@ -44,6 +44,17 @@
   ],
   "ratelimits": [
     {
+      // Guest joins (web and app), per event and IP. Each join can mint a
+      // guest with upload rights; generous because venue Wi-Fi puts many
+      // guests behind one address.
+      "name": "JOIN_LIMITER",
+      "namespace_id": "1005",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
+    },
+    {
       // v1 upload sessions, keyed per guest session. A 50-item queue needs
       // about 150 calls (start, part URLs, status), so this leaves headroom.
       "name": "UPLOAD_LIMITER",

@@ -136,6 +136,7 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
         (404, "event_not_found", .eventNotFound),
         (426, "client_upgrade_required", .upgradeRequired),
         (409, "nickname_taken", .nicknameTaken),
+        (429, "rate_limited", .rateLimited),
         (400, "invalid_request", .invalidRequest),
         (503, "stream_signing_unavailable", .server(status: 503, code: "stream_signing_unavailable")),
     ])

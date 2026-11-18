@@ -65,6 +65,7 @@ import {
   toPublicParticipant,
   type PublicParticipant,
 } from "./guestIdentity";
+import { isJoinLimited, JOIN_RATE_LIMITED, JOIN_RETRY_AFTER_SECONDS } from "./joinLimit";
 import {
   MAX_PIN_LENGTH,
   MIN_PIN_LENGTH,
@@ -1439,7 +1440,12 @@ app.post("/api/events/:slug/participants", async (c) => {
     avatarSeed: avatarSeed?.slice(0, 100) ?? null,
     presentedToken: c.req.header(GUEST_TOKEN_HEADER) ?? null,
     enforceClaims: c.env.GUEST_TOKENS_ENFORCED === "true",
+    isLimited: () => isJoinLimited(c.env.JOIN_LIMITER, event.id, c.req.header("CF-Connecting-IP")),
   });
+  if (!result.ok && result.error === "rate_limited") {
+    c.header("Retry-After", String(JOIN_RETRY_AFTER_SECONDS));
+    return c.json(JOIN_RATE_LIMITED, 429);
+  }
   if (!result.ok) {
     return c.json({ error: "This nickname is already taken in this event.", code: result.error }, 409);
   }

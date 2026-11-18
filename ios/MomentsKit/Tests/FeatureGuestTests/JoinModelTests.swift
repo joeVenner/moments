@@ -123,6 +123,34 @@ private func makeModel(invite: InviteToken? = nil, store: InMemoryEventCredentia
         #expect(service.joinCalls.first?.nickname == "Lea" && service.joinCalls.first?.credentials.guestToken == "gt")
     }
 
+    @Test func busyNetworkAsksToTryTheNameAgainLater() async throws {
+        let (model, service, store) = makeModel()
+        service.eventResults = [.success(publicEvent)]
+        service.joinResults = [
+            .failure(MomentsAPIError.rateLimited),
+            .success(JoinResult(participant: guest, guestToken: "gt_new")),
+        ]
+        await model.start()
+        await model.join(nickname: "Lea")
+        #expect(model.phase == .needsNickname(publicEvent, .busy))
+        #expect(try store.credentials(for: slug)?.guestToken == nil)
+        await model.join(nickname: "Lea")
+        #expect(model.phase == .joined(publicEvent, guest))
+    }
+
+    @Test func returningGuestKeepsTheirIdentityWhenTheNetworkIsBusy() async throws {
+        let saved = StoredEventCredentials(eventID: "e1", guestToken: "gt", participantID: "p1", nickname: "Lea")
+        let store = InMemoryEventCredentialStore([slug: saved])
+        let (model, service, _) = makeModel(store: store)
+        service.eventResults = [.success(publicEvent), .success(publicEvent)]
+        service.joinResults = [.failure(MomentsAPIError.rateLimited), .success(JoinResult(participant: guest, guestToken: nil))]
+        await model.start()
+        #expect(model.phase == .failed(.temporary))
+        #expect(try store.credentials(for: slug) == saved)
+        await model.retry()
+        #expect(model.phase == .joined(publicEvent, guest))
+    }
+
     @Test func returningGuestWithARevokedTokenChoosesANameAgain() async throws {
         let store = InMemoryEventCredentialStore([slug: StoredEventCredentials(eventID: "e1", guestToken: "gt", participantID: "p1", nickname: "Lea")])
         let (model, service, _) = makeModel(store: store)

@@ -31,6 +31,9 @@ public final class JoinModel: Identifiable {
     public enum NicknameProblem: Equatable, Sendable {
         case taken
         case invalid
+        /// Too many joins from this network (a busy venue Wi-Fi); try again
+        /// in a minute.
+        case busy
     }
 
     public enum Failure: Equatable, Sendable {
@@ -120,6 +123,7 @@ public final class JoinModel: Identifiable {
             case let .accepted(result): saveAndShowJoined(event, result)
             case .rejected: phase = .needsNickname(event, .taken)
             case .invalid: phase = .needsNickname(event, .invalid)
+            case .busy: phase = .needsNickname(event, .busy)
             }
         }
     }
@@ -143,7 +147,7 @@ public final class JoinModel: Identifiable {
     // MARK: - Steps
 
     private enum UnlockOutcome { case unlocked, refused(AccessProblem) }
-    private enum ClaimOutcome { case accepted(JoinResult), rejected, invalid }
+    private enum ClaimOutcome { case accepted(JoinResult), rejected, invalid, busy }
 
     private func unlock(_ credential: AccessCredential) async throws -> UnlockOutcome {
         do {
@@ -171,6 +175,9 @@ public final class JoinModel: Identifiable {
         case .rejected, .invalid:
             try store.update(for: slug) { $0.guestToken = nil; $0.participantID = nil; $0.nickname = nil }
             phase = .needsNickname(event, nil)
+        case .busy:
+            // Not a verdict on the stored identity: keep it and retry later.
+            throw MomentsAPIError.rateLimited
         }
     }
 
@@ -187,6 +194,8 @@ public final class JoinModel: Identifiable {
             return .rejected
         } catch MomentsAPIError.invalidRequest {
             return .invalid
+        } catch MomentsAPIError.rateLimited {
+            return .busy
         }
         // Before enforcement a revoked token also gets a token-less 200 for the
         // same participant, so this can't detect revocation until then.

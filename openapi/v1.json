@@ -1431,6 +1431,24 @@
               }
             }
           },
+          "429": {
+            "description": "`rate_limited`: too many joins from this network; retry after `Retry-After` seconds",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": false
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Any other error (415, 5xx, ...)",
             "content": {
