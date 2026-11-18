@@ -1,0 +1,147 @@
+import DesignSystem
+import SwiftUI
+import UploadEngine
+
+/// This event's uploads: what's waiting, sending, done or stuck.
+public struct UploadProgressView: View {
+    let model: UploadProgressModel
+    @Environment(\.dismiss) private var dismiss
+
+    public init(model: UploadProgressModel) {
+        self.model = model
+    }
+
+    public var body: some View {
+        NavigationStack {
+            Group {
+                if model.rows.isEmpty {
+                    Text("Nothing is uploading.")
+                        .font(MomentsFont.body())
+                        .foregroundStyle(MomentsColor.textMuted)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List {
+                        if model.couldNotRemove {
+                            Text("Couldn't remove that from this device. Try again.")
+                                .font(MomentsFont.body(.footnote))
+                                .foregroundStyle(MomentsColor.accent)
+                                .listRowBackground(MomentsColor.surface)
+                        }
+                        ForEach(model.rows) { row in
+                            UploadProgressRow(row: row) {
+                                Task { await model.retry(row.id) }
+                            }
+                            .listRowBackground(MomentsColor.surface)
+                            .swipeActions {
+                                if row.isFinished {
+                                    Button("Remove", role: .destructive) { Task { await model.remove(row.id) } }
+                                }
+                            }
+                        }
+                    }
+                    .scrollContentBackground(.hidden)
+                }
+            }
+            .background(MomentsColor.background)
+            .navigationTitle("Your uploads")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+                if model.doneCount > 0 {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Clear finished") { Task { await model.clearDone() } }
+                    }
+                }
+            }
+        }
+        // Sheets don't inherit the event screen's tint.
+        .tint(MomentsColor.accent)
+    }
+}
+
+struct UploadProgressRow: View {
+    let row: UploadProgressModel.Row
+    let retry: () -> Void
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: row.isVideo ? "video" : "photo")
+                .foregroundStyle(MomentsColor.textMuted)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                if let caption = row.caption, !caption.isEmpty {
+                    Text(caption)
+                        .font(MomentsFont.body())
+                        .foregroundStyle(MomentsColor.text)
+                        .lineLimit(1)
+                }
+                Text(statusText)
+                    .font(MomentsFont.body(.footnote))
+                    .foregroundStyle(isProblem ? MomentsColor.accent : MomentsColor.textMuted)
+                if case let .uploading(fraction) = row.status {
+                    ProgressView(value: fraction)
+                        .tint(MomentsColor.accent)
+                        .accessibilityHidden(true)
+                }
+            }
+            Spacer(minLength: 0)
+            if row.canRetry {
+                Button("Try again", action: retry)
+                    .font(MomentsFont.body(.footnote).bold())
+                    .foregroundStyle(MomentsColor.accent)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+                    .buttonStyle(.borderless)
+            } else if row.status == .done {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(MomentsColor.accent)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.vertical, Spacing.xs)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(accessibilityText))
+        .accessibilityActions {
+            if row.canRetry { Button("Try again", action: retry) }
+        }
+    }
+
+    private var isProblem: Bool {
+        if case .failed = row.status { true } else { false }
+    }
+
+    private var statusText: LocalizedStringResource {
+        switch row.status {
+        case .waiting: "Waiting"
+        case let .uploading(fraction): "Uploading \(Int((fraction * 100).rounded()))%"
+        case .finishing: "Finishing"
+        case .done: "Shared"
+        case let .failed(failure, _): Self.message(failure)
+        }
+    }
+
+    private var accessibilityText: String {
+        let kind = row.isVideo ? String(localized: "Video") : String(localized: "Photo")
+        return [kind, row.caption, String(localized: statusText)].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: ", ")
+    }
+
+    static func message(_ failure: QueuedUpload.Failure) -> LocalizedStringResource {
+        switch failure {
+        case .uploadsClosed: "The event stopped taking uploads."
+        case .eventGone: "This event no longer exists."
+        case .accessLost: "Open the event link again, then try again."
+        case .refused: "This file can't be shared."
+        case .rejected: "The upload didn't arrive intact."
+        case .appTooOld: "Update Moments, then try again."
+        case .unavailable: "Uploads are unavailable right now."
+        case .gaveUp: "Couldn't upload. Check your connection."
+        case .sessionLost: "This upload was lost on the server."
+        case .fileLost: "The file is no longer on this device."
+        }
+    }
+}
