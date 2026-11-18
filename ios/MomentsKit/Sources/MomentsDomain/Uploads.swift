@@ -100,7 +100,7 @@ public struct PartURLBatch: Sendable, Hashable, CustomStringConvertible, CustomD
 }
 
 /// Why the server refused an upload's bytes.
-public enum RejectReason: Sendable, Hashable {
+public enum RejectReason: RawRepresentable, Sendable, Hashable {
     /// A part had the wrong length (often a resume bug: prepare the file anew).
     case partSizeMismatch
     /// The assembled file's size or type differs from the session.
@@ -109,6 +109,16 @@ public enum RejectReason: Sendable, Hashable {
     case signatureMismatch
     /// A reason a newer server added.
     case unknown(String)
+
+    /// The server's string for this reason.
+    public var rawValue: String {
+        switch self {
+        case .partSizeMismatch: "part_size_mismatch"
+        case .objectMismatch: "object_mismatch"
+        case .signatureMismatch: "signature_mismatch"
+        case let .unknown(value): value
+        }
+    }
 
     public init(rawValue: String) {
         switch rawValue {
