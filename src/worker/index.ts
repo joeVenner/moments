@@ -724,6 +724,8 @@ async function getOpenUpload(
     .first<UploadRow>();
 }
 
+const V1_SESSION_ERROR = { error: "this upload is managed by the app API", code: "v1_upload_session" } as const;
+
 async function getUpload(
   db: D1Database,
   eventId: string,
@@ -1255,6 +1257,8 @@ app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
   }
   const upload = await getUpload(c.env.DB, event.id, uploadId, key);
   if (!upload) return c.json({ error: "upload not found" }, 404);
+  // App sessions finish through v1, which checks part sizes and file bytes.
+  if (upload.client_upload_id) return c.json(V1_SESSION_ERROR, 409);
   const existingMoment = await getMomentForUpload(c.env.DB, event.id, key);
   if (existingMoment) {
     if (upload.status !== "completed") {
@@ -1380,6 +1384,8 @@ app.post("/api/events/:slug/moments/multipart/abort", async (c) => {
   if (!registrationKeyBelongsToEvent(event.id, key)) {
     return c.json({ error: "key does not belong to this event" }, 400);
   }
+  const upload = await getUpload(c.env.DB, event.id, uploadId, key);
+  if (upload?.client_upload_id) return c.json(V1_SESSION_ERROR, 409);
 
   try {
     await abortMultipartUpload(c.env, key, uploadId);
@@ -1390,7 +1396,9 @@ app.post("/api/events/:slug/moments/multipart/abort", async (c) => {
     });
     return c.json({ error: err instanceof Error ? err.message : "abort failed" }, 502);
   }
-  await c.env.DB.prepare("UPDATE uploads SET status = 'aborted' WHERE upload_id = ? AND key = ? AND event_id = ?")
+  await c.env.DB.prepare(
+    "UPDATE uploads SET status = 'aborted' WHERE upload_id = ? AND key = ? AND event_id = ? AND client_upload_id IS NULL"
+  )
     .bind(uploadId, key, event.id)
     .run();
   logUpload("info", "multipart_aborted", { eventId: event.id });

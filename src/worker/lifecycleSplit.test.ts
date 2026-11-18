@@ -221,3 +221,27 @@ describe("PATCH /api/admin/events/:id/lifecycle", () => {
     expect(((await res.json()) as { error: string }).error).toContain(message);
   });
 });
+
+describe("app (v1) upload sessions on the web routes", () => {
+  const KEY = "events/ev/moments/abc-a.jpg";
+  beforeEach(() => {
+    seed({ purge_after: FUTURE });
+    sqlite.raw
+      .prepare(
+        `INSERT INTO uploads (id, event_id, uploader_name, key, upload_id, size_bytes, status, client_upload_id, participant_id, part_size)
+         VALUES ('row-1', 'ev', 'Sara', ?, 'mp-1', 10, 'open', '6f1c2a7e-3b4d-4e5f-8a9b-0c1d2e3f4a5b', 'p1', 8388608)`
+      )
+      .run(KEY);
+  });
+
+  it.each(["complete", "abort"])("refuses to %s one, so v1's checks can't be skipped", async (action) => {
+    const res = await call(
+      `/api/events/party/moments/multipart/${action}`,
+      json({ upload_id: "mp-1", key: KEY, uploader_name: "Sara", parts: [{ partNumber: 1, etag: "x" }] })
+    );
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "v1_upload_session" });
+    expect((sqlite.raw.prepare("SELECT status FROM uploads WHERE id = 'row-1'").get() as { status: string }).status).toBe("open");
+  });
+});
+
