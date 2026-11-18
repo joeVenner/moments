@@ -161,6 +161,7 @@ public struct JoinView: View {
         switch problem {
         case .taken: "This nickname is already taken in this event."
         case .invalid: "Enter a name between 1 and 60 characters."
+        case .busy: "Too many people are joining from this network. Try again in a minute."
         }
     }
 
