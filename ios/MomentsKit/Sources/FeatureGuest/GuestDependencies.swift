@@ -9,11 +9,17 @@ public struct UploadDependencies: Sendable {
     public let staging: StagingArea
     public let submitter: any UploadSubmitting
     public let importer: any MediaImporting
+    /// The queue's state for the "Your uploads" screen; nil hides it.
+    public let progress: (any UploadProgressSource)?
 
-    public init(staging: StagingArea, submitter: any UploadSubmitting, importer: any MediaImporting = LiveMediaImporter()) {
+    public init(
+        staging: StagingArea, submitter: any UploadSubmitting, importer: any MediaImporting = LiveMediaImporter(),
+        progress: (any UploadProgressSource)? = nil
+    ) {
         self.staging = staging
         self.submitter = submitter
         self.importer = importer
+        self.progress = progress
     }
 }
 

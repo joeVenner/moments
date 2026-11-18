@@ -177,6 +177,21 @@ public struct QueuedUpload: Codable, Sendable, Hashable, Identifiable {
         retryAt = nil
     }
 
+    /// A failure "Try again" can fix (the others never will).
+    public var canRetryByGuest: Bool {
+        guard case let .failed(failure) = phase else { return false }
+        switch failure {
+        case .uploadsClosed, .eventGone, .refused, .rejected, .sessionLost, .fileLost: return false
+        case .accessLost, .appTooOld, .unavailable, .gaveUp: return true
+        }
+    }
+
+    /// Share of the parts storage has (0 before a session exists).
+    public var uploadedFraction: Double {
+        guard let session, session.partCount > 0 else { return 0 }
+        return min(1, Double(uploaded.count) / Double(session.partCount))
+    }
+
     public var isFinished: Bool {
         switch phase {
         case .done, .failed: true
@@ -281,19 +296,14 @@ public extension QueuedUpload {
     /// session under the same client id (so a finished upload is found, not
     /// repeated). Closed or gone events and refused files stay failed.
     mutating func retryByGuest() {
-        guard case let .failed(failure) = phase else { return }
-        switch failure {
-        case .uploadsClosed, .eventGone, .refused, .rejected, .sessionLost, .fileLost:
-            return
-        case .accessLost, .appTooOld, .unavailable, .gaveUp:
-            attempts = 0
-            rounds = 0
-            retryAt = nil
-            // Without a session (never opened, or confirmed cancelled) a
-            // fresh start is safe, so the restart budget starts over too.
-            if session == nil { restarts = 0 }
-            phase = session == nil ? .prepared : .checking
-        }
+        guard canRetryByGuest else { return }
+        attempts = 0
+        rounds = 0
+        retryAt = nil
+        // Without a session (never opened, or confirmed cancelled) a fresh
+        // start is safe, so the restart budget starts over too.
+        if session == nil { restarts = 0 }
+        phase = session == nil ? .prepared : .checking
     }
 }
 

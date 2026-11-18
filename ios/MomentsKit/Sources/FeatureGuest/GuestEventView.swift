@@ -13,6 +13,8 @@ public struct GuestEventView: View {
     /// The guest left the event (everything deleted, identity forgotten).
     let onLeft: () -> Void
     @State private var leave: LeaveModel?
+    @State private var progress: UploadProgressModel?
+    @State private var isShowingProgress = false
     @State private var isConfirmingLeave = false
     @State private var feed: FeedModel?
     @State private var highlights: HighlightsModel?
@@ -52,7 +54,9 @@ public struct GuestEventView: View {
                     }
                     .tint(MomentsColor.accent)
                     .haptic(.uploadComplete, trigger: sharedBatches)
-                    .safeAreaInset(edge: .top) { if let leave { eventMenu(leave) } }
+                    .safeAreaInset(edge: .top) {
+                        if leave != nil || progress != nil { topBar }
+                    }
                     if feed.phase == .accessLost {
                         Button("Join again", action: rejoin)
                             .buttonStyle(.momentsPrimary)
@@ -138,6 +142,9 @@ public struct GuestEventView: View {
             if let leaver = dependencies.leaver {
                 leave = LeaveModel(slug: join.slug, service: leaver, store: dependencies.store)
             }
+            if let source = dependencies.uploads?.progress {
+                progress = UploadProgressModel(eventSlug: join.slug.value, source: source)
+            }
         }
         .onChange(of: leave?.phase) { _, phase in
             guard phase == .left else { return }
@@ -152,9 +159,46 @@ public struct GuestEventView: View {
 
     // MARK: - Leaving
 
+    private var topBar: some View {
+        HStack(spacing: 0) {
+            Spacer()
+            if let progress { uploadsButton(progress) }
+            if let leave { eventMenu(leave) }
+        }
+        .padding(.horizontal, Spacing.sm)
+    }
+
+    /// Opens "Your uploads"; a count while some are under way, and a mark
+    /// when one needs attention.
+    private func uploadsButton(_ progress: UploadProgressModel) -> some View {
+        Button { isShowingProgress = true } label: {
+            HStack(spacing: Spacing.xs) {
+                Image(systemName: progress.failedCount > 0 ? "exclamationmark.arrow.circlepath" : "arrow.up.circle")
+                if progress.activeCount > 0 {
+                    Text(progress.activeCount, format: .number)
+                        .font(MomentsFont.caption().bold())
+                }
+            }
+            .font(.title3)
+            .foregroundStyle(progress.failedCount > 0 ? MomentsColor.accent : MomentsColor.textMuted)
+            .frame(minWidth: 44, minHeight: 44)
+        }
+        .accessibilityLabel(Text("Your uploads"))
+        .accessibilityValue(Text(uploadsSummary(progress)))
+        // Follows the queue while the event is shown, so the count is live.
+        .task { await progress.observe() }
+        .sheet(isPresented: $isShowingProgress) { UploadProgressView(model: progress) }
+    }
+
+    private func uploadsSummary(_ progress: UploadProgressModel) -> String {
+        var parts: [String] = []
+        if progress.activeCount > 0 { parts.append(String(localized: "\(progress.activeCount) in progress")) }
+        if progress.failedCount > 0 { parts.append(String(localized: "\(progress.failedCount) need attention")) }
+        return parts.joined(separator: ", ")
+    }
+
     private func eventMenu(_ leave: LeaveModel) -> some View {
         HStack {
-            Spacer()
             Menu {
                 Button("Leave event…", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
                     isConfirmingLeave = true
@@ -168,7 +212,6 @@ public struct GuestEventView: View {
             .accessibilityLabel(Text("Event options"))
             .disabled(leave.phase == .leaving)
         }
-        .padding(.horizontal, Spacing.sm)
         .confirmationDialog("Leave this event?", isPresented: $isConfirmingLeave, titleVisibility: .visible) {
             Button("Leave and delete", role: .destructive) { Task { await leave.leave() } }
             Button("Cancel", role: .cancel) {}
