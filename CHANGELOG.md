@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The iOS app can import photos and videos from the photo picker without asking for photo-library access. Each pick is copied into a private, unbacked-up folder, cleaned for upload, and the copy is deleted once it's done (or kept briefly so a failed attempt can be retried). Links, folders and files over 4 GB are refused, and the phone's free space is checked first.
 - The iOS app prepares each video before upload. It is re-encoded to at most 1080p (never enlarged, portrait kept upright) in a format every browser plays, and nothing hidden survives: no location, phone model, editing app or capture date. Videos over 10 minutes, and results over the 512 MB upload limit, are refused; cancelling stops the work and leaves no files behind.
 - The iOS app prepares each photo before upload. It is resized to at most 2560 pixels, turned upright and saved as a JPEG. All hidden information is removed: location, phone model, capture time and the original color profile. Only common photo formats are accepted, and damaged or oversized files are refused.
 - The iOS app can keep sending photos and videos while it is in the background or after the system closes it. After a relaunch it picks up transfers still in progress instead of sending them again. Temporary piece files are deleted when each transfer ends, and leftovers are cleared at launch without touching pieces still being sent.
