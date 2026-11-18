@@ -67,6 +67,11 @@ export interface UploadSessionRow {
   caption: string | null;
   status: "open" | "completed" | "aborted";
   created_at: string;
+  completed_at: string | null;
+  /** Kept on the row so the server can finalize without the guest. */
+  uploader_name: string;
+  /** The moment this session became, once completed. */
+  moment_id: string | null;
 }
 
 export interface StartUploadInput {
@@ -102,8 +107,11 @@ export type StartUploadResult =
   | { kind: "closed" }
   | { kind: "rate_limited" };
 
-const SESSION_COLUMNS = `id, event_id, participant_id, client_upload_id, key, upload_id, content_type,
-  size_bytes, part_size, caption, status, created_at`;
+/** Every session read goes through this (moment_id via the media_url index). */
+const SESSION_SELECT = `SELECT id, event_id, participant_id, client_upload_id, key, upload_id, content_type,
+    size_bytes, part_size, caption, status, created_at, completed_at, uploader_name,
+    (SELECT m.id FROM moments m WHERE m.event_id = uploads.event_id AND m.media_url = '/media/' || uploads.key LIMIT 1) AS moment_id
+  FROM uploads`;
 
 export function partCount(session: Pick<UploadSessionRow, "size_bytes" | "part_size">): number {
   return partCountForSize(session.size_bytes, session.part_size);
@@ -123,7 +131,7 @@ export function validateUploadInput(input: Pick<StartUploadInput, "clientUploadI
 async function findByClientId(db: D1Database, input: StartUploadInput): Promise<UploadSessionRow | null> {
   return db
     .prepare(
-      `SELECT ${SESSION_COLUMNS} FROM uploads
+      `${SESSION_SELECT}
         WHERE event_id = ? AND participant_id = ? AND client_upload_id = ?`
     )
     .bind(input.eventId, input.participantId, input.clientUploadId.toLowerCase())
@@ -207,9 +215,14 @@ export async function startUpload(
     const winner = await findByClientId(db, input);
     return winner ? existingResult(winner, input) : { kind: "too_many_open" };
   }
-  const session = await db.prepare(`SELECT ${SESSION_COLUMNS} FROM uploads WHERE id = ?`).bind(id).first<UploadSessionRow>();
+  const session = await getUploadById(db, id);
   if (!session) throw new Error("upload session missing after insert");
   return { kind: "started", session };
+}
+
+/** A v1 session by row id (server-side callers: finalize, the sweeper). */
+export async function getUploadById(db: D1Database, id: string): Promise<UploadSessionRow | null> {
+  return db.prepare(`${SESSION_SELECT} WHERE id = ? AND client_upload_id IS NOT NULL`).bind(id).first<UploadSessionRow>();
 }
 
 /** The guest's own session in this event, or null (never another guest's). */
@@ -219,7 +232,7 @@ export async function getOwnedUpload(
 ): Promise<UploadSessionRow | null> {
   return db
     .prepare(
-      `SELECT ${SESSION_COLUMNS} FROM uploads
+      `${SESSION_SELECT}
         WHERE id = ? AND event_id = ? AND participant_id = ? AND client_upload_id IS NOT NULL`
     )
     .bind(ref.uploadId, ref.eventId, ref.participantId)
@@ -259,6 +272,15 @@ export async function presignPartUrls(
 export type AbortUploadResult = { kind: "aborted"; session: UploadSessionRow } | { kind: "completed" };
 
 /**
+ * Marks an open session aborted. Returns false when it was no longer open
+ * (finalize won the race), so abort and complete can't both succeed.
+ */
+export async function markAborted(db: D1Database, id: string): Promise<boolean> {
+  const result = await db.prepare("UPDATE uploads SET status = 'aborted' WHERE id = ? AND status = 'open'").bind(id).run();
+  return result.meta.changes > 0;
+}
+
+/**
  * Cancels the guest's session: aborts it in R2 (which also kills its part
  * URLs) and frees its slot under the open-session cap. Idempotent; R2
  * already having no such upload counts as done.
@@ -275,7 +297,11 @@ export async function abortUpload(
     } catch (err) {
       if (!(err instanceof R2RequestError && err.code === "NoSuchUpload")) throw err;
     }
-    await db.prepare("UPDATE uploads SET status = 'aborted' WHERE id = ? AND status = 'open'").bind(session.id).run();
+    if (!(await markAborted(db, session.id))) {
+      // Finalize completed it meanwhile (its multipart was already gone).
+      const current = await getUploadById(db, session.id);
+      if (current?.status === "completed") return { kind: "completed" };
+    }
   }
   return { kind: "aborted", session: { ...session, status: "aborted" } };
 }
