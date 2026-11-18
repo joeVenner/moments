@@ -1,5 +1,6 @@
 import type { MomentData } from "./types";
 import {
+  createUpload,
   saveUpload,
   getUpload,
   getUploadFile,
@@ -225,7 +226,7 @@ async function runResumableUpload(
       loadedBytes: 0,
       lastError: null,
     };
-    await saveUpload(state);
+    await createUpload(state);
   }
 
   // OPFS is the durable source of file bytes for reload/background recovery.

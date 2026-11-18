@@ -55,6 +55,15 @@ export function uploadTokenHeaders(upload: { slug: string; guestToken?: string |
   return token ? { "X-Guest-Token": token } : {};
 }
 
+/** Forgets the guest token (the guest left; the server revoked it). */
+export function clearGuestToken(slug: string): void {
+  try {
+    localStorage.removeItem(guestTokenKey(slug));
+  } catch {
+    // Storage blocked: nothing was saved.
+  }
+}
+
 export function setGuestToken(slug: string, token: string): void {
   try {
     localStorage.setItem(guestTokenKey(slug), token);
