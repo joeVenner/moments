@@ -105,13 +105,14 @@ export async function presignPartUrl(
   env: Env,
   key: string,
   uploadId: string,
-  partNumber: number
+  partNumber: number,
+  expiresInSeconds: number = PART_PRESIGN_EXPIRY_SECONDS
 ): Promise<string> {
   const client = s3Client(env);
   const target = objectUrl(env, key, {
     partNumber: String(partNumber),
     uploadId,
-    "X-Amz-Expires": String(PART_PRESIGN_EXPIRY_SECONDS),
+    "X-Amz-Expires": String(expiresInSeconds),
   });
   const signed = await client.sign(target, { method: "PUT", aws: { signQuery: true } });
   return signed.url;
