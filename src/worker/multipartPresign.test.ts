@@ -162,6 +162,16 @@ describe("listParts", () => {
     expect(await listParts(envWithR2(), KEY, "upl-1")).toEqual([{ partNumber: 1, etag: '"x"', size: 5 }]);
   });
 
+  it("throws on a malformed part instead of reading it as missing", async () => {
+    stubFetch(
+      () =>
+        new Response(
+          `<ListPartsResult><IsTruncated>false</IsTruncated><Part><PartNumber>1</PartNumber><ETag>"x"</ETag><Size>big</Size></Part></ListPartsResult>`
+        )
+    );
+    await expect(listParts(envWithR2(), KEY, "upl-1")).rejects.toThrow("malformed part");
+  });
+
   it("returns an empty list for an upload with no parts yet", async () => {
     stubFetch(() => new Response(`<ListPartsResult><IsTruncated>false</IsTruncated></ListPartsResult>`, { status: 200 }));
     expect(await listParts(envWithR2(), KEY, "upl-empty")).toEqual([]);

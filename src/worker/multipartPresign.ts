@@ -202,6 +202,20 @@ export async function abortMultipartUpload(
   }
 }
 
+const DIGITS = /^\d+$/;
+
+/** One ListParts <Part>; a malformed one throws rather than reading as missing. */
+function parsePart(xml: string): R2Part {
+  const field = (name: string) => new RegExp(`<${name}>([^<]*)</${name}>`).exec(xml)?.[1];
+  const partNumber = field("PartNumber");
+  const etag = field("ETag");
+  const size = field("Size");
+  if (!partNumber || !DIGITS.test(partNumber) || etag === undefined || (size !== undefined && !DIGITS.test(size))) {
+    throw new Error("listParts: malformed part in response");
+  }
+  return size === undefined ? { partNumber: Number(partNumber), etag } : { partNumber: Number(partNumber), etag, size: Number(size) };
+}
+
 /**
  * List already-uploaded parts for a multipart upload — the resume source of
  * truth. Used on reload/revisit to skip parts the client doesn't need to re-PUT.
@@ -228,12 +242,7 @@ export async function listParts(
     const xml = await res.text();
     // Each <Part> holds PartNumber, ETag and Size (any order, maybe LastModified too).
     for (const block of xml.matchAll(/<Part>([\s\S]*?)<\/Part>/g)) {
-      const field = (name: string) => new RegExp(`<${name}>([^<]*)</${name}>`).exec(block[1])?.[1];
-      const partNumber = Number(field("PartNumber"));
-      const etag = field("ETag");
-      if (!Number.isInteger(partNumber) || etag === undefined) continue;
-      const size = field("Size");
-      parts.push(size === undefined ? { partNumber, etag } : { partNumber, etag, size: Number(size) });
+      parts.push(parsePart(block[1]));
     }
     const truncated = /<IsTruncated>true<\/IsTruncated>/.test(xml);
     if (!truncated) break;
