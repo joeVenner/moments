@@ -161,6 +161,9 @@ export function MomentCard({ moment, index = 0, slug }: { moment: PendingMoment;
                     setReacted(result.reacted);
                     setReactionCount(result.reaction_count);
                   })
+                  // Refused (rate limit, or join required) or offline: the heart
+                  // keeps its current state, which is still what the server has.
+                  .catch(() => {})
                   .finally(() => setReacting(false));
               }}
               className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-1 font-mono text-[10px] transition ${reacted ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]" : "text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"}`}
