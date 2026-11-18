@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A "leave and delete what I shared" request for the website (`POST /api/events/:slug/leave`); the button comes next.
 
 - Website: returning guests who never received their guest identity (they joined before it existed, or their join failed on the network) now get it in the background, so their nickname stays theirs once identities are required.
 - iOS: the app is available in French. Every screen, message and VoiceOver label is translated, with proper plural forms. `npm run ios:strings:check` flags any new app text that has no translation.
@@ -65,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Website uploads now belong to the guest who made them. A guest who joined always uploads under their own nickname, whatever name the page sends, so nobody can post photos as someone else. Once guest identities are required, the website refuses uploads from visitors who haven't joined, before anything is stored.
 - Hearts now belong to the guest, not the device. A guest who joined reacts as themselves on the website and in the app: the server decides whose heart it is, so a client can no longer send hearts on another guest's behalf, and a guest sees their hearts on every device where they joined. Leaving an event takes back that guest's hearts. Clients without a guest identity keep their device id only until guest identities are required.
 ### Fixed
+- Leaving an event now deletes everything the guest shared with their identity, including website photos and videos and their thumbnails, not only what came from the app. A guest with an unfinished website upload can now finish leaving.
 
 - Website: going from one event straight to another no longer carries over the first event's screen state ("not found", the PIN prompt, the open tab, an upload or a join in progress).
 - iOS: VoiceOver now says "3 new moments" instead of reading out formatting code when new moments arrive.
