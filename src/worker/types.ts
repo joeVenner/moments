@@ -20,6 +20,8 @@ export interface Env {
   GUEST_READ_LIMITER?: RateLimit;
   /** v1 upload session routes, per guest (new sessions, part URLs, status, abort). */
   UPLOAD_LIMITER?: RateLimit;
+  /** Guest joins (web and v1), per event and IP: each join can mint a guest. */
+  JOIN_LIMITER?: RateLimit;
   // Optional: AI banner generation is inert (returns 501) when unset.
   OPENAI_API_KEY?: string;
   // Optional: presigned large direct-to-R2 uploads are inert (returns 501)

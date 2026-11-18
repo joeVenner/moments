@@ -327,6 +327,7 @@ public struct MomentsClient: MomentsService {
             case let .unauthorized(response): throw Self.error(401, try? response.body.json.code)
             case let .notFound(response): throw Self.error(404, try? response.body.json.code)
             case let .conflict(response): throw Self.error(409, try? response.body.json.code)
+            case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
             case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
             case let .default(status, response): throw Self.error(status, try? response.body.json.code)
             }

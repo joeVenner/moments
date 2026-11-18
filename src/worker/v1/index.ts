@@ -31,6 +31,7 @@ import {
 } from "../feed";
 import { getLeaderboard } from "../leaderboard";
 import { GUEST_TOKEN_HEADER, joinEventAsGuest, resolveGuestSession, toPublicParticipant } from "../guestIdentity";
+import { isJoinLimited, JOIN_RATE_LIMITED, JOIN_RETRY_AFTER_SECONDS } from "../joinLimit";
 import { type ReactionState, setReaction } from "../reactions";
 import { signMomentsForEvent, STREAM_SIGNING_UNAVAILABLE, StreamSigningError } from "../streamSigning";
 import { withGuestMediaGrant, withGuestMediaGrants } from "../mediaAccess";
@@ -188,6 +189,11 @@ const joinEventRoute = createRoute({
     200: json(JoinResponseSchema, "Joined, or re-joined with the current guest token"),
     400: json(ErrorSchema, "Invalid body"),
     409: json(ErrorSchema, "`nickname_taken`: another device owns this nickname"),
+    429: {
+      description: "`rate_limited`: too many joins from this network; retry after `Retry-After` seconds",
+      headers: z.object({ "Retry-After": z.string().optional() }),
+      content: { "application/json": { schema: ErrorSchema } },
+    },
     ...commonErrors,
   },
 });
@@ -484,13 +490,18 @@ v1.openapi(getFeedChangesRoute, async (c) => {
 
 v1.openapi(joinEventRoute, async (c) => {
   const body = c.req.valid("json");
+  const eventId = c.get("event").id;
   const result = await joinEventAsGuest(c.env.DB, {
-    eventId: c.get("event").id,
+    eventId,
     nickname: body.nickname,
     avatarSeed: body.avatar_seed || null,
     presentedToken: c.req.header(GUEST_TOKEN_HEADER) ?? null,
     enforceClaims: c.env.GUEST_TOKENS_ENFORCED === "true",
+    isLimited: () => isJoinLimited(c.env.JOIN_LIMITER, eventId, c.req.header("CF-Connecting-IP")),
   });
+  if (!result.ok && result.error === "rate_limited") {
+    return c.json(JOIN_RATE_LIMITED, 429, { "Retry-After": String(JOIN_RETRY_AFTER_SECONDS) });
+  }
   if (!result.ok) {
     return c.json({ error: "This nickname is already taken in this event.", code: result.error }, 409);
   }

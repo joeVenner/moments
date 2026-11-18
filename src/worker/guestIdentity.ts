@@ -20,11 +20,16 @@ export interface JoinInput {
   presentedToken: string | null;
   /** When true, a claimed nickname can only be joined with its own token. */
   enforceClaims: boolean;
+  /**
+   * Asked only when this join could create or claim a participant (not for a
+   * re-join with the current token): true refuses it with `rate_limited`.
+   */
+  isLimited?: () => Promise<boolean>;
 }
 
 export type JoinResult =
   | { ok: true; participant: ParticipantRow; guestToken: string | null }
-  | { ok: false; error: "nickname_taken" };
+  | { ok: false; error: "nickname_taken" | "rate_limited" };
 
 function base64UrlEncode(bytes: Uint8Array): string {
   let binary = "";
@@ -119,6 +124,7 @@ export async function joinEventAsGuest(db: D1Database, input: JoinInput): Promis
   if (current && current.participant.nickname === input.nickname) {
     return { ok: true, participant: await backfillAvatar(db, current.participant, input.avatarSeed), guestToken: null };
   }
+  if (input.isLimited && (await input.isLimited())) return { ok: false, error: "rate_limited" };
 
   const token = generateGuestToken();
   const [claim, session] = await db.batch([

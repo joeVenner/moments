@@ -301,6 +301,31 @@ describe("POST /events/{slug}/participants", () => {
     }
   );
 
+  it("rate limits joins per event and IP before creating anyone", async () => {
+    const limit = vi.fn().mockResolvedValue({ success: false });
+    extraEnv = { JOIN_LIMITER: { limit } };
+    const res = await join("party", { nickname: "Sara" }, { "CF-Connecting-IP": "198.51.100.7" });
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("60");
+    expect(await res.json()).toMatchObject({ code: "rate_limited" });
+    expect(limit).toHaveBeenCalledWith({ key: "event-1:ip:198.51.100.7" });
+    // Nobody was created: the name is still free once the limit lifts.
+    limit.mockResolvedValue({ success: true });
+    const later = await join("party", { nickname: "Sara" });
+    const token = JoinResponseSchema.parse(await later.json()).guest_token ?? "";
+    expect(token).toMatch(/^gt_/);
+    // A returning guest re-joining with its token mints nothing: never limited.
+    limit.mockClear();
+    limit.mockResolvedValue({ success: false });
+    const again = await join("party", { nickname: "Sara" }, { "X-Guest-Token": token });
+    expect(again.status).toBe(200);
+    expect(limit).not.toHaveBeenCalled();
+    // The same token under a new name would mint a second guest: limited.
+    const other = await join("party", { nickname: "Sam" }, { "X-Guest-Token": token });
+    expect(other.status).toBe(429);
+    expect(limit).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects a non-JSON body", async () => {
     const res = await call("/events/party/participants", { method: "POST", body: "nickname=Sara" });
     expect(res.status).toBe(415);
