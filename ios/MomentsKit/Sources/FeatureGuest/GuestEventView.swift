@@ -15,6 +15,14 @@ public struct GuestEventView: View {
     @State private var leaderboard: LeaderboardModel?
     @State private var thumbnails: ThumbnailLoader?
     @State private var viewerImages: ThumbnailLoader?
+    /// The open upload screen's model (fresh each time it opens).
+    @State private var upload: UploadModel?
+    /// The same model, kept until the sheet's dismissal is handled (the
+    /// sheet binding is already nil by then).
+    @State private var presentedUpload: UploadModel?
+    /// Bumped when a batch is queued (for the haptic, played here because
+    /// the sheet is already closing).
+    @State private var sharedBatches = 0
 
     public init(join: JoinModel, dependencies: GuestDependencies, rejoin: @escaping () -> Void) {
         self.join = join
@@ -29,13 +37,16 @@ public struct GuestEventView: View {
                     if join.hasUnsavedIdentity { unsavedBanner }
                     TabView {
                         FeedView(model: feed, thumbnails: thumbnails, viewerImages: viewerImages)
+                            .safeAreaInset(edge: .bottom, alignment: .trailing) { shareButton(feed) }
                             .tabItem { Label("Moments", systemImage: "square.grid.3x3") }
                         HighlightsView(model: highlights, thumbnails: thumbnails, viewerImages: viewerImages)
+                            .safeAreaInset(edge: .bottom, alignment: .trailing) { shareButton(feed) }
                             .tabItem { Label("Highlights", systemImage: "heart") }
                         LeaderboardView(model: leaderboard)
                             .tabItem { Label("Leaderboard", systemImage: "trophy") }
                     }
                     .tint(MomentsColor.accent)
+                    .haptic(.uploadComplete, trigger: sharedBatches)
                     if feed.phase == .accessLost {
                         Button("Join again", action: rejoin)
                             .buttonStyle(.momentsPrimary)
@@ -47,10 +58,21 @@ public struct GuestEventView: View {
                 JoinView(model: join)
             }
         }
+        // However the sheet closes, unshared picks and files are dropped;
+        // on real dismissal only (a picker shown over it must not count).
+        .sheet(item: $upload, onDismiss: {
+            presentedUpload?.discardAll()
+            presentedUpload = nil
+        }) { model in
+            UploadView(model: model) { sharedBatches += 1 }
+        }
         // The event ended for this guest: every tab stops; lost access also
         // drops cached images of the private event.
         .onChange(of: feed?.phase) { _, phase in
             guard phase == .accessLost || phase == .failed(.eventGone) else { return }
+            // The event ended: an open upload screen closes and drops its picks.
+            upload?.discardAll()
+            upload = nil
             highlights?.end()
             leaderboard?.end()
             guard phase == .accessLost else { return }
@@ -90,6 +112,32 @@ public struct GuestEventView: View {
             leaderboard = leaderboardModel
             feed = feedModel
         }
+    }
+
+    /// Shown at the bottom of a tab (above the tab bar, insetting the
+    /// tab's content) when uploads are available and the event is open.
+    @ViewBuilder private func shareButton(_ feed: FeedModel) -> some View {
+        if let uploads = dependencies.uploads, feed.phase != .accessLost, feed.phase != .failed(.eventGone) {
+            shareButton(uploads)
+        }
+    }
+
+    private func shareButton(_ uploads: UploadDependencies) -> some View {
+        Button {
+            let model = UploadModel(
+                eventSlug: join.slug.value, staging: uploads.staging, importer: uploads.importer, submitter: uploads.submitter
+            )
+            presentedUpload = model
+            upload = model
+        } label: {
+            Image(systemName: "plus")
+                .font(.title2.bold())
+                .foregroundStyle(MomentsColor.onAccent)
+                .frame(width: 56, height: 56)
+                .background(MomentsColor.accent, in: Circle())
+        }
+        .accessibilityLabel(Text("Share photos and videos"))
+        .padding(Spacing.md)
     }
 
     private var unsavedBanner: some View {

@@ -55,8 +55,14 @@ let package = Package(
         .testTarget(name: "AppRoutingTests", dependencies: ["AppRouting", "MomentsDomain"]),
         .target(name: "CredentialStore", dependencies: ["MomentsDomain"]),
         .testTarget(name: "CredentialStoreTests", dependencies: ["CredentialStore", "MomentsDomain"]),
-        .target(name: "FeatureGuest", dependencies: ["MomentsAPI", "MomentsDomain", "CredentialStore", "DesignSystem"]),
-        .testTarget(name: "FeatureGuestTests", dependencies: ["FeatureGuest", "MomentsAPI", "MomentsDomain", "CredentialStore"]),
+        .target(
+            name: "FeatureGuest",
+            dependencies: ["MomentsAPI", "MomentsDomain", "CredentialStore", "DesignSystem", "UploadEngine", "MediaPipeline"]
+        ),
+        .testTarget(
+            name: "FeatureGuestTests",
+            dependencies: ["FeatureGuest", "MomentsAPI", "MomentsDomain", "CredentialStore", "UploadEngine", "MediaPipeline"]
+        ),
         .target(name: "UploadEngine", dependencies: ["MomentsAPI", "MomentsDomain"]),
         .testTarget(name: "UploadEngineTests", dependencies: ["UploadEngine", "MomentsAPI", "MomentsDomain"]),
         .target(name: "MediaPipeline"),
