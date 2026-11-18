@@ -33,7 +33,7 @@ import { getLeaderboard } from "../leaderboard";
 import { GUEST_TOKEN_HEADER, joinEventAsGuest, resolveGuestSession, toPublicParticipant } from "../guestIdentity";
 import { isJoinLimited, JOIN_RATE_LIMITED, JOIN_RETRY_AFTER_SECONDS } from "../joinLimit";
 import { leaveEvent } from "../guestLeave";
-import { gateReaction, type ReactionState, setReaction } from "../reactions";
+import { gateReaction, type ReactionState, setReaction, viewerReactorId } from "../reactions";
 import { signMomentsForEvent, STREAM_SIGNING_UNAVAILABLE, StreamSigningError } from "../streamSigning";
 import { withGuestMediaGrant, withGuestMediaGrants } from "../mediaAccess";
 import type { Env, EventRow } from "../types";
@@ -63,6 +63,7 @@ import {
   UploadSessionSchema,
   UploadStatusSchema,
   ReactionHeadersSchema,
+  ViewerHeadersSchema,
   ReactionRequestSchema,
   ReactionSchema,
   JoinRequestSchema,
@@ -129,7 +130,7 @@ const getFeedRoute = createRoute({
   path: "/events/{slug}/feed",
   operationId: "getFeed",
   tags: ["Guest"],
-  request: { params: SlugParamSchema, query: FeedQuerySchema, headers: EventHeadersSchema },
+  request: { params: SlugParamSchema, query: FeedQuerySchema, headers: ViewerHeadersSchema },
   responses: {
     200: json(FeedPageSchema, "Newest-first page of visible moments"),
     400: json(ErrorSchema, "Invalid query"),
@@ -142,7 +143,7 @@ const getHighlightsRoute = createRoute({
   path: "/events/{slug}/highlights",
   operationId: "getHighlights",
   tags: ["Guest"],
-  request: { params: SlugParamSchema, query: HighlightsQuerySchema, headers: EventHeadersSchema },
+  request: { params: SlugParamSchema, query: HighlightsQuerySchema, headers: ViewerHeadersSchema },
   responses: {
     200: json(HighlightsSchema, "The event's most-hearted visible moments"),
     400: json(ErrorSchema, "Invalid query"),
@@ -169,7 +170,7 @@ const getFeedChangesRoute = createRoute({
   path: "/events/{slug}/feed/changes",
   operationId: "getFeedChanges",
   tags: ["Guest"],
-  request: { params: SlugParamSchema, query: ChangesQuerySchema, headers: EventHeadersSchema },
+  request: { params: SlugParamSchema, query: ChangesQuerySchema, headers: ViewerHeadersSchema },
   responses: {
     200: json(FeedChangesSchema, "Everything that changed after `since`, oldest first"),
     400: json(ErrorSchema, "Invalid query"),
@@ -201,8 +202,8 @@ const joinEventRoute = createRoute({
 });
 
 const reactionResponses = {
-  200: json(ReactionSchema, "This device's reaction state and the moment's total"),
-  400: json(ErrorSchema, "Invalid reactor id"),
+  200: json(ReactionSchema, "The guest's reaction state and the moment's total"),
+  400: json(ErrorSchema, "Invalid reactor id, or none sent without X-Guest-Token"),
   403: json(ErrorSchema, "`guest_required`: join the event first (once guest tokens are enforced)"),
   429: json(ErrorSchema, "`rate_limited`: too many reactions from this device; slow down"),
   ...commonErrors,
@@ -468,7 +469,11 @@ v1.openapi(getFeedRoute, async (c) => {
     eventId: c.get("event").id,
     before: parseCursor(query.before),
     limit: clampLimit(query.limit, FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT),
-    reactorId: query.reactor_id ?? "",
+    reactorId: await viewerReactorId(c.env, {
+      eventId: c.get("event").id,
+      token: c.req.header(GUEST_TOKEN_HEADER),
+      clientReactorId: query.reactor_id,
+    }),
   });
   c.header("Cache-Control", "no-store");
   return c.json({ ...page, moments: await signFeedMedia(c.env, c.get("event"), page.moments) }, 200);
@@ -492,7 +497,11 @@ v1.openapi(getHighlightsRoute, async (c) => {
   const moments = await getHighlights(c.env.DB, {
     eventId: c.get("event").id,
     limit: clampLimit(query.limit, HIGHLIGHTS_DEFAULT_LIMIT, HIGHLIGHTS_MAX_LIMIT),
-    reactorId: query.reactor_id ?? "",
+    reactorId: await viewerReactorId(c.env, {
+      eventId: c.get("event").id,
+      token: c.req.header(GUEST_TOKEN_HEADER),
+      clientReactorId: query.reactor_id,
+    }),
   });
   c.header("Cache-Control", "no-store");
   return c.json({ moments: await signFeedMedia(c.env, c.get("event"), moments) }, 200);
@@ -510,7 +519,11 @@ v1.openapi(getFeedChangesRoute, async (c) => {
     eventId: c.get("event").id,
     since: Number(query.since),
     limit: clampLimit(query.limit, CHANGES_MAX_LIMIT, CHANGES_MAX_LIMIT),
-    reactorId: query.reactor_id ?? "",
+    reactorId: await viewerReactorId(c.env, {
+      eventId: c.get("event").id,
+      token: c.req.header(GUEST_TOKEN_HEADER),
+      clientReactorId: query.reactor_id,
+    }),
   });
   c.header("Cache-Control", "no-store");
   return c.json({ ...changes, upserts: await signFeedMedia(c.env, c.get("event"), changes.upserts) }, 200);
@@ -539,7 +552,7 @@ v1.openapi(joinEventRoute, async (c) => {
 
 type ReactionOutcome =
   | { ok: true; state: ReactionState }
-  | { ok: false; status: 403 | 404 | 429; body: { error: string; code: string } };
+  | { ok: false; status: 400 | 403 | 404 | 429; body: { error: string; code: string } };
 
 /**
  * Shared by add and remove: guest check (when enforced), rate limit, then
@@ -549,7 +562,7 @@ type ReactionOutcome =
 async function applyReaction(
   c: Context<V1Env>,
   momentId: string,
-  reactorId: string,
+  reactorId: string | undefined,
   reacted: boolean
 ): Promise<ReactionOutcome> {
   const event = c.get("event");

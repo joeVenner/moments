@@ -13,6 +13,7 @@
  * response still authenticates until the end.
  */
 import { abortUpload, getUploadById, type MultipartBackend } from "./uploadSessions";
+import { guestReactorId } from "./reactions";
 
 /** Each abort is one R2 subrequest. */
 export const LEAVE_ABORT_BATCH = 10;
@@ -85,14 +86,9 @@ export async function leaveEvent(
   const [, , , removed] = await db.batch([
     db.prepare(`DELETE FROM uploads WHERE event_id = ? AND participant_id = ? AND ${nothingLeft}`)
       .bind(eventId, participantId, ...guard),
-    // The guest's hearts: those under the reactor ids their sessions bound
-    // (0017). Hearts never sent with the token aren't linked to them, so stay.
-    db.prepare(
-      `DELETE FROM moment_reactions WHERE event_id = ? AND reactor_id IN (
-         SELECT reactor_id FROM guest_sessions
-         WHERE event_id = ? AND participant_id = ? AND reactor_id IS NOT NULL
-       ) AND ${nothingLeft}`
-    ).bind(eventId, eventId, participantId, ...guard),
+    // The guest's hearts (made with their token; see reactions.ts).
+    db.prepare(`DELETE FROM moment_reactions WHERE event_id = ? AND reactor_id = ? AND ${nothingLeft}`)
+      .bind(eventId, guestReactorId(participantId), ...guard),
     db.prepare(`DELETE FROM guest_sessions WHERE event_id = ? AND participant_id = ? AND ${nothingLeft}`)
       .bind(eventId, participantId, ...guard),
     db.prepare(`DELETE FROM participants WHERE event_id = ? AND id = ? AND ${nothingLeft}`)

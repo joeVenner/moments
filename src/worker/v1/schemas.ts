@@ -117,7 +117,9 @@ export const HighlightsSchema = z
 
 export const HighlightsQuerySchema = z.object({
   limit: limit.optional(),
-  reactor_id: z.string().max(100).optional(),
+  reactor_id: z.string().max(100).optional().openapi({
+    description: "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's.",
+  }),
 });
 
 export const LeaderboardEntrySchema = z
@@ -146,9 +148,13 @@ export const MomentParamSchema = SlugParamSchema.extend({
 const reactorId = z
   .string()
   .regex(REACTOR_ID_PATTERN)
-  .openapi({ description: "This device's reactor id for the event (8-100 letters, digits or dashes)" });
+  .openapi({
+    description:
+      "Deprecated: ignored when X-Guest-Token is sent (the server reacts as the token's guest). " +
+      "Required only for tokenless requests, which GUEST_TOKENS_ENFORCED refuses.",
+  });
 
-export const ReactionRequestSchema = z.object({ reactor_id: reactorId }).openapi("ReactionRequest");
+export const ReactionRequestSchema = z.object({ reactor_id: reactorId.optional() }).openapi("ReactionRequest");
 
 export const ReactionSchema = z
   .object({
@@ -160,13 +166,17 @@ export const ReactionSchema = z
 export const FeedQuerySchema = z.object({
   before: cursor.optional(),
   limit: limit.optional(),
-  reactor_id: z.string().max(100).optional(),
+  reactor_id: z.string().max(100).optional().openapi({
+    description: "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's.",
+  }),
 });
 
 export const ChangesQuerySchema = z.object({
   since: cursor,
   limit: limit.optional(),
-  reactor_id: z.string().max(100).optional(),
+  reactor_id: z.string().max(100).optional().openapi({
+    description: "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's.",
+  }),
 });
 
 export const JoinRequestSchema = z
@@ -226,6 +236,11 @@ const optionalHeader = (description: string) => z.string().max(512).optional().o
 
 export const EventHeadersSchema = z.object({
   "x-event-access": optionalHeader("Access grant; required for private events only"),
+});
+
+/** Reads that report `reacted`: it is the token's guest's heart. */
+export const ViewerHeadersSchema = EventHeadersSchema.extend({
+  "x-guest-token": optionalHeader("This device's guest token; `reacted` reports this guest's hearts"),
 });
 
 export const ReactionHeadersSchema = EventHeadersSchema.extend({
