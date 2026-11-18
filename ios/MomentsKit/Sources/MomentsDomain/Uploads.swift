@@ -100,7 +100,7 @@ public struct PartURLBatch: Sendable, Hashable, CustomStringConvertible, CustomD
 }
 
 /// Why the server refused an upload's bytes.
-public enum RejectReason: Sendable, Hashable {
+public enum RejectReason: RawRepresentable, Sendable, Hashable {
     /// A part had the wrong length (often a resume bug: prepare the file anew).
     case partSizeMismatch
     /// The assembled file's size or type differs from the session.
