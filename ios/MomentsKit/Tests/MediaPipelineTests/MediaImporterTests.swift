@@ -18,6 +18,13 @@ private func writeJPEG(_ width: Int, _ height: Int, to url: URL) throws {
     try #require(CGImageDestinationFinalize(destination))
 }
 
+private func thumbnailPixels(_ url: URL) throws -> (width: Int, height: Int) {
+    let source = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+    let properties = try #require(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
+    #expect(CGImageSourceGetType(source) as String? == UTType.jpeg.identifier)
+    return (try #require(properties[kCGImagePropertyPixelWidth] as? Int), try #require(properties[kCGImagePropertyPixelHeight] as? Int))
+}
+
 struct MediaImporterTests {
     @Test func preparesAPhotoAndDeletesThePickedCopy() async throws {
         let folder = try VideoFolder()
@@ -31,8 +38,11 @@ struct MediaImporterTests {
         let media = try await MediaImporter.importMedia(PickedMedia(url: picked, kind: .photo), into: item)
         #expect(media.name == MediaImporter.photoName && media.contentType == "image/jpeg")
         #expect(media.width == 2560 && media.height == 1707 && media.duration == nil)
-        let files = try FileManager.default.contentsOfDirectory(atPath: item.path())
-        #expect(files == [MediaImporter.photoName])
+        let files = try FileManager.default.contentsOfDirectory(atPath: item.path()).sorted()
+        #expect(files == [MediaImporter.photoName, MediaImporter.thumbnailName])
+        let thumbnail = try #require(media.thumbnail)
+        #expect(thumbnail.name == MediaImporter.thumbnailName)
+        #expect(thumbnail.byteCount == Int64(try item.appending(path: thumbnail.name).resourceValues(forKeys: [.fileSizeKey]).fileSize ?? -1))
         #expect(media.byteCount == Int64(try item.appending(path: media.name).resourceValues(forKeys: [.fileSizeKey]).fileSize ?? -1))
         #expect(!FileManager.default.fileExists(atPath: picked.path()))
     }
@@ -46,6 +56,12 @@ struct MediaImporterTests {
         #expect(media.width == 640 && media.height == 360)
         #expect(abs((media.duration ?? 0) - 1) < 0.2)
         #expect(!FileManager.default.fileExists(atPath: picked.path()))
+        let thumbnail = try #require(media.thumbnail)
+        let size = try thumbnailPixels(item.appending(path: thumbnail.name))
+        #expect(size.width == 400 && size.height == 225)
+        // The video's own metadata (VideoPreparer strips it too) never reaches the frame.
+        let data = try Data(contentsOf: item.appending(path: thumbnail.name))
+        #expect(data.range(of: Data("<x:xmpmeta".utf8)) == nil)
     }
 
     @Test func replacesTheFileOfAnEarlierAttempt() async throws {
@@ -53,10 +69,13 @@ struct MediaImporterTests {
         let item = folder.url.appending(path: "item")
         try FileManager.default.createDirectory(at: item, withIntermediateDirectories: true)
         try Data("old".utf8).write(to: item.appending(path: MediaImporter.photoName))
+        try Data("old thumb".utf8).write(to: item.appending(path: MediaImporter.thumbnailName))
         let picked = folder.url.appending(path: "picked.jpg")
         try writeJPEG(100, 100, to: picked)
         let media = try await MediaImporter.importMedia(PickedMedia(url: picked, kind: .photo), into: item)
         #expect(media.width == 100)
+        // The earlier thumbnail is replaced by this file's.
+        #expect(try thumbnailPixels(item.appending(path: try #require(media.thumbnail).name)).width == 100)
     }
 
     @Test func mapsProblemsAndAlwaysDeletesThePickedCopy() async throws {
