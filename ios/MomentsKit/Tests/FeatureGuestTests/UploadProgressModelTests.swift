@@ -173,3 +173,102 @@ private func settle(_ model: UploadProgressModel, until condition: () -> Bool) a
         #expect(row(.failed(.gaveUp, canRetry: true)).fraction == 0)
     }
 }
+
+@Suite @MainActor struct UploadProgressWiFiTests {
+    private func upload(_ type: String, size: Int64) throws -> QueuedUpload {
+        QueuedUpload(
+            eventSlug: "party", file: try #require(.init(relativePath: "staged/x", size: size, contentType: type)),
+            caption: nil, createdAt: Date(timeIntervalSince1970: 0)
+        )
+    }
+
+    @Test func largeVideosWaitForWiFiWhileOnMobileData() async throws {
+        let video = try upload("video/mp4", size: CellularPolicy.largeVideoBytes)
+        let clip = try upload("video/mp4", size: CellularPolicy.largeVideoBytes - 1)
+        let source = FakeProgressSource()
+        let (network, path) = AsyncStream.makeStream(of: Bool.self)
+        let model = UploadProgressModel(eventSlug: "party", source: source, network: { network }) { true }
+        let observing = Task { await model.observe() }
+        await settle(model) { false }
+        await source.push([video, clip])
+        await settle(model) { model.rows.count == 2 }
+        #expect(model.rows.map(\.status) == [.waiting, .waiting])
+
+        path.yield(true)
+        await settle(model) { model.rows.first?.status == .waitingForWiFi }
+        #expect(model.rows.map(\.status) == [.waitingForWiFi, .waiting])
+        #expect(model.activeCount == 2)
+
+        path.yield(false)
+        await settle(model) { model.rows.first?.status == .waiting }
+        #expect(model.rows.map(\.status) == [.waiting, .waiting])
+
+        // The queue ending stops the network watch too.
+        await source.finish()
+        await observing.value
+    }
+
+    @Test func nothingWaitsWhenTheGuestAllowsMobileData() async throws {
+        let video = try upload("video/mp4", size: CellularPolicy.largeVideoBytes * 2)
+        let source = FakeProgressSource()
+        let (network, path) = AsyncStream.makeStream(of: Bool.self)
+        let model = UploadProgressModel(eventSlug: "party", source: source, network: { network }) { false }
+        let observing = Task { await model.observe() }
+        await settle(model) { false }
+        path.yield(true)
+        await source.push([video])
+        await settle(model) { model.rows.count == 1 }
+        #expect(model.rows.map(\.status) == [.waiting])
+        await source.finish()
+        await observing.value
+    }
+
+    @Test func eachObservationWatchesTheNetworkAfresh() async throws {
+        let video = try upload("video/mp4", size: CellularPolicy.largeVideoBytes)
+        let watches = Watches()
+        let source = FakeProgressSource()
+        let model = UploadProgressModel(eventSlug: "party", source: source, network: { watches.start() }) { true }
+        // Like the sheet's .task ending and starting again.
+        for (round, isExpensive) in [(1, true), (2, false)] {
+            let observing = Task { await model.observe() }
+            await settle(model) { false }
+            await source.push([video])
+            watches.latest?.yield(isExpensive)
+            let expected: UploadProgressModel.Status = isExpensive ? .waitingForWiFi : .waiting
+            await settle(model) { model.rows.first?.status == expected }
+            #expect(model.rows.first?.status == expected, "round \(round)")
+            await source.finish()
+            await observing.value
+        }
+        #expect(watches.count == 2)
+    }
+
+    @Test func aFinishedOrCheckedUploadIsNeverHeld() throws {
+        let video = try upload("video/mp4", size: CellularPolicy.largeVideoBytes)
+        let lost = applyingFileLost(video)
+        #expect(UploadProgressModel.row(lost, isHoldingLargeVideos: true).status == .failed(.fileLost, canRetry: false))
+        #expect(UploadProgressModel.row(video, isHoldingLargeVideos: true).status == .waitingForWiFi)
+        #expect(UploadProgressModel.row(video, isHoldingLargeVideos: false).status == .waiting)
+    }
+
+    private func applyingFileLost(_ item: QueuedUpload) -> QueuedUpload {
+        var copy = item
+        copy.apply(.fileLost(clientUploadID: item.clientUploadID), now: Date(timeIntervalSince1970: 0))
+        return copy
+    }
+}
+
+/// Network watches started by a model, newest last.
+private final class Watches: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuations: [AsyncStream<Bool>.Continuation] = []
+
+    var count: Int { lock.withLock { continuations.count } }
+    var latest: AsyncStream<Bool>.Continuation? { lock.withLock { continuations.last } }
+
+    func start() -> AsyncStream<Bool> {
+        let (stream, continuation) = AsyncStream.makeStream(of: Bool.self)
+        lock.withLock { continuations.append(continuation) }
+        return stream
+    }
+}

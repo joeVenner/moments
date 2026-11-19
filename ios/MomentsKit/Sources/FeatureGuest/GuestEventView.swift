@@ -167,7 +167,7 @@ public struct GuestEventView: View {
                 )
             }
             if let source = dependencies.uploads?.progress {
-                progress = UploadProgressModel(eventSlug: join.slug.value, source: source)
+                progress = UploadProgressModel.live(eventSlug: join.slug.value, source: source)
             }
         }
         .onChange(of: leave?.phase) { _, phase in
