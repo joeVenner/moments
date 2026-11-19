@@ -59,13 +59,14 @@ describe("openapi/v1.json", () => {
       for (const [key, value] of Object.entries(record)) walk(value, `${path}.${key}`);
     };
     walk(v1.getOpenAPI31Document(OPENAPI_CONFIG).components?.schemas, "schemas");
-    // ModerationRequest.status is only sent by the app, never decoded. AdminMoment's
+    // ModerationRequest.status and UpdateEventAccessRequest.mode are only sent by the app, never decoded. AdminMoment's
     // must be re-validated by the host mapper when the app starts decoding it.
     expect(found.sort()).toEqual([
       "schemas.AdminMoment.properties.moderation_status",
       "schemas.Event.properties.access_mode",
       "schemas.Media.properties.kind",
       "schemas.ModerationRequest.properties.status",
+      "schemas.UpdateEventAccessRequest.properties.mode",
     ]);
   });
 

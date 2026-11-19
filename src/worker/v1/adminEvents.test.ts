@@ -368,3 +368,158 @@ describe("PATCH /api/v1/admin/events/{id}", () => {
     }
   );
 });
+
+async function patchAuthed(path: string, body: unknown) {
+  return call(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}` },
+    body: JSON.stringify(body),
+  });
+}
+
+function accessRow(id: string) {
+  return sqlite.raw
+    .prepare("SELECT access_mode, access_pin_hash, access_pin_salt, invite_token, access_version FROM events WHERE id = ?")
+    .get(id) as { access_mode: string; access_pin_hash: string | null; access_pin_salt: string | null; invite_token: string; access_version: number };
+}
+
+describe("PATCH /api/v1/admin/events/{id}/access", () => {
+  it("needs a host session", async () => {
+    insertEvent("e", "2026-01-01 10:00:00");
+    const response = await call("/admin/events/e/access", {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "public" }),
+    });
+    expect(response.status).toBe(401);
+  });
+
+  it("makes an event private with a new PIN: revokes grants, replaces the invite, never echoes the PIN", async () => {
+    insertEvent("e", "2026-01-01 10:00:00");
+    const before = accessRow("e");
+    const response = await patchAuthed("/admin/events/e/access", { mode: "private", pin: " 482913 " });
+    expect(response.status).toBe(200);
+    const raw = await response.text();
+    expect(raw).not.toMatch(/482913|access_pin|access_version|pin_salt/);
+    const detail = AdminEventDetailSchema.parse(JSON.parse(raw));
+    expect(detail.event.access_mode).toBe("private");
+    const after = accessRow("e");
+    expect(after.access_version).toBe(before.access_version + 1);
+    expect(after.invite_token).not.toBe(before.invite_token);
+    expect(after.access_pin_hash).not.toBe("pin-hash");
+    expect(after.access_pin_salt).toHaveLength(32);
+    expect(detail.share.invite_url).toContain(after.invite_token);
+  });
+
+  it("keeps the PIN and invite when re-saving private without one", async () => {
+    insertEvent("e", "2026-01-01 10:00:00", "private");
+    const before = accessRow("e");
+    const response = await patchAuthed("/admin/events/e/access", { mode: "private" });
+    expect(response.status).toBe(200);
+    expect(accessRow("e")).toEqual(before);
+  });
+
+  it("makes an event public and revokes grants when it goes private again", async () => {
+    insertEvent("e", "2026-01-01 10:00:00", "private");
+    const before = accessRow("e");
+    const publicDetail = AdminEventDetailSchema.parse(await (await patchAuthed("/admin/events/e/access", { mode: "public" })).json());
+    expect(publicDetail.event.access_mode).toBe("public");
+    expect(publicDetail.share.invite_url).toBeNull();
+    await patchAuthed("/admin/events/e/access", { mode: "private" });
+    expect(accessRow("e").access_version).toBe(before.access_version + 1);
+  });
+
+  it("refuses private with no PIN at all", async () => {
+    insertEvent("e", "2026-01-01 10:00:00");
+    sqlite.raw.prepare("UPDATE events SET access_pin_hash = NULL WHERE id = 'e'").run();
+    const response = await patchAuthed("/admin/events/e/access", { mode: "private" });
+    expect(response.status).toBe(400);
+    expect(ErrorSchema.parse(await response.json())).toEqual({ error: "a PIN is required for private events", code: "invalid_request" });
+    expect(accessRow("e").access_mode).toBe("public");
+  });
+
+  it.each([[{ mode: "secret" }], [{ mode: "private", pin: "123" }], [{ mode: "private", pin: "1".repeat(21) }], [{ mode: "public", invite_token: "x" }], [{}], [{ mode: "private", pin: "   " }]])(
+    "refuses %j",
+    async (body) => {
+      insertEvent("e", "2026-01-01 10:00:00");
+      const before = accessRow("e");
+      const response = await patchAuthed("/admin/events/e/access", body);
+      expect(response.status).toBe(400);
+      expect(accessRow("e")).toEqual(before);
+    }
+  );
+
+  it("answers event_not_found for an unknown id", async () => {
+    const response = await patchAuthed("/admin/events/missing/access", { mode: "public" });
+    expect(response.status).toBe(404);
+    expect(ErrorSchema.parse(await response.json()).code).toBe("event_not_found");
+  });
+});
+
+describe("PATCH /api/v1/admin/events/{id}/lifecycle", () => {
+  function datesRow(id: string) {
+    return sqlite.raw.prepare("SELECT expires_at, uploads_close_at, purge_after, archived_at FROM events WHERE id = ?").get(id);
+  }
+
+  it("sets split dates, keeps the one not sent, and un-archives", async () => {
+    insertEvent("e", "2026-01-01 10:00:00");
+    sqlite.raw.prepare("UPDATE events SET purge_after = '2099-06-01 00:00:00', archived_at = '2026-02-01 00:00:00' WHERE id = 'e'").run();
+    const response = await patchAuthed("/admin/events/e/lifecycle", { uploads_close_at: "2099-01-01T12:00:00+02:00" });
+    expect(response.status).toBe(200);
+    AdminEventDetailSchema.parse(await response.json());
+    expect(datesRow("e")).toEqual({
+      expires_at: null, uploads_close_at: "2099-01-01 10:00:00", purge_after: "2099-06-01 00:00:00", archived_at: null,
+    });
+  });
+
+  it("closes uploads now with a past date", async () => {
+    insertEvent("e", "2026-01-01 10:00:00");
+    const response = await patchAuthed("/admin/events/e/lifecycle", { uploads_close_at: "2020-01-01T00:00:00Z" });
+    expect(response.status).toBe(200);
+    expect(AdminEventDetailSchema.parse(await response.json()).event.uploads_open).toBe(false);
+  });
+
+  it("makes expires_at alone the single end date again", async () => {
+    insertEvent("e", "2026-01-01 10:00:00");
+    sqlite.raw.prepare("UPDATE events SET uploads_close_at = '2099-01-01 00:00:00', purge_after = '2099-02-01 00:00:00' WHERE id = 'e'").run();
+    await patchAuthed("/admin/events/e/lifecycle", { expires_at: "2099-03-01T00:00:00Z" });
+    expect(datesRow("e")).toMatchObject({ expires_at: "2099-03-01 00:00:00", uploads_close_at: null, purge_after: null });
+  });
+
+  it("clears a split date with null and keeps the others when two are sent", async () => {
+    insertEvent("e", "2026-01-01 10:00:00");
+    sqlite.raw.prepare("UPDATE events SET uploads_close_at = '2099-01-01 00:00:00', purge_after = '2099-02-01 00:00:00' WHERE id = 'e'").run();
+    await patchAuthed("/admin/events/e/lifecycle", { purge_after: null });
+    expect(datesRow("e")).toMatchObject({ uploads_close_at: "2099-01-01 00:00:00", purge_after: null });
+    await patchAuthed("/admin/events/e/lifecycle", { expires_at: "2099-05-01T00:00:00Z", purge_after: "2099-06-01T00:00:00Z" });
+    expect(datesRow("e")).toMatchObject({
+      expires_at: "2099-05-01 00:00:00", uploads_close_at: "2099-01-01 00:00:00", purge_after: "2099-06-01 00:00:00",
+    });
+  });
+
+  it("refuses uploads closing after deletion", async () => {
+    insertEvent("e", "2026-01-01 10:00:00");
+    const response = await patchAuthed("/admin/events/e/lifecycle", {
+      uploads_close_at: "2099-03-01T00:00:00Z", purge_after: "2099-02-01T00:00:00Z",
+    });
+    expect(response.status).toBe(400);
+    expect(ErrorSchema.parse(await response.json()).error).toBe("uploads must close before the event is purged");
+  });
+
+  it.each([
+    [{}],
+    [{ purge_after: "2020-01-01T00:00:00Z" }],
+    [{ expires_at: "2020-01-01T00:00:00Z" }],
+    [{ uploads_close_at: "2099-01-01T00:00:00" }],
+    [{ archive_now: true }],
+  ])("refuses %j and changes nothing", async (body) => {
+    insertEvent("e", "2026-01-01 10:00:00");
+    const before = datesRow("e");
+    const response = await patchAuthed("/admin/events/e/lifecycle", body);
+    expect(response.status).toBe(400);
+    expect(datesRow("e")).toEqual(before);
+  });
+
+  it("answers event_not_found for an unknown id", async () => {
+    const response = await patchAuthed("/admin/events/missing/lifecycle", { purge_after: null });
+    expect(response.status).toBe(404);
+  });
+});

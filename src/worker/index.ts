@@ -4,6 +4,7 @@ import { getEventAnalytics } from "./adminAnalytics";
 import { deleteAdminMoment } from "./adminModeration";
 import type { Env, EventRow, MomentRow, LeaderboardEntry, UploadRow } from "./types";
 import { insertEvent, normalizeDate } from "./eventWrites";
+import { lifecycleChangeFrom, type SettingsRefusal, updateEventAccess, updateEventLifecycle } from "./eventSettings";
 import { putMedia, pointsForContentType, isAllowedContentType, MAX_UPLOAD_BYTES, momentKey } from "./storage";
 import {
   isR2Configured,
@@ -44,7 +45,6 @@ import {
   StreamSigningError,
   tokenExpiry,
   streamUploadMetadata,
-  syncStreamSigning,
 } from "./streamSigning";
 import {
   THUMBNAIL_CONTENT_TYPE,
@@ -84,11 +84,7 @@ import { gateReaction, GUEST_REQUIRED, REACTOR_ID_PATTERN, setReaction, viewerRe
 import { finishAccess, guestMoment, resolveWebUploader, uploadAccess, uploadRefusal } from "./webUploader";
 import { cleanWebCaption } from "./captionText";
 import {
-  MAX_PIN_LENGTH,
-  MIN_PIN_LENGTH,
   grantEventAccess,
-  hashEventPin,
-  randomAccessToken,
   verifyEventAccess,
 } from "./eventAccess";
 import {
@@ -352,49 +348,29 @@ async function unlockResponse(
   };
 }
 
+/** The web's answer for a refused settings change (its messages are unchanged). */
+function webSettingsRefusal(c: Context<{ Bindings: Env }>, refusal: SettingsRefusal) {
+  return refusal.kind === "not_found"
+    ? c.json({ error: "event not found" }, 404)
+    : c.json({ error: refusal.error }, 400);
+}
+
 app.patch("/api/admin/events/:id/access", async (c) => {
-  const event = await c.env.DB.prepare("SELECT * FROM events WHERE id = ?")
-    .bind(c.req.param("id")).first<EventRow>();
-  if (!event) return c.json({ error: "event not found" }, 404);
+  const id = c.req.param("id");
   const body = (await c.req.json().catch(() => null)) as { mode?: unknown; pin?: unknown } | null;
   const mode = body?.mode;
-  if (mode !== "public" && mode !== "private") return c.json({ error: "invalid access mode" }, 400);
-
-  let salt = event.access_pin_salt;
-  let hash = event.access_pin_hash;
-  let inviteToken = event.invite_token ?? randomAccessToken();
-  let accessVersion = event.access_version;
-  const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
-  if (pin) {
-    if (pin.length < MIN_PIN_LENGTH || pin.length > MAX_PIN_LENGTH) {
-      return c.json({ error: `PIN must be ${MIN_PIN_LENGTH} to ${MAX_PIN_LENGTH} characters` }, 400);
-    }
-    salt = randomAccessToken().slice(0, 32);
-    hash = await hashEventPin(pin, salt);
-    // A new PIN means the old one may have leaked: revoke every issued grant
-    // and every shared invite link. The host copies the new link afterwards.
-    accessVersion += 1;
-    inviteToken = randomAccessToken();
-  } else if (mode === "private" && event.access_mode !== "private") {
-    // Re-privatising must not resurrect grants issued during an earlier private period.
-    accessVersion += 1;
+  if (mode !== "public" && mode !== "private") {
+    const exists = await c.env.DB.prepare("SELECT 1 FROM events WHERE id = ?").bind(id).first();
+    return exists ? c.json({ error: "invalid access mode" }, 400) : c.json({ error: "event not found" }, 404);
   }
-  if (mode === "private" && !hash) return c.json({ error: "a PIN is required for private events" }, 400);
-  await c.env.DB.prepare(
-    `UPDATE events
-        SET access_mode = ?, access_pin_hash = ?, access_pin_salt = ?, invite_token = ?, access_version = ?
-      WHERE id = ?`
-  ).bind(mode, hash, salt, inviteToken, accessVersion, event.id).run();
+  const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
+  const result = await updateEventAccess(c.env, id, { mode, pin }, (work) => c.executionCtx.waitUntil(work));
+  if (result.kind !== "ok") return webSettingsRefusal(c, result);
   const updated = await c.env.DB.prepare(
     `SELECT id, slug, title, type, main_characters, description, cover_image_url,
             created_at, starts_at, expires_at, uploads_close_at, purge_after, archived_at, access_mode, invite_token
        FROM events WHERE id = ?`
-  ).bind(event.id).first<EventRow>();
-  // Re-apply requireSignedURLs to the event's existing Stream videos: on every
-  // private save (backfills older uploads) and when going public.
-  if (isStreamConfigured(c.env) && isStreamSigningConfigured(c.env) && (mode === "private" || event.access_mode !== mode)) {
-    c.executionCtx.waitUntil(syncStreamSigning(c.env, event.id, mode === "private"));
-  }
+  ).bind(id).first<EventRow>();
   return c.json({ event: updated });
 });
 
@@ -416,26 +392,10 @@ app.patch("/api/admin/events/:id/lifecycle", async (c) => {
     if (!has("expires_at") && !has("uploads_close_at") && !has("purge_after")) {
       return c.json({ error: "expires_at is invalid" }, 400);
     }
-    const expiresAt = has("expires_at") ? normalizeDate(body?.expires_at) : event.expires_at;
-    if (expiresAt === undefined) return c.json({ error: "expires_at is invalid" }, 400);
-    // The web admin only knows expires_at: when that is all that is sent, it
-    // is the single end date again, so a stale split date cannot outlive it.
-    const isSingleDate = !has("uploads_close_at") && !has("purge_after");
-    const uploadsCloseAt = has("uploads_close_at")
-      ? normalizeDate(body?.uploads_close_at)
-      : isSingleDate ? null : event.uploads_close_at;
-    const purgeAfter = has("purge_after") ? normalizeDate(body?.purge_after) : isSingleDate ? null : event.purge_after;
-    if (uploadsCloseAt === undefined) return c.json({ error: "uploads_close_at is invalid" }, 400);
-    if (purgeAfter === undefined) return c.json({ error: "purge_after is invalid" }, 400);
-    const effectiveClose = uploadsCloseAt ?? expiresAt;
-    const effectivePurge = purgeAfter ?? expiresAt;
-    if (effectiveClose && effectivePurge && effectiveClose > effectivePurge) {
-      return c.json({ error: "uploads must close before the event is purged" }, 400);
-    }
-    await c.env.DB.prepare(
-      "UPDATE events SET expires_at = ?, uploads_close_at = ?, purge_after = ?, archived_at = NULL WHERE id = ?"
-    )
-      .bind(expiresAt, uploadsCloseAt, purgeAfter, event.id).run();
+    const parsed = lifecycleChangeFrom(body ?? {});
+    if (parsed.kind === "invalid") return c.json({ error: `${parsed.field} is invalid` }, 400);
+    const result = await updateEventLifecycle(c.env.DB, event.id, parsed.change);
+    if (result.kind !== "ok") return webSettingsRefusal(c, result);
   }
   const updated = await c.env.DB.prepare("SELECT * FROM events WHERE id = ?")
     .bind(event.id).first<EventRow>();
