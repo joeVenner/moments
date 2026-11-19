@@ -413,6 +413,16 @@
         }
       }
     },
+    "Event link": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lien de l'événement"
+          }
+        }
+      }
+    },
     "Event not found": {
       "extractionState": "manual",
       "localizations": {
@@ -731,6 +741,16 @@
         }
       }
     },
+    "Open event": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir l'événement"
+          }
+        }
+      }
+    },
     "Open the event link again, then try again.": {
       "extractionState": "manual",
       "localizations": {
@@ -929,12 +949,12 @@
         }
       }
     },
-    "Scan an event QR code to join.": {
+    "Scan the event's QR code with your camera, or paste its link here.": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Scannez le QR code d'un événement pour le rejoindre."
+            "value": "Scannez le QR code de l'événement avec l'appareil photo, ou collez son lien ici."
           }
         }
       }
@@ -1056,6 +1076,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ce code ou cette invitation n'est pas valide."
+          }
+        }
+      }
+    },
+    "That isn't a Moments event link.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce n'est pas un lien d'événement Moments."
           }
         }
       }

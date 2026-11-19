@@ -5,7 +5,7 @@ import MomentsDomain
 import SwiftUI
 
 /// Shows the screen for the last opened link: the join flow for an event,
-/// a placeholder otherwise.
+/// the home screen otherwise.
 struct RootView: View {
     let navigation: AppNavigation
     let environment: AppEnvironment
@@ -23,7 +23,7 @@ struct RootView: View {
                 // A new model per open restarts the flow cleanly.
                 .id(joinModel.id)
             } else {
-                placeholder
+                HomeView(navigation: navigation, notice: notice)
             }
         }
         // Universal links arrive here; App Clip invocations arrive as a
@@ -45,26 +45,9 @@ struct RootView: View {
         #endif
     }
 
-    private var placeholder: some View {
-        VStack(spacing: Spacing.sm) {
-            Text("Moments")
-                .font(MomentsFont.display())
-                .foregroundStyle(MomentsColor.text)
-            Text(subtitle)
-                .font(MomentsFont.body())
-                .foregroundStyle(MomentsColor.textMuted)
-                .multilineTextAlignment(.center)
-        }
-        .padding(Spacing.lg)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(MomentsColor.background)
-    }
-
-    private var subtitle: String {
-        switch navigation.destination {
-        case .slideshow: String(localized: "The slideshow is coming soon.")
-        case nil, .event: String(localized: "Scan an event QR code to join.")
-        }
+    private var notice: String? {
+        guard case .slideshow = navigation.destination else { return nil }
+        return String(localized: "The slideshow is coming soon.")
     }
 
     private func showDestination() {
