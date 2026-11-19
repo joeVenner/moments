@@ -3,7 +3,8 @@ import type { Context, MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { areUploadsOpen, canFinishUploads, getActiveEventBySlug, sqlTimestamp, toPublicEvent, UPLOADS_CLOSED } from "../events";
 import { isR2Configured } from "../presign";
-import { R2RequestError } from "../multipartPresign";
+import { presignBoundPutUrl, R2RequestError } from "../multipartPresign";
+import { MAX_THUMBNAIL_BYTES, THUMBNAIL_CONTENT_TYPE, THUMBNAIL_URL_TTL_SECONDS, thumbnailKeys, thumbnailUploadKey } from "../thumbnails";
 import { finalizeUpload, r2FinalizeBackend } from "../uploadFinalize";
 import {
   abortUpload,
@@ -56,6 +57,8 @@ import {
   PartUrlsRequestSchema,
   PartUrlsSchema,
   StartUploadRequestSchema,
+  ThumbnailUrlRequestSchema,
+  ThumbnailUrlSchema,
   UploadHeadersSchema,
   UploadParamSchema,
   UploadCompleteConflictSchema,
@@ -333,6 +336,28 @@ const partUrlsRoute = createRoute({
     200: json(PartUrlsSchema, "Signed URLs"),
     400: json(ErrorSchema, "`invalid_parts`: a part number outside the file"),
     409: json(ErrorSchema, "`upload_not_open`: completed or aborted; start a new session"),
+    ...uploadErrors,
+    404: json(ErrorSchema, "No live event with this slug, or `upload_not_found`"),
+  },
+});
+
+const thumbnailUrlRoute = createRoute({
+  method: "post",
+  path: "/events/{slug}/uploads/{id}/thumbnail-url",
+  operationId: "getThumbnailUrl",
+  tags: ["Uploads"],
+  summary: "A presigned PUT URL for the session's grid thumbnail, valid for 6 h (optional)",
+  description:
+    `Optional. Call after startUpload and before completeUpload, with the thumbnail's exact size. PUT the ~400 px JPEG to \`url\` with \`Content-Type: image/jpeg\` and a body of exactly \`size\` bytes (at most ${MAX_THUMBNAIL_BYTES}), no other headers; R2 refuses anything else. completeUpload checks it (a whole JPEG) and the feed serves it as \`thumb_url\`. A thumbnail sent after completeUpload, or a missing or bad one, is dropped: the moment completes without \`thumb_url\`. Asking again gives a new URL.`,
+  request: {
+    params: UploadParamSchema,
+    headers: UploadHeadersSchema,
+    body: { content: { "application/json": { schema: ThumbnailUrlRequestSchema } }, required: true },
+  },
+  responses: {
+    200: json(ThumbnailUrlSchema, "Signed URL"),
+    400: json(ErrorSchema, "Invalid body (size missing or too large)"),
+    409: json(ErrorSchema, "`upload_not_open`: completed or aborted; complete without a thumbnail"),
     ...uploadErrors,
     404: json(ErrorSchema, "No live event with this slug, or `upload_not_found`"),
   },
@@ -747,6 +772,27 @@ v1.openapi(partUrlsRoute, async (c) => {
   }
 });
 
+v1.openapi(thumbnailUrlRoute, async (c) => {
+  const event = c.get("event");
+  const guest = await uploadGuest(c);
+  if (!guest) return c.json(GUEST_REQUIRED, 403);
+  const session = await getOwnedUpload(c.env.DB, { eventId: event.id, participantId: guest.participant.id, uploadId: c.req.valid("param").id });
+  if (!session) return c.json(UPLOAD_NOT_FOUND, 404);
+  if (session.status !== "open") return c.json(UPLOAD_NOT_OPEN, 409);
+  if (!canFinishUploads(event)) return c.json(UPLOADS_CLOSED, 403);
+  if (!isR2Configured(c.env)) return c.json(UPLOADS_UNAVAILABLE, 501);
+  if (await isUploadLimited(c, guest.sessionId)) return c.json(RATE_LIMITED, 429);
+  try {
+    const url = await presignBoundPutUrl(
+      c.env, thumbnailUploadKey(session.key), THUMBNAIL_CONTENT_TYPE, c.req.valid("json").size, THUMBNAIL_URL_TTL_SECONDS
+    );
+    return c.json({ expires_at: sqlTimestamp(new Date(Date.now() + THUMBNAIL_URL_TTL_SECONDS * 1000)), url }, 200);
+  } catch (err) {
+    logUploadError("v1_upload_thumbnail_url_failed", { eventId: event.id, uploadRecordId: session.id }, err);
+    return c.json(STORAGE_UNAVAILABLE, 502);
+  }
+});
+
 v1.openapi(abortUploadRoute, async (c) => {
   const event = c.get("event");
   const guest = await uploadGuest(c);
@@ -760,6 +806,12 @@ v1.openapi(abortUploadRoute, async (c) => {
   try {
     const result = await abortUpload(c.env.DB, r2MultipartBackend(c.env), session);
     if (result.kind === "completed") return c.json(UPLOAD_NOT_OPEN, 409);
+    try {
+      await c.env.BUCKET.delete(thumbnailKeys(session.key));
+    } catch (err) {
+      // Not worth failing the cancel: the event's purge removes a leftover.
+      logUploadError("v1_upload_thumbnail_delete_failed", { eventId: event.id, uploadRecordId: session.id }, err);
+    }
     return c.json(toUploadSession(result.session), 200);
   } catch (err) {
     logUploadError("v1_upload_abort_failed", { eventId: event.id, uploadRecordId: session.id }, err);
