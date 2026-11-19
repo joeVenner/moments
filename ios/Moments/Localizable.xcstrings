@@ -206,6 +206,16 @@
         }
       }
     },
+    "%lld of %lld shared": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partagés : %lld sur %lld"
+          }
+        }
+      }
+    },
     "%lld to %lld characters": {
       "localizations": {
         "fr": {
@@ -276,6 +286,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ajouté"
+          }
+        }
+      }
+    },
+    "All shared": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout est partagé"
           }
         }
       }
@@ -2145,6 +2165,16 @@
         }
       }
     },
+    "Sharing ^[%lld moment](inflect: true)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partage de ^[%lld moment](inflect: true)"
+          }
+        }
+      }
+    },
     "Sharing open until %@": {
       "localizations": {
         "fr": {
@@ -3286,6 +3316,16 @@
         }
       }
     },
+    "You can lock your phone. Sharing carries on in the background.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous pouvez verrouiller votre téléphone. Le partage continue en arrière-plan."
+          }
+        }
+      }
+    },
     "You're invited": {
       "localizations": {
         "fr": {
@@ -3486,6 +3526,16 @@
         }
       }
     },
+    "^[%lld moment](inflect: true) couldn't be shared": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "^[%lld moment](inflect: true) n'a pas pu être partagé"
+          }
+        }
+      }
+    },
     "^[%lld new moment](inflect: true)": {
       "extractionState": "manual",
       "localizations": {
@@ -3518,6 +3568,17 @@
           }
         }
       }
+    },
+    "to %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vers %@"
+          }
+        }
+      },
+      "comment": "Under the uploads title: the event they go to."
     }
   },
   "version": "1.0"

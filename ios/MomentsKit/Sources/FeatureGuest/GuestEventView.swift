@@ -223,7 +223,7 @@ public struct GuestEventView: View {
         .accessibilityValue(Text(uploadsSummary(progress)))
         // Follows the queue while the event is shown, so the count is live.
         .task { await progress.observe() }
-        .sheet(isPresented: $isShowingProgress) { UploadProgressView(model: progress) }
+        .sheet(isPresented: $isShowingProgress) { UploadProgressView(model: progress, eventTitle: feed?.event.title) }
     }
 
     private func uploadsSummary(_ progress: UploadProgressModel) -> String {

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS app: the uploads sheet opens on "Sharing 6 moments to <event>" with overall progress, how many are shared, and a reminder that sharing carries on with the phone locked.
 - iOS app: the full-screen viewer shows who shared a moment and how long ago next to Close, the caption at the bottom, and the heart as a pill with its count.
 - iOS app: an event now opens on its name, when sharing closes, and a Moments / Highlights / Leaderboard switcher at the top (instead of a bottom tab bar), with an orange "Share moments" button at the bottom.
 - iOS app: joining an event looks like an invitation ("You're invited", the event name, its type and date), shows the face you'll join with and lets you pick a new one, then asks your name. The PIN step explains the PIN is on the invitation.

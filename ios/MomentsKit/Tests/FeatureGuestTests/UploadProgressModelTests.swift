@@ -82,6 +82,9 @@ private func settle(_ model: UploadProgressModel, until condition: () -> Bool) a
         ])
         #expect(model.rows[1].isVideo && model.rows[1].caption == nil)
         #expect(model.activeCount == 2 && model.failedCount == 1 && model.doneCount == 1)
+        // The failed one stays out of the bar: (0 + 1/3 + 1) / 3.
+        #expect(abs(model.overallFraction - 4.0 / 9) < 0.000_001)
+        #expect(model.headline == .sharing(2))
         await source.finish()
         await observing.value
     }
@@ -147,5 +150,26 @@ private func settle(_ model: UploadProgressModel, until condition: () -> Bool) a
         let sent = applying({ [.sessionStarted(session($0)), .partsUploaded([1, 2, 3], sessionID: "u1")] }, to: item())
         #expect(sent.phase == .finishing)
         #expect(UploadProgressModel.row(sent).status == .finishing)
+    }
+}
+
+@Suite struct UploadProgressOverallTests {
+    @MainActor @Test func anEmptyQueueIsAllSharedAtNothing() {
+        let model = UploadProgressModel(eventSlug: "party", source: FakeProgressSource())
+        #expect(model.overallFraction == 0)
+        #expect(model.headline == .allShared)
+    }
+
+    private func row(_ status: UploadProgressModel.Status) -> UploadProgressModel.Row {
+        .init(id: UUID(), isVideo: false, caption: nil, status: status)
+    }
+
+    @Test func eachItemCountsHowFarItIs() {
+        #expect(row(.waiting).fraction == 0)
+        #expect(row(.uploading(0.4)).fraction == 0.4)
+        #expect(row(.uploading(1.7)).fraction == 1)
+        #expect(row(.finishing).fraction == 1)
+        #expect(row(.done).fraction == 1)
+        #expect(row(.failed(.gaveUp, canRetry: true)).fraction == 0)
     }
 }

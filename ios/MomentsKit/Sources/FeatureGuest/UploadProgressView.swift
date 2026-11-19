@@ -5,10 +5,13 @@ import UploadEngine
 /// This event's uploads: what's waiting, sending, done or stuck.
 public struct UploadProgressView: View {
     let model: UploadProgressModel
+    /// The event they go to, named under the title.
+    let eventTitle: String?
     @Environment(\.dismiss) private var dismiss
 
-    public init(model: UploadProgressModel) {
+    public init(model: UploadProgressModel, eventTitle: String? = nil) {
         self.model = model
+        self.eventTitle = eventTitle
     }
 
     public var body: some View {
@@ -21,6 +24,9 @@ public struct UploadProgressView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List {
+                        UploadQueueHeader(model: model, eventTitle: eventTitle)
+                            .listRowBackground(MomentsColor.background)
+                            .listRowSeparator(.hidden)
                         if model.couldNotRemove {
                             Text("Couldn't remove that from this device. Try again.")
                                 .font(MomentsFont.body(.footnote))
@@ -60,6 +66,61 @@ public struct UploadProgressView: View {
         }
         // Sheets don't inherit the event screen's tint.
         .tint(MomentsColor.accent)
+    }
+}
+
+/// "Sharing 6 moments to …": the batch's progress over its items.
+struct UploadQueueHeader: View {
+    let model: UploadProgressModel
+    let eventTitle: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text(Self.title(model.headline))
+                    .font(MomentsFont.display(.title2))
+                    .foregroundStyle(MomentsColor.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let eventTitle {
+                    Text("to \(eventTitle)", comment: "Under the uploads title: the event they go to.")
+                        .font(MomentsFont.body())
+                        .foregroundStyle(MomentsColor.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                ProgressView(value: model.overallFraction)
+                    .tint(MomentsColor.accent)
+                Text("\(model.doneCount) of \(model.rows.count) shared")
+                    .font(MomentsFont.caption())
+                    .foregroundStyle(MomentsColor.textMuted)
+            }
+            // One stop: the count says it better than a percentage.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text("\(model.doneCount) of \(model.rows.count) shared"))
+            if model.activeCount > 0, model.failedCount > 0 {
+                Text("^[\(model.failedCount) moment](inflect: true) couldn't be shared")
+                    .font(MomentsFont.caption())
+                    .foregroundStyle(MomentsColor.accent)
+            }
+            if model.activeCount > 0 {
+                Text("You can lock your phone. Sharing carries on in the background.")
+                    .font(MomentsFont.caption())
+                    .foregroundStyle(MomentsColor.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, Spacing.xs)
+    }
+
+    static func title(_ headline: UploadProgressModel.Headline) -> LocalizedStringResource {
+        switch headline {
+        case let .sharing(count): "Sharing ^[\(count) moment](inflect: true)"
+        case let .someFailed(count): "^[\(count) moment](inflect: true) couldn't be shared"
+        case .allShared: "All shared"
+        }
     }
 }
 
