@@ -48,12 +48,17 @@ import {
 } from "../hostSessions";
 import { ADMIN_RETRY_AFTER_SECONDS, attemptAdminLogin } from "../adminLogin";
 import { getAdminEventDetail, listAdminEvents } from "../adminEvents";
+import { deleteAdminMoment, listAdminMoments, setMomentModeration } from "../adminModeration";
 import {
   AccessRequestSchema,
   AccessResponseSchema,
   AdminEventDetailSchema,
   AdminEventListSchema,
   AdminEventParamSchema,
+  AdminMomentListSchema,
+  AdminMomentParamSchema,
+  AdminMomentSchema,
+  ModerationBodySchema,
   ChangesQuerySchema,
   ErrorSchema,
   EventHeadersSchema,
@@ -491,6 +496,58 @@ const getAdminEventRoute = createRoute({
   },
 });
 
+const hostErrors = {
+  401: json(ErrorSchema, "`host_auth_required`: sign in again"),
+  426: json(ErrorSchema, "This app build is too old; show the update screen"),
+  default: json(ErrorSchema, "Any other error"),
+};
+
+const listAdminMomentsRoute = createRoute({
+  method: "get",
+  path: "/admin/events/{id}/moments",
+  operationId: "listAdminMoments",
+  tags: ["Host"],
+  summary: "Every moment of an event, hidden ones included, for moderation",
+  security: HOST_SECURITY,
+  request: { params: AdminEventParamSchema },
+  responses: {
+    200: json(AdminMomentListSchema, "The moments"),
+    404: json(ErrorSchema, "`event_not_found`"),
+    ...hostErrors,
+  },
+});
+
+const moderateMomentRoute = createRoute({
+  method: "patch",
+  path: "/admin/moments/{id}",
+  operationId: "moderateMoment",
+  tags: ["Host"],
+  summary: "Hide a moment from guests, or show it again",
+  security: HOST_SECURITY,
+  request: { params: AdminMomentParamSchema, body: { required: true, content: { "application/json": { schema: ModerationBodySchema } } } },
+  responses: {
+    200: json(z.object({ moment: AdminMomentSchema }).openapi("AdminMomentResponse"), "The moment as it is now"),
+    404: json(ErrorSchema, "`moment_not_found`"),
+    ...hostErrors,
+  },
+});
+
+const deleteMomentRoute = createRoute({
+  method: "delete",
+  path: "/admin/moments/{id}",
+  operationId: "deleteMoment",
+  tags: ["Host"],
+  summary: "Delete a moment and its files for good",
+  security: HOST_SECURITY,
+  request: { params: AdminMomentParamSchema },
+  responses: {
+    204: { description: "Deleted" },
+    404: json(ErrorSchema, "`moment_not_found`"),
+    502: json(ErrorSchema, "`media_delete_failed`: the files couldn't be removed; nothing was deleted, try again"),
+    ...hostErrors,
+  },
+});
+
 const signOutRoute = createRoute({
   method: "delete",
   path: "/admin/session",
@@ -646,6 +703,32 @@ v1.openapi(getAdminEventRoute, async (c) => {
   const detail = await getAdminEventDetail(c.env.DB, c.env.EVENT_ACCESS_SECRET, id, new URL(c.req.url).origin);
   if (!detail) return c.json({ error: "Event not found.", code: "event_not_found" }, 404);
   return c.json(detail, 200);
+});
+
+v1.openapi(listAdminMomentsRoute, async (c) => {
+  const list = await listAdminMoments(c.env, c.req.valid("param").id);
+  if (!list) return c.json({ error: "Event not found.", code: "event_not_found" }, 404);
+  return c.json(list, 200);
+});
+
+v1.openapi(moderateMomentRoute, async (c) => {
+  const moment = await setMomentModeration(c.env, c.req.valid("param").id, c.req.valid("json").status);
+  if (!moment) return c.json({ error: "Moment not found.", code: "moment_not_found" }, 404);
+  return c.json({ moment }, 200);
+});
+
+v1.openapi(deleteMomentRoute, async (c) => {
+  const id = c.req.valid("param").id;
+  try {
+    if ((await deleteAdminMoment(c.env, id)) === "not_found") {
+      return c.json({ error: "Moment not found.", code: "moment_not_found" }, 404);
+    }
+  } catch (error) {
+    // Only the error type: storage messages can name internal endpoints.
+    console.error(JSON.stringify({ msg: "admin_moment_delete_failed", moment_id: id, reason: error instanceof Error ? error.name : "unknown" }));
+    return c.json({ error: "The files couldn't be deleted. Try again.", code: "media_delete_failed" }, 502);
+  }
+  return c.body(null, 204);
 });
 
 v1.openapi(signOutRoute, async (c) => {

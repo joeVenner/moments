@@ -68,7 +68,7 @@
           },
           "code": {
             "type": "string",
-            "description": "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, not_found, internal"
+            "description": "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, media_delete_failed, not_found, internal"
           }
         },
         "required": [
@@ -379,6 +379,186 @@
           "upload_states"
         ]
       },
+      "AdminMomentList": {
+        "type": "object",
+        "properties": {
+          "moments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminMoment"
+            },
+            "description": "Newest first, hidden ones included; at most 500"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True when older moments were left out by the 500 cap"
+          }
+        },
+        "required": [
+          "moments",
+          "truncated"
+        ]
+      },
+      "AdminMoment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "uploader_name": {
+            "type": "string"
+          },
+          "caption": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "description": "UTC, `YYYY-MM-DD HH:MM:SS`",
+            "example": "2026-11-17 18:30:00"
+          },
+          "mime_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "size_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "moderation_status": {
+            "type": "string",
+            "description": "`hidden` moments are invisible to guests"
+          },
+          "reaction_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "media": {
+            "$ref": "#/components/schemas/Media"
+          }
+        },
+        "required": [
+          "id",
+          "event_id",
+          "uploader_name",
+          "caption",
+          "created_at",
+          "mime_type",
+          "size_bytes",
+          "moderation_status",
+          "reaction_count",
+          "media"
+        ],
+        "description": "Its `/media/...` URLs carry an `mv` admin view signature (not `at`) valid 1-2 hours, so hidden moments load too; reload the list for fresh ones."
+      },
+      "Media": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "description": "Original. `/media/...` is relative to the API origin; Stream URLs are absolute."
+          },
+          "thumb_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "About 400 px grid thumbnail"
+          },
+          "display_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "About 1600 px viewer image"
+          },
+          "poster_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hls_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stream videos only; 404 until processing finishes"
+          },
+          "width": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "height": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "blurhash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "url",
+          "thumb_url",
+          "display_url",
+          "poster_url",
+          "hls_url",
+          "width",
+          "height",
+          "duration_ms",
+          "blurhash"
+        ],
+        "description": "For private events each `/media/...` URL carries an `at` query parameter: a signature for that one object, valid 6-12 hours and revoked when the host changes access. Use the URL as given (cache by path); refresh the feed for new signatures."
+      },
+      "AdminMomentResponse": {
+        "type": "object",
+        "properties": {
+          "moment": {
+            "$ref": "#/components/schemas/AdminMoment"
+          }
+        },
+        "required": [
+          "moment"
+        ]
+      },
+      "ModerationRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "`hidden` hides it from guests; `approved` shows it again"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
       "EventResponse": {
         "type": "object",
         "properties": {
@@ -490,82 +670,6 @@
           "reacted",
           "media"
         ]
-      },
-      "Media": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string",
-            "description": "Original. `/media/...` is relative to the API origin; Stream URLs are absolute."
-          },
-          "thumb_url": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "About 400 px grid thumbnail"
-          },
-          "display_url": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "About 1600 px viewer image"
-          },
-          "poster_url": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "hls_url": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Stream videos only; 404 until processing finishes"
-          },
-          "width": {
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "height": {
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "duration_ms": {
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "blurhash": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "kind",
-          "url",
-          "thumb_url",
-          "display_url",
-          "poster_url",
-          "hls_url",
-          "width",
-          "height",
-          "duration_ms",
-          "blurhash"
-        ],
-        "description": "For private events each `/media/...` URL carries an `at` query parameter: a signature for that one object, valid 6-12 hours and revoked when the host changes access. Use the URL as given (cache by path); refresh the feed for new signatures."
       },
       "Highlights": {
         "type": "object",
@@ -1369,6 +1473,253 @@
           },
           "426": {
             "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/events/{id}/moments": {
+      "get": {
+        "operationId": "listAdminMoments",
+        "tags": [
+          "Host"
+        ],
+        "summary": "Every moment of an event, hidden ones included, for moderation",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "description": "The event's id (from the events list)"
+            },
+            "required": true,
+            "description": "The event's id (from the events list)",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The moments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMomentList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`host_auth_required`: sign in again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`event_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/moments/{id}": {
+      "patch": {
+        "operationId": "moderateMoment",
+        "tags": [
+          "Host"
+        ],
+        "summary": "Hide a moment from guests, or show it again",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModerationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The moment as it is now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMomentResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`host_auth_required`: sign in again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`moment_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteMoment",
+        "tags": [
+          "Host"
+        ],
+        "summary": "Delete a moment and its files for good",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "description": "`host_auth_required`: sign in again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`moment_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`media_delete_failed`: the files couldn't be removed; nothing was deleted, try again",
             "content": {
               "application/json": {
                 "schema": {
