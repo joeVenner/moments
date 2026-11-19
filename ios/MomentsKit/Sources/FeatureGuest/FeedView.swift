@@ -195,12 +195,24 @@ struct MomentThumbnail: View {
             }
             .overlay(alignment: .topTrailing) {
                 if moment.media.kind == .video {
-                    Image(systemName: "play.fill")
-                        .font(.caption)
-                        .foregroundStyle(MomentsColor.text)
-                        .padding(Spacing.xxs)
-                        .background(MomentsColor.background.opacity(0.6), in: Circle())
-                        .padding(Spacing.xxs)
+                    HStack(spacing: 2) {
+                        Image(systemName: "play.fill")
+                        if let length = Self.durationText(moment.media.durationMilliseconds) {
+                            Text(verbatim: length)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                    }
+                    .font(MomentsFont.number(.caption2))
+                    .foregroundStyle(MomentsColor.text)
+                    .padding(.horizontal, Spacing.xxs)
+                    .padding(.vertical, 2)
+                    // Without a length it stays the round play badge it was.
+                    .frame(minWidth: 20, minHeight: 20)
+                    .background(MomentsColor.background.opacity(0.6), in: Capsule())
+                    .padding(Spacing.xxs)
+                    // A third of the screen wide: the badges stop growing early.
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 }
             }
             .overlay(alignment: .bottomLeading) {
@@ -216,6 +228,7 @@ struct MomentThumbnail: View {
                     .padding(.vertical, 2)
                     .background(MomentsColor.background.opacity(0.6), in: Capsule())
                     .padding(Spacing.xxs)
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 }
             }
             .clipped()
@@ -226,8 +239,37 @@ struct MomentThumbnail: View {
             .accessibilityLabel(accessibilityLabel)
             .accessibilityAddTraits(.isImage)
             // Same view either way (a conditional modifier would reset the cell's state).
-            .accessibilityValue(heartsValue)
+            .accessibilityValue(accessibilityValue)
             .task(id: LoadKey(urls: imageURLs, attempt: attempt)) { await load() }
+    }
+
+    /// "0:42" or "1:05:09", in whole seconds as players show it (at least
+    /// 0:01); nil when the length is unknown.
+    static func durationText(_ milliseconds: Int?, locale: Locale = .current) -> String? {
+        guard let seconds = wholeSeconds(milliseconds) else { return nil }
+        let pattern: Duration.TimeFormatStyle.Pattern = seconds >= 3600 ? .hourMinuteSecond : .minuteSecond
+        return Duration.seconds(seconds).formatted(.time(pattern: pattern).locale(locale))
+    }
+
+    /// "42 seconds", for VoiceOver.
+    static func spokenDuration(_ milliseconds: Int?, locale: Locale = .current) -> String? {
+        guard let seconds = wholeSeconds(milliseconds) else { return nil }
+        return Duration.seconds(seconds).formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide).locale(locale))
+    }
+
+    private static func wholeSeconds(_ milliseconds: Int?) -> Int? {
+        guard let milliseconds, milliseconds > 0 else { return nil }
+        return max(1, milliseconds / 1000)
+    }
+
+    /// The video's length, then its hearts.
+    private var accessibilityValue: Text {
+        guard moment.media.kind == .video, let length = Self.spokenDuration(moment.media.durationMilliseconds) else {
+            return heartsValue
+        }
+        return moment.reactionCount > 0 || moment.hasReacted
+            ? Text(verbatim: length + ", ") + heartsValue
+            : Text(verbatim: length)
     }
 
     /// Smallest rendition first; videos never use the video file.
