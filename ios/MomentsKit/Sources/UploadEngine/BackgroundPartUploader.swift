@@ -40,21 +40,32 @@ public final class BackgroundPartUploader: PartUploader, Sendable {
     /// Part files are written from the one shared file handle; its offset
     /// is shared, so writes take turns.
     private let writeLock = NSLock()
+    /// Read at each part, so a change applies to parts not yet started.
+    private let largeVideosOnWiFiOnly: @Sendable () -> Bool
 
     /// The app's uploader, on the background session `identifier`.
-    public convenience init(identifier: String, service: any UploadService, staging: StagingArea, hosts: StorageHostPolicy) {
+    public convenience init(
+        identifier: String, service: any UploadService, staging: StagingArea, hosts: StorageHostPolicy,
+        largeVideosOnWiFiOnly: @escaping @Sendable () -> Bool = { CellularPolicy.largeVideosOnWiFiOnly() }
+    ) {
         let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
         configuration.sessionSendsLaunchEvents = true
         configuration.isDiscretionary = false
         configuration.timeoutIntervalForResource = Self.resourceTimeout
-        self.init(service: service, staging: staging, hosts: hosts, configuration: configuration)
+        self.init(
+            service: service, staging: staging, hosts: hosts, configuration: configuration,
+            largeVideosOnWiFiOnly: largeVideosOnWiFiOnly
+        )
     }
 
     /// Any configuration (tests use an ephemeral one with a stub protocol).
     init(
         service: any UploadService, staging: StagingArea, hosts: StorageHostPolicy, configuration: URLSessionConfiguration,
-        maxPartFiles: Int = BackgroundPartUploader.defaultMaxPartFiles
+        maxPartFiles: Int = BackgroundPartUploader.defaultMaxPartFiles,
+        // Tests never hold parts for Wi-Fi unless they ask to.
+        largeVideosOnWiFiOnly: @escaping @Sendable () -> Bool = { false }
     ) {
+        self.largeVideosOnWiFiOnly = largeVideosOnWiFiOnly
         self.service = service
         self.staging = staging
         self.hosts = hosts
@@ -201,14 +212,24 @@ public final class BackgroundPartUploader: PartUploader, Sendable {
             throw MomentsAPIError.transport(nil)
         }
         try writePart(from: file, range: range, to: partURL)
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-        request.cachePolicy = .reloadIgnoringLocalCacheData
+        let request = Self.partRequest(to: url, for: item, largeVideosOnWiFiOnly: largeVideosOnWiFiOnly())
         let task = session.uploadTask(with: request, fromFile: partURL)
         task.taskDescription = key.label
         // Recorded before it can finish, so its result always finds it.
         tasks.start(key)
         task.resume()
+    }
+
+    /// A part's PUT; held for Wi-Fi when the policy says so (a background
+    /// task waits for one rather than failing).
+    static func partRequest(to url: URL, for item: QueuedUpload, largeVideosOnWiFiOnly: Bool) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.allowsExpensiveNetworkAccess = CellularPolicy.allowsMobileData(
+            contentType: item.file.contentType, size: item.file.size, largeVideosOnWiFiOnly: largeVideosOnWiFiOnly
+        )
+        return request
     }
 
     private func writePart(from file: FileHandle, range: Range<Int64>, to url: URL) throws(MomentsAPIError) {
