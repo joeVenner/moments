@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS app: the hosted event page is a QR card, the stats, then one row each for Moderate moments, Privacy, Dates and Details, each showing its current state. The Edit menu in the top bar is gone.
 - iOS app: the Hosting tab groups events into Live now, Upcoming and Past. Live events show a card with moment and guest counts; the header has an orange New event button and an account menu with Sign out.
 - iOS app: a bottom tab bar (Events · Scan · Hosting) replaces the single home screen. Events holds the "At an event?" join card and your events; Hosting shows your hosted events, or a sign-in invitation; Scan opens the QR scanner from either tab.
 - iOS host app: "Privacy" in an event's Edit menu switches it between public and private and sets a new PIN. One confirmation comes first when saving signs guests out.
