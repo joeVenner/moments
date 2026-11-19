@@ -1,12 +1,32 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ · archived": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · archivé"
+          }
+        }
+      }
+    },
     "%@ · as %@": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "%@ · en tant que %@"
+          }
+        }
+      }
+    },
+    "%@ · uploads closed": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · envois fermés"
           }
         }
       }
@@ -376,6 +396,16 @@
         }
       }
     },
+    "Couldn't sign in. Try again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexion impossible. Réessayez."
+          }
+        }
+      }
+    },
     "Couldn't upload. Check your connection.": {
       "extractionState": "manual",
       "localizations": {
@@ -580,6 +610,46 @@
         }
       }
     },
+    "Host sign-in": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexion organisateur"
+          }
+        }
+      }
+    },
+    "Host sign-in isn't available right now.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La connexion organisateur n'est pas disponible pour le moment."
+          }
+        }
+      }
+    },
+    "Hosted events": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Événements organisés"
+          }
+        }
+      }
+    },
+    "Incorrect username or password.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identifiant ou mot de passe incorrect."
+          }
+        }
+      }
+    },
     "Item %lld": {
       "extractionState": "manual",
       "localizations": {
@@ -776,12 +846,32 @@
         }
       }
     },
+    "Moments: %lld · Guests: %lld": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Souvenirs : %lld · Invités : %lld"
+          }
+        }
+      }
+    },
     "Next": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Suivant"
+          }
+        }
+      }
+    },
+    "No events yet. Create one on the web for now.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun événement pour l'instant. Pour en créer un, passez par le web."
           }
         }
       }
@@ -904,6 +994,16 @@
         }
       }
     },
+    "Password": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mot de passe"
+          }
+        }
+      }
+    },
     "Photo": {
       "extractionState": "manual",
       "localizations": {
@@ -998,6 +1098,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Préparation…"
+          }
+        }
+      }
+    },
+    "Private": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privé"
           }
         }
       }
@@ -1227,6 +1337,16 @@
         }
       }
     },
+    "Showing the newest 500 events.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affichage des 500 événements les plus récents."
+          }
+        }
+      }
+    },
     "Shows them at the top of the feed": {
       "extractionState": "manual",
       "localizations": {
@@ -1234,6 +1354,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "Les affiche en haut du fil"
+          }
+        }
+      }
+    },
+    "Sign in": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se connecter"
+          }
+        }
+      }
+    },
+    "Sign in with your event admin login to see and manage your events.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connectez-vous avec l'identifiant administrateur de vos événements pour les voir et les gérer."
+          }
+        }
+      }
+    },
+    "Sign out": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se déconnecter"
+          }
+        }
+      }
+    },
+    "Sign out of hosting on this phone?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se déconnecter de l'espace organisateur sur ce téléphone ?"
+          }
+        }
+      }
+    },
+    "Signing in": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexion en cours"
           }
         }
       }
@@ -1498,6 +1668,16 @@
         }
       }
     },
+    "Too many attempts. Try again in 15 minutes.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop de tentatives. Réessayez dans 15 minutes."
+          }
+        }
+      }
+    },
     "Too many moments are waiting to upload. Try again once some have finished.": {
       "extractionState": "manual",
       "localizations": {
@@ -1586,6 +1766,26 @@
         }
       }
     },
+    "Update Moments to see your events.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettez à jour Moments pour voir vos événements."
+          }
+        }
+      }
+    },
+    "Update Moments to sign in.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettez à jour Moments pour vous connecter."
+          }
+        }
+      }
+    },
     "Update Moments, then try again.": {
       "extractionState": "manual",
       "localizations": {
@@ -1626,6 +1826,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Les envois sont indisponibles pour le moment."
+          }
+        }
+      }
+    },
+    "Username": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identifiant"
           }
         }
       }
@@ -1729,6 +1939,26 @@
         }
       }
     },
+    "You're offline. Check your connection and try again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous êtes hors ligne. Vérifiez votre connexion et réessayez."
+          }
+        }
+      }
+    },
+    "You're offline. Pull down to try again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous êtes hors ligne. Tirez vers le bas pour réessayer."
+          }
+        }
+      }
+    },
     "Your access to this event has expired. Enter the event PIN again.": {
       "extractionState": "manual",
       "localizations": {
@@ -1756,6 +1986,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vos événements ne peuvent pas être affichés pour le moment. Tirez vers le bas pour réessayer."
+          }
+        }
+      }
+    },
+    "Your events couldn't be loaded. Pull down to try again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos événements n'ont pas pu être chargés. Tirez vers le bas pour réessayer."
+          }
+        }
+      }
+    },
+    "Your hosted events": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos événements organisés"
           }
         }
       }

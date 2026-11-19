@@ -1,6 +1,7 @@
 import AppRouting
 import DesignSystem
 import FeatureGuest
+import FeatureHost
 import MomentsDomain
 import SwiftUI
 
@@ -35,7 +36,7 @@ struct RootView: View {
             } else if OnboardingFlow.shouldShow(completed: hasOnboarded, isShowingEvent: false) {
                 OnboardingView { hasOnboarded = true }
             } else {
-                HomeView(navigation: navigation, myEvents: myEvents, notice: notice)
+                HomeView(navigation: navigation, myEvents: myEvents, host: HomeView.Host(account: environment.hostAccount, events: environment.hostEvents), notice: notice)
             }
         }
         // Universal links arrive here; App Clip invocations arrive as a

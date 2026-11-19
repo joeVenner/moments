@@ -395,6 +395,15 @@ private func event(_ id: String) -> AdminEvent {
         #expect(model.phase == .failed(.offline) && model.events.map(\.id) == ["a"])
     }
 
+    @Test func resetForgetsTheList() async {
+        let service = FakeHostService()
+        service.eventsResult = .success(AdminEventList(events: [event("a")], isTruncated: true))
+        let model = HostEventsModel(service: service, account: account(service, store: FlakyHostStore(live)))
+        await model.load()
+        model.reset()
+        #expect(model.events.isEmpty && !model.isTruncated && model.phase == .idle)
+    }
+
     @Test func signedOutLoadsNothing() async {
         let service = FakeHostService()
         let model = HostEventsModel(service: service, account: account(service))

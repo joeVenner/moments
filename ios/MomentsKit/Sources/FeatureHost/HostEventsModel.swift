@@ -69,6 +69,9 @@ public final class HostEventsModel {
         return true
     }
 
+    /// Forgets the list, e.g. right after a sign-out.
+    public func reset() { clear() }
+
     private func clear() {
         events = []
         isTruncated = false

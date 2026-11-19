@@ -1,5 +1,6 @@
 import CredentialStore
 import FeatureGuest
+import FeatureHost
 import Foundation
 import MomentsAPI
 import OSLog
@@ -11,6 +12,11 @@ struct AppEnvironment {
     let service: any MomentsService
     let credentials: any EventCredentialStore
     let guest: GuestDependencies
+    /// The host screens' API and where the host's session token is kept.
+    let hostService: any HostService
+    /// Built once here: the account reads the keychain when created.
+    let hostAccount: HostAccount
+    let hostEvents: HostEventsModel
 
     static let productionBaseURL = URL(string: "https://moments-hq.com")!
 
@@ -49,24 +55,29 @@ struct AppEnvironment {
         let uploads = isHostingTests ? nil : startUploads(client: client, credentials: credentials)
         // No queue to hand session events to: release the system at once.
         if uploads == nil { BackgroundUploadEvents.connect { systemCompletion in systemCompletion() } }
-        return make(client: client, credentials: credentials, uploads: uploads)
+        return make(client: client, credentials: credentials, hostSessions: KeychainHostSessionStore(), uploads: uploads)
     }
 
     /// For tests and previews: no keychain, no network calls until used.
     static func inMemory() -> AppEnvironment {
         // No uploads: a background session can't be created twice per process.
-        make(client: makeClient(), credentials: InMemoryEventCredentialStore(), uploads: nil)
+        make(client: makeClient(), credentials: InMemoryEventCredentialStore(), hostSessions: InMemoryHostSessionStore(), uploads: nil)
     }
 
     private static func make(
-        client: MomentsClient, credentials: any EventCredentialStore, uploads: UploadDependencies?
+        client: MomentsClient, credentials: any EventCredentialStore, hostSessions: any HostSessionStore,
+        uploads: UploadDependencies?
     ) -> AppEnvironment {
         // Hearts belong to the joined guest (the X-Guest-Token), so the
         // device needs no reactor id of its own.
         let guest = GuestDependencies(
             service: client, store: credentials, mediaFetcher: makeMediaFetcher(), uploads: uploads, leaver: client
         )
-        return AppEnvironment(service: client, credentials: credentials, guest: guest)
+        let hostAccount = HostAccount(service: client, store: hostSessions)
+        return AppEnvironment(
+            service: client, credentials: credentials, guest: guest, hostService: client,
+            hostAccount: hostAccount, hostEvents: HostEventsModel(service: client, account: hostAccount)
+        )
     }
 
     // MARK: Uploads

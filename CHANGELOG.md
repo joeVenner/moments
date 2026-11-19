@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS: host sign-in. Home has a "Host sign-in" link (or "Your hosted events" once signed in). The form signs in with the event admin login, with clear messages for a wrong password, the 15-minute lockout, being offline or an outdated app. The hosted events list shows each event's date, status, moment and guest counts and a Private badge, with pull to refresh and sign out. Host screens are covered in the app switcher, and a typed password is never kept. English and French.
 - iOS: groundwork for host sign-in. The app can sign in with the admin login, keep the session token in the keychain (its own `moments.host-session` item, readable only while the phone is unlocked, never backed up to another device or synced), sign out, and load the host's events. The screens come next.
 - `GET /api/v1/admin/events` for the app's host screens: every event, newest first (up to 500, with a `truncated` flag), with moment and guest counts. It needs a host session; PINs and invite tokens are never included, and private-event covers come with a signed link.
 - Host sign-in for the app: `POST /api/v1/admin/session` exchanges the admin username and password for a 30-day bearer token (only its hash is stored); `GET` checks it and `DELETE` signs out. Every other `/api/v1/admin/*` route needs the token. Changing the admin password ends every session. Migration `0021_host_sessions`.
