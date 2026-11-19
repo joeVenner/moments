@@ -11,7 +11,90 @@
     }
   ],
   "components": {
+    "securitySchemes": {
+      "hostSession": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "A host session token from `POST /admin/session`"
+      }
+    },
     "schemas": {
+      "HostSignInResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/HostSession"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "token": {
+                "type": "string",
+                "description": "Send as `Authorization: Bearer <token>`. Returned only here; keep it in the keychain."
+              },
+              "token_type": {
+                "type": "string",
+                "description": "`Bearer`"
+              }
+            },
+            "required": [
+              "token",
+              "token_type"
+            ]
+          }
+        ]
+      },
+      "HostSession": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "Who signed in: `operator` (the admin login) for now"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "UTC, `YYYY-MM-DD HH:MM:SS`; sign in again after it"
+          }
+        },
+        "required": [
+          "subject",
+          "expires_at"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, not_found, internal"
+          }
+        },
+        "required": [
+          "error",
+          "code"
+        ]
+      },
+      "HostSignInRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ]
+      },
       "EventResponse": {
         "type": "object",
         "properties": {
@@ -129,22 +212,6 @@
           "archived_at",
           "access_mode",
           "uploads_open"
-        ]
-      },
-      "Error": {
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "string"
-          },
-          "code": {
-            "type": "string",
-            "description": "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, not_found, internal"
-          }
-        },
-        "required": [
-          "error",
-          "code"
         ]
       },
       "FeedPage": {
@@ -814,6 +881,207 @@
     "parameters": {}
   },
   "paths": {
+    "/admin/session": {
+      "post": {
+        "operationId": "signIn",
+        "tags": [
+          "Host"
+        ],
+        "summary": "Sign in as a host and get a bearer token",
+        "description": "Uses the admin username and password for now. Every attempt counts against a per-IP limit (10 a minute), right or wrong.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostSignInRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Signed in; the token is shown only here",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostSignInResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`: missing or oversized username or password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_credentials`: wrong username or password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: too many sign-in attempts from this network",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": false
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`sign_in_unavailable`: host sign-in is not set up on this server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getHostSession",
+        "tags": [
+          "Host"
+        ],
+        "summary": "Check the current host session",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The session is live",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`host_auth_required`: no token, or it expired, was signed out, or the admin password changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "signOut",
+        "tags": [
+          "Host"
+        ],
+        "summary": "Sign out: the token stops working",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Signed out"
+          },
+          "401": {
+            "description": "`host_auth_required`: no live session for this token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/events/{slug}": {
       "get": {
         "operationId": "getEvent",

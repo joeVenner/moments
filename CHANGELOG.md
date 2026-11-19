@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Host sign-in for the app: `POST /api/v1/admin/session` exchanges the admin username and password for a 30-day bearer token (only its hash is stored); `GET` checks it and `DELETE` signs out. Every other `/api/v1/admin/*` route needs the token. Changing the admin password ends every session. Migration `0021_host_sessions`.
 - iOS QR scanner: "Scan QR code" on the home screen opens the camera (VisionKit) and joins the event from its code; codes that are not Moments links are refused, and a camera-off screen links to Settings.
 - iOS home "Your events": the events joined on this phone, newest first, each opening with one tap (a private event whose grant expired asks for the PIN again); a back button returns home from an event.
 - iOS onboarding: three first-launch pages (what Moments is, scan to join, share and heart) with Skip; shown once, and skipped when the app opens on an event link.
