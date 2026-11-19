@@ -224,20 +224,16 @@ struct MomentThumbnail: View {
             .accessibilityAddTraits(.isImage)
             // Same view either way (a conditional modifier would reset the cell's state).
             .accessibilityValue(heartsValue)
-            .task(id: LoadKey(url: thumbnailURL, attempt: attempt)) { await load() }
+            .task(id: LoadKey(urls: imageURLs, attempt: attempt)) { await load() }
     }
 
-    /// Smallest rendition that fills the cell; videos never use the video file.
-    private var thumbnailURL: URL? {
-        let media = moment.media
-        let candidate = media.kind == .video
-            ? media.thumbURL ?? media.posterURL
-            : media.thumbURL ?? media.displayURL ?? media.url
-        return candidate.flatMap(URL.init(string:))
+    /// Smallest rendition first; videos never use the video file.
+    private var imageURLs: [URL] {
+        moment.media.gridImageURLs.compactMap(URL.init(string:))
     }
 
     private struct LoadKey: Equatable {
-        let url: URL?
+        let urls: [URL]
         let attempt: Int
     }
 
@@ -260,9 +256,12 @@ struct MomentThumbnail: View {
     }
 
     private func load() async {
-        guard let thumbnailURL else { return failed = true }
+        let loader = thumbnails
+        let pixelSize = Self.pixelSize
         do {
-            image = try await thumbnails.image(at: thumbnailURL, maxPixelSize: Self.pixelSize)
+            image = try await GridImage.load(imageURLs) { url in
+                try await loader.image(at: url, maxPixelSize: pixelSize)
+            }
             failed = false
         } catch is CancellationError {
             return
