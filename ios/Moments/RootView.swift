@@ -5,11 +5,12 @@ import MomentsDomain
 import SwiftUI
 
 /// Shows the screen for the last opened link: the join flow for an event,
-/// the home screen otherwise.
+/// otherwise the first-launch pages once, then the home screen.
 struct RootView: View {
     let navigation: AppNavigation
     let environment: AppEnvironment
     @State private var joinModel: JoinModel?
+    @AppStorage(OnboardingFlow.completedKey) private var hasOnboarded = false
 
     var body: some View {
         Group {
@@ -22,6 +23,8 @@ struct RootView: View {
                 }
                 // A new model per open restarts the flow cleanly.
                 .id(joinModel.id)
+            } else if OnboardingFlow.shouldShow(completed: hasOnboarded, isShowingEvent: false) {
+                OnboardingView { hasOnboarded = true }
             } else {
                 HomeView(navigation: navigation, notice: notice)
             }
@@ -54,6 +57,8 @@ struct RootView: View {
         // Last chance to keep a one-time guest token the keychain refused.
         if let joinModel, joinModel.hasUnsavedIdentity { joinModel.retrySaving() }
         guard case let .event(slug) = navigation.destination else { return joinModel = nil }
+        // Arriving by an event link skips the pages: the guest came to join.
+        hasOnboarded = true
         joinModel = makeJoinModel(slug: slug, invite: navigation.takeInvite(for: slug))
     }
 

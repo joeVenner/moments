@@ -445,6 +445,16 @@
         }
       }
     },
+    "Every moment, together": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaque moment, ensemble"
+          }
+        }
+      }
+    },
     "Finishing": {
       "extractionState": "manual",
       "localizations": {
@@ -452,6 +462,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Finalisation"
+          }
+        }
+      }
+    },
+    "Get started": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commencer"
           }
         }
       }
@@ -671,6 +691,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Moments n'a pas pu terminer votre départ. Réessayez pour reprendre là où il s'est arrêté."
+          }
+        }
+      }
+    },
+    "Moments gathers the photos and videos guests take at an event into one live feed.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moments rassemble les photos et vidéos prises par les invités d'un événement dans un fil en direct."
+          }
+        }
+      }
+    },
+    "Next": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suivant"
           }
         }
       }
@@ -959,6 +999,26 @@
         }
       }
     },
+    "Scan the event's QR code, pick a name, and you're in. No account needed.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scannez le QR code de l'événement, choisissez un nom, et c'est parti. Aucun compte nécessaire."
+          }
+        }
+      }
+    },
+    "Scan to join": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scannez pour rejoindre"
+          }
+        }
+      }
+    },
     "Share": {
       "extractionState": "manual",
       "localizations": {
@@ -977,6 +1037,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Partager ^[%lld souvenir](inflect: true)"
+          }
+        }
+      }
+    },
+    "Share and heart": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partagez et aimez"
           }
         }
       }
@@ -1014,6 +1084,16 @@
         }
       }
     },
+    "Share your photos and videos, heart your favourites, and climb the leaderboard.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partagez vos photos et vidéos, aimez vos préférées et grimpez dans le classement."
+          }
+        }
+      }
+    },
     "Shared": {
       "extractionState": "manual",
       "localizations": {
@@ -1043,6 +1123,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Les affiche en haut du fil"
+          }
+        }
+      }
+    },
+    "Skip": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passer"
           }
         }
       }

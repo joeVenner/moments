@@ -81,4 +81,39 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(!navigation.handle(text: text))
         #expect(navigation.destination == nil && navigation.openCount == 0)
     }
+
+    @Test func onboardingAdvancesPageByPageThenFinishes() {
+        var flow = OnboardingFlow(pageCount: 3)
+        #expect(flow.page == 0 && !flow.isLastPage)
+        let first = flow.advance()
+        #expect(first && flow.page == 1)
+        let second = flow.advance()
+        #expect(second && flow.isLastPage)
+        let past = flow.advance()
+        #expect(!past)
+        #expect(flow.page == 2)
+    }
+
+    @Test func onboardingSwipesStayWithinThePages() {
+        var flow = OnboardingFlow(pageCount: 3)
+        flow.show(7)
+        #expect(flow.page == 2)
+        flow.show(-1)
+        #expect(flow.page == 0)
+    }
+
+    @Test func onboardingShowsOnceAndNeverOverAnEvent() {
+        #expect(OnboardingFlow.shouldShow(completed: false, isShowingEvent: false))
+        #expect(!OnboardingFlow.shouldShow(completed: true, isShowingEvent: false))
+        #expect(!OnboardingFlow.shouldShow(completed: false, isShowingEvent: true))
+        // Persisted: renaming it would show the pages again to everyone.
+        #expect(OnboardingFlow.completedKey == "moments.onboarding.completed")
+    }
+
+    @Test func aSinglePageFlowStartsOnItsLastPage() {
+        var flow = OnboardingFlow(pageCount: 1)
+        #expect(flow.isLastPage)
+        flow.show(3)
+        #expect(flow.page == 0)
+    }
 }
