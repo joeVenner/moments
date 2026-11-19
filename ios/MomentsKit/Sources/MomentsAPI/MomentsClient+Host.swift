@@ -43,6 +43,18 @@ public protocol HostService: Sendable {
     /// Deletes a moment and its files. `.momentNotFound` when it's already
     /// gone; `.mediaDeleteFailed` when the files stayed (the moment too).
     func deleteMoment(token: String, momentID: String) async throws
+    /// Creates a public event, open for uploads until `endsAt` (nil: no end).
+    /// `.rateLimited` after many in a minute; `.invalidRequest` for fields
+    /// the server refuses (too long, an end in the past).
+    func createEvent(token: String, details: EventDetails, endsAt: Date?) async throws -> AdminEventDetail
+    /// Replaces the event's details; the slug (and so its links) never changes.
+    func updateEvent(token: String, id: String, details: EventDetails) async throws -> AdminEventDetail
+    /// Public or private. A `newPIN` signs every guest out and replaces the
+    /// invite link; nil keeps the current PIN. Private needs a PIN.
+    func updateAccess(token: String, id: String, mode: Event.AccessMode, newPIN: String?) async throws -> AdminEventDetail
+    /// When uploads close (a past date closes them now) and when the event
+    /// and its media are deleted (must be in the future); nil means never.
+    func updateDates(token: String, id: String, uploadsCloseAt: Date?, deleteAfter: Date?) async throws -> AdminEventDetail
 }
 
 extension MomentsClient: HostService {
@@ -182,6 +194,90 @@ extension MomentsClient: HostService {
         }
     }
 
+    public func createEvent(token: String, details: EventDetails, endsAt: Date?) async throws -> AdminEventDetail {
+        try await withHostToken(token) {
+            let body = Components.Schemas.CreateAdminEventRequest(
+                title: details.title, _type: details.type,
+                mainCharacters: details.mainCharacters, description: details.description,
+                startsAt: details.startsAt.map(ServerDate.requestFormat), expiresAt: endsAt.map(ServerDate.requestFormat)
+            )
+            switch try await client.createAdminEvent(body: .json(body)) {
+            case let .created(response): return try mapper.adminEventDetail(try response.body.json)
+            case let .badRequest(response): throw Self.hostError(400, try? response.body.json.code)
+            case let .unauthorized(response): throw Self.hostError(401, try? response.body.json.code)
+            case let .upgradeRequired(response): throw Self.hostError(426, try? response.body.json.code)
+            case let .tooManyRequests(response): throw Self.hostError(429, try? response.body.json.code)
+            case let .default(status, response): throw Self.hostError(status, try? response.body.json.code)
+            }
+        }
+    }
+
+    public func updateEvent(token: String, id: String, details: EventDetails) async throws -> AdminEventDetail {
+        guard Self.isValidPathID(id) else { throw MomentsAPIError.eventNotFound }
+        return try await withHostToken(token) {
+            // Every field is sent: the generated client drops nil ones (the
+            // server reads that as "unchanged"), so "" stands for "clear".
+            let body = Components.Schemas.UpdateAdminEventRequest(
+                title: details.title, _type: details.type,
+                mainCharacters: details.mainCharacters ?? "", description: details.description ?? "",
+                startsAt: details.startsAt.map(ServerDate.requestFormat) ?? ""
+            )
+            let output = try await client.updateAdminEvent(path: .init(id: id), body: .json(body))
+            switch output {
+            case let .ok(response): return try Self.checked(mapper.adminEventDetail(try response.body.json), id: id)
+            case let .badRequest(response): throw Self.hostError(400, try? response.body.json.code)
+            case let .unauthorized(response): throw Self.hostError(401, try? response.body.json.code)
+            case let .notFound(response): throw Self.hostError(404, try? response.body.json.code)
+            case let .upgradeRequired(response): throw Self.hostError(426, try? response.body.json.code)
+            case let .default(status, response): throw Self.hostError(status, try? response.body.json.code)
+            }
+        }
+    }
+
+    public func updateAccess(token: String, id: String, mode: Event.AccessMode, newPIN: String?) async throws -> AdminEventDetail {
+        guard Self.isValidPathID(id) else { throw MomentsAPIError.eventNotFound }
+        return try await withHostToken(token) {
+            let body = Components.Schemas.UpdateEventAccessRequest(mode: mode.rawValue, pin: newPIN)
+            let output = try await client.updateEventAccess(path: .init(id: id), body: .json(body))
+            switch output {
+            case let .ok(response): return try Self.checked(mapper.adminEventDetail(try response.body.json), id: id)
+            case let .badRequest(response): throw Self.hostError(400, try? response.body.json.code)
+            case let .unauthorized(response): throw Self.hostError(401, try? response.body.json.code)
+            case let .notFound(response): throw Self.hostError(404, try? response.body.json.code)
+            case let .upgradeRequired(response): throw Self.hostError(426, try? response.body.json.code)
+            case let .default(status, response): throw Self.hostError(status, try? response.body.json.code)
+            }
+        }
+    }
+
+    public func updateDates(token: String, id: String, uploadsCloseAt: Date?, deleteAfter: Date?) async throws -> AdminEventDetail {
+        guard Self.isValidPathID(id) else { throw MomentsAPIError.eventNotFound }
+        return try await withHostToken(token) {
+            // Both split dates, always, and the legacy single date cleared, so
+            // the event is exactly what the host sees. "" clears (see updateEvent).
+            let body = Components.Schemas.UpdateEventLifecycleRequest(
+                uploadsCloseAt: uploadsCloseAt.map(ServerDate.requestFormat) ?? "",
+                purgeAfter: deleteAfter.map(ServerDate.requestFormat) ?? "",
+                expiresAt: ""
+            )
+            let output = try await client.updateEventLifecycle(path: .init(id: id), body: .json(body))
+            switch output {
+            case let .ok(response): return try Self.checked(mapper.adminEventDetail(try response.body.json), id: id)
+            case let .badRequest(response): throw Self.hostError(400, try? response.body.json.code)
+            case let .unauthorized(response): throw Self.hostError(401, try? response.body.json.code)
+            case let .notFound(response): throw Self.hostError(404, try? response.body.json.code)
+            case let .upgradeRequired(response): throw Self.hostError(426, try? response.body.json.code)
+            case let .default(status, response): throw Self.hostError(status, try? response.body.json.code)
+            }
+        }
+    }
+
+    /// The answer must be the event that was changed.
+    private static func checked(_ detail: AdminEventDetail, id: String) throws -> AdminEventDetail {
+        guard detail.summary.event.id == id else { throw MomentsAPIError.unexpectedResponse }
+        return detail
+    }
+
     /// The server's path ids are 1–100 characters; anything else can't exist.
     static func isValidPathID(_ id: String) -> Bool { !id.isEmpty && id.count <= 100 }
 
@@ -212,6 +308,7 @@ struct HostAuthMiddleware: ClientMiddleware {
     static let hostOperations: Set<String> = [
         "getHostSession", "signOut", "listAdminEvents", "getAdminEvent",
         "listAdminMoments", "moderateMoment", "deleteMoment",
+        "createAdminEvent", "updateAdminEvent", "updateEventAccess", "updateEventLifecycle",
     ]
 
     func intercept(

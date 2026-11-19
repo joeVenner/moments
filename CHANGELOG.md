@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS: groundwork for creating and editing events in the host app. The API client can create an event, edit its details, change its privacy and PIN, and set its dates. Form models check the same limits as the server. The screens come next.
 - App API: hosts can make an event public or private with a new PIN (`PATCH /api/v1/admin/events/{id}/access`) and change when uploads close and when it is deleted (`PATCH /api/v1/admin/events/{id}/lifecycle`). A new PIN signs every guest out and replaces the invite link, as on the web. A deletion date in the past is refused.
 - App API: hosts can create an event (`POST /api/v1/admin/events`) and change its title, type, people, description or date (`PATCH /api/v1/admin/events/{id}`). New events start public and open for uploads; the slug comes from the title and never changes, so shared links and QR codes keep working.
 - iOS: moderate an event from the app. "Moderate moments" on a hosted event opens a grid of all its moments, hidden ones dimmed with a badge. Tap one to hide it from guests, show it again, or delete it (marked destructive, with a "can't be undone" warning); VoiceOver users get the same actions. English and French.
@@ -97,6 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Website uploads now belong to the guest who made them. A guest who joined always uploads under their own nickname, whatever name the page sends, so nobody can post photos as someone else. Once guest identities are required, the website refuses uploads from visitors who haven't joined, before anything is stored.
 - Hearts now belong to the guest, not the device. A guest who joined reacts as themselves on the website and in the app: the server decides whose heart it is, so a client can no longer send hearts on another guest's behalf, and a guest sees their hearts on every device where they joined. Leaving an event takes back that guest's hearts. Clients without a guest identity keep their device id only until guest identities are required.
 ### Fixed
+- App API: an empty string now clears an event date. Generated clients like the iOS one leave a missing field out rather than sending `null`, so the app couldn't clear a date before.
 - iOS: retrying a picture right after it failed to load now really loads it again.
 - Leaving an event now deletes everything the guest shared with their identity, including website photos and videos and their thumbnails, not only what came from the app. A guest with an unfinished website upload can now finish leaving.
 

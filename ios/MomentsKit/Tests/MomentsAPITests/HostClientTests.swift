@@ -249,6 +249,86 @@ private func adminMoment(id: String = "m1", status: String = "approved", kind: S
         #expect(stub.requests.isEmpty)
     }
 
+    private func jsonBody(_ request: StubTransport.Recorded) throws -> [String: String] {
+        let object = try JSONSerialization.jsonObject(with: Data(try #require(request.body).utf8))
+        return try #require(object as? [String: String])
+    }
+
+    @Test func createsAnEventWithZonedDatesAndTheBearer() async throws {
+        let stub = StubTransport(status: 201, json: detail())
+        let startsAt = try #require(ServerDate.parse("2026-12-05 17:00:00"))
+        let details = EventDetails(title: "Party", type: "Wedding", mainCharacters: "Sara", startsAt: startsAt)
+        let created = try await client(stub).createEvent(token: hostToken, details: details, endsAt: nil)
+        #expect(created.summary.event.id == "e1")
+        let request = try #require(stub.requests.first)
+        #expect(request.request.method == .post && request.request.path == "/admin/events")
+        #expect(request.request.headerFields[.authorization] == "Bearer \(hostToken)")
+        // No end: the field is left out, never sent as an empty date.
+        #expect(try jsonBody(request) == [
+            "title": "Party", "type": "Wedding", "main_characters": "Sara", "starts_at": "2026-12-05T17:00:00Z",
+        ])
+    }
+
+    @Test(arguments: [
+        (429, "rate_limited", MomentsAPIError.rateLimited),
+        (400, "invalid_request", .invalidRequest),
+        (401, "host_auth_required", .hostAuthRequired),
+    ])
+    func mapsCreateFailures(_ status: Int, _ code: String, _ expected: MomentsAPIError) async throws {
+        let stub = StubTransport(status: status, json: #"{"error":"x","code":"\#(code)"}"#)
+        await #expect(throws: expected) {
+            _ = try await client(stub).createEvent(token: hostToken, details: EventDetails(title: "P", type: "P"), endsAt: nil)
+        }
+    }
+
+    @Test func editsAnEventSendingEmptyToClear() async throws {
+        let stub = StubTransport(json: detail())
+        _ = try await client(stub).updateEvent(token: hostToken, id: "e1", details: EventDetails(title: "Party", type: "Party"))
+        let request = try #require(stub.requests.first)
+        #expect(request.request.method == .patch && request.request.path == "/admin/events/e1")
+        #expect(request.request.headerFields[.authorization] == "Bearer \(hostToken)")
+        #expect(try jsonBody(request) == ["title": "Party", "type": "Party", "main_characters": "", "description": "", "starts_at": ""])
+    }
+
+    @Test func changesAccessAndLeavesThePINOutToKeepIt() async throws {
+        let stub = StubTransport(json: detail(inviteURL: "https://moments.test/e/party?invite=abc", accessMode: "private"))
+        _ = try await client(stub).updateAccess(token: hostToken, id: "e1", mode: .private, newPIN: nil)
+        _ = try await client(stub).updateAccess(token: hostToken, id: "e1", mode: .private, newPIN: "482913")
+        #expect(stub.requests.map(\.request.path) == ["/admin/events/e1/access", "/admin/events/e1/access"])
+        #expect(try jsonBody(stub.requests[0]) == ["mode": "private"])
+        #expect(try jsonBody(stub.requests[1]) == ["mode": "private", "pin": "482913"])
+    }
+
+    @Test func setsBothSplitDatesAndClearsTheSingleOne() async throws {
+        let stub = StubTransport(json: detail())
+        let close = try #require(ServerDate.parse("2026-12-05 17:00:00"))
+        _ = try await client(stub).updateDates(token: hostToken, id: "e1", uploadsCloseAt: close, deleteAfter: nil)
+        let request = try #require(stub.requests.first)
+        #expect(request.request.method == .patch && request.request.path == "/admin/events/e1/lifecycle")
+        #expect(try jsonBody(request) == ["uploads_close_at": "2026-12-05T17:00:00Z", "purge_after": "", "expires_at": ""])
+    }
+
+    @Test func refusesAnAnswerForAnotherEvent() async throws {
+        let stub = StubTransport(json: detail())
+        await #expect(throws: MomentsAPIError.unexpectedResponse) {
+            _ = try await client(stub).updateEvent(token: hostToken, id: "other", details: EventDetails(title: "P", type: "P"))
+        }
+    }
+
+    @Test func eventWritesNeverCallWithAnImpossibleIDOrNoToken() async throws {
+        let stub = StubTransport(json: "{}")
+        await #expect(throws: MomentsAPIError.eventNotFound) {
+            _ = try await client(stub).updateAccess(token: hostToken, id: "", mode: .public, newPIN: nil)
+        }
+        await #expect(throws: MomentsAPIError.eventNotFound) {
+            _ = try await client(stub).updateDates(token: hostToken, id: String(repeating: "x", count: 101), uploadsCloseAt: nil, deleteAfter: nil)
+        }
+        await #expect(throws: MomentsAPIError.hostAuthRequired) {
+            _ = try await client(stub).createEvent(token: "", details: EventDetails(title: "P", type: "P"), endsAt: nil)
+        }
+        #expect(stub.requests.isEmpty)
+    }
+
     @Test func aMissingEventsMomentsAreEventNotFound() async throws {
         let stub = StubTransport(status: 404, json: #"{"error":"x","code":"event_not_found"}"#)
         await #expect(throws: MomentsAPIError.eventNotFound) { _ = try await client(stub).adminMoments(token: hostToken, eventID: "e1") }

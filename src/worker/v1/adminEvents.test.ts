@@ -341,6 +341,10 @@ describe("PATCH /api/v1/admin/events/{id}", () => {
     });
     await update("e", { starts_at: null });
     expect(sqlite.raw.prepare("SELECT starts_at FROM events WHERE id = 'e'").get()).toEqual({ starts_at: null });
+    await update("e", { starts_at: "2026-12-05T18:00:00Z" });
+    // Generated clients can't send null: an empty string clears too.
+    await update("e", { starts_at: "" });
+    expect(sqlite.raw.prepare("SELECT starts_at FROM events WHERE id = 'e'").get()).toEqual({ starts_at: null });
   });
 
   it("needs a host session", async () => {
@@ -489,10 +493,23 @@ describe("PATCH /api/v1/admin/events/{id}/lifecycle", () => {
     sqlite.raw.prepare("UPDATE events SET uploads_close_at = '2099-01-01 00:00:00', purge_after = '2099-02-01 00:00:00' WHERE id = 'e'").run();
     await patchAuthed("/admin/events/e/lifecycle", { purge_after: null });
     expect(datesRow("e")).toMatchObject({ uploads_close_at: "2099-01-01 00:00:00", purge_after: null });
+    await patchAuthed("/admin/events/e/lifecycle", { uploads_close_at: "", purge_after: "2099-02-01T00:00:00Z" });
+    expect(datesRow("e")).toMatchObject({ uploads_close_at: null, purge_after: "2099-02-01 00:00:00" });
+    await patchAuthed("/admin/events/e/lifecycle", { uploads_close_at: "2099-01-01T00:00:00Z" });
     await patchAuthed("/admin/events/e/lifecycle", { expires_at: "2099-05-01T00:00:00Z", purge_after: "2099-06-01T00:00:00Z" });
     expect(datesRow("e")).toMatchObject({
       expires_at: "2099-05-01 00:00:00", uploads_close_at: "2099-01-01 00:00:00", purge_after: "2099-06-01 00:00:00",
     });
+  });
+
+  it("takes the app's body: both split dates and the single one cleared", async () => {
+    insertEvent("e", "2026-01-01 10:00:00");
+    sqlite.raw.prepare("UPDATE events SET expires_at = '2099-09-01 00:00:00' WHERE id = 'e'").run();
+    const response = await patchAuthed("/admin/events/e/lifecycle", {
+      uploads_close_at: "2099-01-01T00:00:00Z", purge_after: "", expires_at: "",
+    });
+    expect(response.status).toBe(200);
+    expect(datesRow("e")).toMatchObject({ expires_at: null, uploads_close_at: "2099-01-01 00:00:00", purge_after: null });
   });
 
   it("refuses uploads closing after deletion", async () => {

@@ -450,15 +450,19 @@ const eventTitle = z.string().trim().min(1).max(120);
 const eventType = z.string().trim().min(1).max(60).openapi({ description: "Free text, e.g. Wedding, Birthday" });
 const optionalText = (max: number, description: string) =>
   z.string().trim().max(max).nullable().optional().openapi({ description: `${description} Empty or null clears it.` });
-/** Full ISO 8601 with an explicit zone, so no host's time is silently shifted. */
-const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
+/**
+ * Full ISO 8601 with an explicit zone, so no host's time is silently shifted,
+ * or empty to clear the date: generated clients (the iOS one) can't send an
+ * explicit null, they leave the field out, which means "unchanged".
+ */
+const ISO_DATE_TIME = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2}))?$/;
 const eventDate = (description: string) =>
   z
     .string()
     .regex(ISO_DATE_TIME)
     .nullable()
     .optional()
-    .openapi({ description: `${description} ISO 8601 with a time zone (e.g. 2026-12-05T18:00:00+01:00), years 2000-2100; null clears it.` });
+    .openapi({ description: `${description} ISO 8601 with a time zone (e.g. 2026-12-05T18:00:00+01:00), years 2000-2100; empty or null clears it.` });
 
 export const CreateAdminEventBodySchema = z
   .object({
