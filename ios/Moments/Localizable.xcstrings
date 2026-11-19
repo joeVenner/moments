@@ -2153,6 +2153,16 @@
         }
       }
     },
+    "Share photo": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partager la photo"
+          }
+        }
+      }
+    },
     "Share the event link": {
       "localizations": {
         "fr": {

@@ -140,7 +140,11 @@ struct MomentViewer: View {
             if !isPlaying {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     caption(moment)
-                    reactionButton(moment)
+                    HStack(spacing: Spacing.sm) {
+                        reactionButton(moment)
+                        Spacer(minLength: 0)
+                        shareButton(moment)
+                    }
                 }
                 .padding(Spacing.md)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -175,6 +179,23 @@ struct MomentViewer: View {
         .accessibilityLabel(Text("Heart"))
         .accessibilityValue(Text(moment.hasReacted ? "On, ^[\(moment.reactionCount) heart](inflect: true)" : "Off, ^[\(moment.reactionCount) heart](inflect: true)"))
         .accessibilityAddTraits(.isToggle)
+    }
+
+    /// Photos only for now: a video would need its whole file downloaded.
+    @ViewBuilder private func shareButton(_ moment: Moment) -> some View {
+        if let photo = SharedPhoto(media: moment.media, images: images) {
+            // The preview names no one: it shows in other apps.
+            ShareLink(item: photo, preview: SharePreview(Text("Photo"))) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(MomentsFont.body().weight(.semibold))
+                    .foregroundStyle(MomentsColor.text)
+                    .frame(width: Radius.minimumTapTarget, height: Radius.minimumTapTarget)
+                    .background(MomentsColor.surface.opacity(0.85), in: Circle())
+                    .overlay(Circle().stroke(MomentsColor.border))
+            }
+            .fixedSize()
+            .accessibilityLabel(Text("Share photo"))
+        }
     }
 
     private func counter(position: Int, total: Int) -> some View {
