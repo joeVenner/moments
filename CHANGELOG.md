@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS app: video tiles in the feed and Highlights show how long the video is next to the play badge.
 - iOS app: the Leaderboard ends with how many points a guest still needs for their next milestone, with a progress bar.
 - iOS app: the uploads sheet opens on "Sharing 6 moments to <event>" with overall progress, how many are shared, and a reminder that sharing carries on with the phone locked.
 - iOS app: the full-screen viewer shows who shared a moment and how long ago next to Close, the caption at the bottom, and the heart as a pill with its count.
