@@ -678,6 +678,38 @@
           }
         }
       },
+      "ThumbnailUrl": {
+        "type": "object",
+        "properties": {
+          "expires_at": {
+            "type": "string",
+            "description": "UTC, `YYYY-MM-DD HH:MM:SS`",
+            "example": "2026-11-17 18:30:00"
+          },
+          "url": {
+            "type": "string",
+            "description": "Presigned PUT URL for the ~400 px JPEG thumbnail. Send exactly `Content-Type: image/jpeg` and the declared size; anything else is refused. A bearer credential: never log it."
+          }
+        },
+        "required": [
+          "expires_at",
+          "url"
+        ]
+      },
+      "ThumbnailUrlRequest": {
+        "type": "object",
+        "properties": {
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 204800,
+            "description": "The thumbnail's exact size in bytes (at most 204800)"
+          }
+        },
+        "required": [
+          "size"
+        ]
+      },
       "UploadCompleteConflict": {
         "type": "object",
         "properties": {
@@ -2505,6 +2537,182 @@
           },
           "409": {
             "description": "`upload_not_open`: completed or aborted; start a new session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_uploads` (open sessions) or `rate_limited`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "`uploads_unavailable`: direct uploads are not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`storage_unavailable`: R2 failed; retry later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error (415, 5xx, ...)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{slug}/uploads/{id}/thumbnail-url": {
+      "post": {
+        "operationId": "getThumbnailUrl",
+        "tags": [
+          "Uploads"
+        ],
+        "summary": "A presigned PUT URL for the session's grid thumbnail, valid for 6 h (optional)",
+        "description": "Optional. Call after startUpload and before completeUpload, with the thumbnail's exact size. PUT the ~400 px JPEG to `url` with `Content-Type: image/jpeg` and a body of exactly `size` bytes (at most 204800), no other headers; R2 refuses anything else. completeUpload checks it (a whole JPEG) and the feed serves it as `thumb_url`. A thumbnail sent after completeUpload, or a missing or bad one, is dropped: the moment completes without `thumb_url`. Asking again gives a new URL.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "slug",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "Access grant; required for private events only"
+            },
+            "required": false,
+            "description": "Access grant; required for private events only",
+            "name": "x-event-access",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "This device's guest token (required: uploads belong to a joined guest)"
+            },
+            "required": false,
+            "description": "This device's guest token (required: uploads belong to a joined guest)",
+            "name": "x-guest-token",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThumbnailUrlRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThumbnailUrl"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body (size missing or too large)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Private event; send a grant from the access endpoint in X-Event-Access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`guest_required`: join first and send X-Guest-Token; or `uploads_closed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live event with this slug, or `upload_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`upload_not_open`: completed or aborted; complete without a thumbnail",
             "content": {
               "application/json": {
                 "schema": {

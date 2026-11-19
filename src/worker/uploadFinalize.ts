@@ -2,6 +2,7 @@ import { matchesContentType, SIGNATURE_BYTES } from "./mediaSignature";
 import { isR2Configured } from "./presign";
 import { completeMultipartUpload, type R2Part, R2RequestError } from "./multipartPresign";
 import { pointsForContentType } from "./storage";
+import { acceptThumbnail, thumbnailKeys } from "./thumbnails";
 import type { Env } from "./types";
 import {
   getUploadById,
@@ -31,6 +32,8 @@ export interface FinalizeBackend extends MultipartBackend {
   head(key: string): Promise<{ contentType: string; size: number } | null>;
   /** The object's first `length` bytes, or null if it doesn't exist. */
   readStart(key: string, length: number): Promise<Uint8Array | null>;
+  readAll(key: string): Promise<Uint8Array | null>;
+  put(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   deleteObject(key: string): Promise<void>;
 }
 
@@ -47,6 +50,13 @@ export function r2FinalizeBackend(env: Env): FinalizeBackend {
     readStart: async (key, length) => {
       const object = await env.BUCKET.get(key, { range: { offset: 0, length } });
       return object ? new Uint8Array(await object.arrayBuffer()) : null;
+    },
+    readAll: async (key) => {
+      const object = await env.BUCKET.get(key);
+      return object ? new Uint8Array(await object.arrayBuffer()) : null;
+    },
+    put: async (key, bytes, contentType) => {
+      await env.BUCKET.put(key, bytes, { httpMetadata: { contentType } });
     },
     deleteObject: (key) => env.BUCKET.delete(key),
   };
@@ -108,7 +118,13 @@ async function register(db: D1Database, backend: FinalizeBackend, session: Uploa
     if (!(await markAborted(db, session.id))) return settled(db, session.id);
     return { kind: "not_open" };
   }
-  const removeObject = () => backend.deleteObject(session.key);
+  const removeThumbnails = async () => {
+    for (const key of thumbnailKeys(session.key)) await backend.deleteObject(key);
+  };
+  const removeObject = async () => {
+    await backend.deleteObject(session.key);
+    await removeThumbnails();
+  };
   if (object.size !== session.size_bytes || object.contentType !== session.content_type) {
     return reject(db, session, "object_mismatch", removeObject);
   }
@@ -116,17 +132,27 @@ async function register(db: D1Database, backend: FinalizeBackend, session: Uploa
   if (!start || !matchesContentType(start, session.content_type)) {
     return reject(db, session, "signature_mismatch", removeObject);
   }
+  // Optional: a missing, bad or unreadable thumbnail never holds the moment
+  // back. A storage error here means the moment has no thumbnail (the feed
+  // falls back to the file); the event's purge removes any leftover.
+  const thumbKey = await acceptThumbnail(backend, session.key).catch((err: unknown) => {
+    console.error(
+      JSON.stringify({ scope: "upload", event: "thumbnail_check_failed", uploadRecordId: session.id, error: err instanceof Error ? err.name : "unknown" })
+    );
+    return null;
+  });
 
   await db.batch([
     db
       .prepare(
-        `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type, participant_id)
-         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+        `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type, participant_id, thumb_key)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
           WHERE EXISTS (${OPEN_IN_LIVE_EVENT})`
       )
       .bind(
         crypto.randomUUID(), session.event_id, session.uploader_name, `/media/${session.key}`, session.caption,
-        pointsForContentType(session.content_type), object.size, session.content_type, session.participant_id, session.id
+        pointsForContentType(session.content_type), object.size, session.content_type, session.participant_id, thumbKey,
+        session.id
       ),
     db
       .prepare(`UPDATE uploads SET status = 'completed', completed_at = datetime('now') WHERE id = ? AND EXISTS (${OPEN_IN_LIVE_EVENT})`)
@@ -165,7 +191,10 @@ export async function finalizeUpload(
   const check = checkParts(session, parts);
   if (check.kind === "incomplete") return check;
   if (check.kind === "bad") {
-    return reject(db, session, "part_size_mismatch", () => backend.abort(session.key, session.upload_id));
+    return reject(db, session, "part_size_mismatch", async () => {
+      await backend.abort(session.key, session.upload_id);
+      for (const key of thumbnailKeys(session.key)) await backend.deleteObject(key);
+    });
   }
   try {
     await backend.complete(session.key, session.upload_id, parts);

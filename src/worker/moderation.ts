@@ -1,7 +1,19 @@
 import type { Env } from "./types";
 import { isStreamConfigured, streamApiUrl, streamAuthHeaders } from "./stream";
 
-export async function deleteMomentMedia(env: Env, mediaUrl: string): Promise<void> {
+/** A moment's stored files: its media plus any derived images. */
+export interface MomentMedia {
+  media_url: string;
+  thumb_key?: string | null;
+  display_key?: string | null;
+  poster_key?: string | null;
+}
+
+/** Deletes a moment's media and every derived image (thumbnail, display, poster). */
+export async function deleteMomentMedia(env: Env, moment: MomentMedia): Promise<void> {
+  const derived = [moment.thumb_key, moment.display_key, moment.poster_key].filter((key): key is string => !!key);
+  if (derived.length > 0) await env.BUCKET.delete(derived);
+  const mediaUrl = moment.media_url;
   if (mediaUrl.startsWith("/media/")) {
     await env.BUCKET.delete(mediaUrl.slice("/media/".length));
     return;

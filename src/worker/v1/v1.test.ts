@@ -14,6 +14,7 @@ import {
   JoinResponseSchema,
   LeaderboardSchema,
   PartUrlsSchema,
+  ThumbnailUrlSchema,
   ReactionSchema,
   TooManyAttemptsSchema,
   UploadCompleteConflictSchema,
@@ -922,6 +923,25 @@ describe("upload sessions", () => {
     expect(await outside.json()).toMatchObject({ code: "invalid_parts" });
   });
 
+  it("signs a thumbnail URL bound to a JPEG of the declared size", async () => {
+    const token = await guestToken();
+    const { id } = (await (await start(token)).json()) as { id: string };
+    const thumb = (body: unknown) =>
+      call(`/events/party/uploads/${id}/thumbnail-url`, authed(token, { method: "POST", body: JSON.stringify(body) }));
+    const ok = await thumb({ size: 40_000 });
+    expect(ok.status).toBe(200);
+    const url = new URL(exact(ThumbnailUrlSchema, await ok.json()).url);
+    // The upload slot, never the served key.
+    expect(url.pathname).toMatch(/\.thumb-upload\.jpg$/);
+    expect(url.searchParams.get("X-Amz-SignedHeaders")).toBe("content-length;content-type;host");
+    expect((await thumb({ size: 300 * 1024 })).status).toBe(400);
+    expect((await thumb({})).status).toBe(400);
+    const lea = await guestToken("party", "Lea");
+    expect(
+      (await call(`/events/party/uploads/${id}/thumbnail-url`, authed(lea, { method: "POST", body: '{"size":10}' }))).status
+    ).toBe(404);
+  });
+
   it("reports which parts R2 already has", async () => {
     const token = await guestToken();
     const { id } = (await (await start(token)).json()) as { id: string };
@@ -986,12 +1006,19 @@ describe("upload sessions", () => {
       if (request.method === "DELETE" && url.searchParams.get("uploadId") === "mp-9") return new Response(null, { status: 204 });
       return new Response("unexpected", { status: 500 });
     });
+    const bucketDelete = vi.fn().mockResolvedValue(undefined);
+    extraEnv = { ...R2_ENV, BUCKET: { delete: bucketDelete } as unknown as R2Bucket };
     const token = await guestToken();
     const { id } = (await (await start(token)).json()) as { id: string };
     const first = await call(`/events/party/uploads/${id}`, authed(token, { method: "DELETE" }));
     expect(first.status).toBe(200);
     expect(exact(UploadSessionSchema, await first.json()).status).toBe("aborted");
+    // Its thumbnail goes too (sent or not).
+    expect(bucketDelete).toHaveBeenCalledWith([expect.stringMatching(/\.thumb-upload\.jpg$/), expect.stringMatching(/\.thumb\.jpg$/)]);
     expect((await call(`/events/party/uploads/${id}`, authed(token, { method: "DELETE" }))).status).toBe(200);
+    // No thumbnail URL for a session that is over.
+    const thumb = await call(`/events/party/uploads/${id}/thumbnail-url`, authed(token, { method: "POST", body: '{"size":10}' }));
+    expect(thumb.status).toBe(409);
     const reused = await start(token);
     expect(reused.status).toBe(409);
     expect(await reused.json()).toMatchObject({ code: "upload_not_open" });

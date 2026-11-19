@@ -200,6 +200,26 @@ describe("/media", () => {
     expect((await get("/media/events/ev1/thumbs/m1.jpg")).status).toBe(404);
   });
 
+  it("never serves a thumbnail's upload slot, and serves accepted thumbnails as safe JPEGs", async () => {
+    const key = addMoment("m1", "ev1");
+    objects.set(`${key}.thumb-upload.jpg`, "<html>");
+    expect((await get(`/media/${key}.thumb-upload.jpg`)).status).toBe(404);
+    objects.set(`${key}.thumb.jpg`, "jpeg");
+    const res = await get(`/media/${key}.thumb.jpg`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/jpeg");
+  });
+
+  it("tells browsers never to sniff or run media", async () => {
+    const key = addMoment("m1", "ev1");
+    const variants: Record<string, string>[] = [{}, { "If-None-Match": '"other"' }, { Range: "bytes=0-1" }];
+    for (const headers of variants) {
+      const res = await get(`/media/${key}`, headers);
+      expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+      expect(res.headers.get("Content-Security-Policy")).toBe("default-src 'none'; sandbox");
+    }
+  });
+
   it("still serves objects that belong to no moment (event covers)", async () => {
     objects.set("events/ev1/cover", "cover");
     expect((await get("/media/events/ev1/cover")).status).toBe(200);

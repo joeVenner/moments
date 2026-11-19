@@ -6,6 +6,7 @@
 
 import { PURGE_AT_SQL, UPLOAD_FINISH_GRACE_MINUTES, UPLOADS_CLOSE_AT_SQL } from "./events";
 import { abortMultipartUpload } from "./multipartPresign";
+import { thumbnailKeys } from "./thumbnails";
 import { isR2Configured } from "./presign";
 import type { Env } from "./types";
 import { UPLOAD_SESSION_TTL_HOURS } from "./uploadSessions";
@@ -130,7 +131,8 @@ async function deleteUnregisteredObjects(env: Env, ids: readonly string[]): Prom
     .all<{ key: string }>();
   if (results.length === 0 || !env.BUCKET) return;
   try {
-    await env.BUCKET.delete(results.map((row) => row.key));
+    // Each session's thumbnail too, uploaded beside it before the abort.
+    await env.BUCKET.delete(results.flatMap((row) => [row.key, ...thumbnailKeys(row.key)]));
   } catch (err) {
     console.error(JSON.stringify({ scope: "upload", event: "orphan_object_delete_failed", error: err instanceof Error ? err.name : "unknown" }));
   }

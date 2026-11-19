@@ -150,7 +150,8 @@ describe("abortOrphanUploads", () => {
       .run();
     const testEnv = env();
     await abortOrphanUploads(testEnv, vi.fn(async () => undefined));
-    expect(testEnv.BUCKET.delete).toHaveBeenCalledWith(["events/live/moments/a-a.jpg"]);
+    // And its thumbnail, if one was sent beside it.
+    expect(testEnv.BUCKET.delete).toHaveBeenCalledWith(["events/live/moments/a-a.jpg", "events/live/moments/a-a.jpg.thumb-upload.jpg", "events/live/moments/a-a.jpg.thumb.jpg"]);
   });
 
   it("leaves failed aborts open for the next run and logs no keys", async () => {

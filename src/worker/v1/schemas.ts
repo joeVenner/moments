@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { MAX_THUMBNAIL_BYTES } from "../thumbnails";
 import { MAX_PIN_LENGTH } from "../eventAccess";
 import { MAX_NICKNAME_LENGTH } from "../guestIdentity";
 import { REACTOR_ID_PATTERN } from "../reactions";
@@ -332,6 +333,27 @@ export const PartUrlsRequestSchema = z
       .openapi({ description: "Parts to sign; omit for all of them (an empty list is an error)" }),
   })
   .openapi("PartUrlsRequest");
+
+export const ThumbnailUrlRequestSchema = z
+  .object({
+    size: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_THUMBNAIL_BYTES)
+      .openapi({ description: `The thumbnail's exact size in bytes (at most ${MAX_THUMBNAIL_BYTES})` }),
+  })
+  .openapi("ThumbnailUrlRequest");
+
+export const ThumbnailUrlSchema = z
+  .object({
+    expires_at: timestamp,
+    url: z.string().openapi({
+      description:
+        "Presigned PUT URL for the ~400 px JPEG thumbnail. Send exactly `Content-Type: image/jpeg` and the declared size; anything else is refused. A bearer credential: never log it.",
+    }),
+  })
+  .openapi("ThumbnailUrl");
 
 export const PartUrlsSchema = z
   .object({

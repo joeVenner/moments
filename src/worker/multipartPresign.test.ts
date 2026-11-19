@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createMultipartUpload,
   presignPartUrl,
+  presignBoundPutUrl,
   completeMultipartUpload,
   abortMultipartUpload,
   listParts,
@@ -63,6 +64,16 @@ describe("presignPartUrl", () => {
     expect(url.searchParams.get("X-Amz-Algorithm")).toBe("AWS4-HMAC-SHA256");
     expect(url.searchParams.get("X-Amz-Signature")).toMatch(/^[a-f0-9]{64}$/);
     expect(url.searchParams.get("X-Amz-Expires")).toBe(String(PART_PRESIGN_EXPIRY_SECONDS));
+  });
+});
+
+describe("presignBoundPutUrl", () => {
+  it("binds the content type and exact size into the signature", async () => {
+    const url = new URL(await presignBoundPutUrl(envWithR2(), `${KEY}.thumb.jpg`, "image/jpeg", 12345, 600));
+    expect(url.pathname).toBe(`/moments-media/${KEY}.thumb.jpg`);
+    expect(url.searchParams.get("X-Amz-SignedHeaders")).toBe("content-length;content-type;host");
+    expect(url.searchParams.get("X-Amz-Expires")).toBe("600");
+    expect(url.searchParams.get("X-Amz-Signature")).toMatch(/^[a-f0-9]{64}$/);
   });
 });
 

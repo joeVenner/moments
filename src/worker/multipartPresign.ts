@@ -139,6 +139,29 @@ export async function presignPartUrl(
   return signed.url;
 }
 
+/**
+ * Presigns a single PUT bound to an exact Content-Type and Content-Length
+ * (both signed, so R2 refuses any other type or size). Used for thumbnails,
+ * whose size the app declares up front.
+ */
+export async function presignBoundPutUrl(
+  env: Env,
+  key: string,
+  contentType: string,
+  size: number,
+  expiresInSeconds: number
+): Promise<string> {
+  const client = s3Client(env);
+  const target = objectUrl(env, key, { "X-Amz-Expires": String(expiresInSeconds) });
+  const signed = await client.sign(target, {
+    method: "PUT",
+    headers: { "Content-Type": contentType, "Content-Length": String(size) },
+    // aws4fetch skips these two headers unless asked; signing them is the point.
+    aws: { signQuery: true, allHeaders: true },
+  });
+  return signed.url;
+}
+
 /** A completed part as R2 reports it / as CompleteMultipartUpload expects it. */
 export interface R2Part {
   partNumber: number;

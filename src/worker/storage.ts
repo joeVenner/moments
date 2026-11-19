@@ -23,7 +23,9 @@ export function sanitizeFilename(name: string): string {
  * `events/<event>/moments/`, so every upload path builds keys here.
  */
 export function momentKey(eventId: string, filename: string): string {
-  return `events/${eventId}/moments/${crypto.randomUUID()}-${sanitizeFilename(filename)}`;
+  // A file named like a thumbnail would be refused or retyped by /media.
+  const name = sanitizeFilename(filename).replace(/\.thumb(-upload)?\.jpg$/i, "_thumb$1.jpg");
+  return `events/${eventId}/moments/${crypto.randomUUID()}-${name}`;
 }
 
 export function isAllowedContentType(contentType: string): boolean {
