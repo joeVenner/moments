@@ -39,6 +39,15 @@ import { signMomentsForEvent, STREAM_SIGNING_UNAVAILABLE, StreamSigningError } f
 import { withGuestMediaGrant, withGuestMediaGrants } from "../mediaAccess";
 import type { Env, EventRow } from "../types";
 import {
+  bearerToken,
+  createHostSession,
+  deleteHostSession,
+  type HostSession,
+  isHostSignInConfigured,
+  resolveHostSession,
+  verifyHostCredentials,
+} from "../hostSessions";
+import {
   AccessRequestSchema,
   AccessResponseSchema,
   ChangesQuerySchema,
@@ -72,6 +81,9 @@ import {
   JoinResponseSchema,
   SlugParamSchema,
   TooManyAttemptsSchema,
+  HostSessionSchema,
+  HostSignInRequestSchema,
+  HostSignInResponseSchema,
 } from "./schemas";
 
 /**
@@ -80,7 +92,7 @@ import {
  * The web `/api/*` routes are unchanged.
  */
 
-type V1Env = { Bindings: Env; Variables: { event: EventRow } };
+type V1Env = { Bindings: Env; Variables: { event: EventRow; hostSession: HostSession } };
 
 export const CLIENT_HEADER = "X-Client";
 export const EVENT_ACCESS_HEADER = "X-Event-Access";
@@ -403,6 +415,83 @@ const accessRoute = createRoute({
   },
 });
 
+const HOST_SECURITY = [{ hostSession: [] }];
+
+const signInRoute = createRoute({
+  method: "post",
+  path: "/admin/session",
+  operationId: "signIn",
+  tags: ["Host"],
+  summary: "Sign in as a host and get a bearer token",
+  description:
+    "Uses the admin username and password for now. Every attempt counts against a per-IP limit (10 a minute), right or wrong.",
+  request: { body: { content: { "application/json": { schema: HostSignInRequestSchema } }, required: true } },
+  responses: {
+    201: json(HostSignInResponseSchema, "Signed in; the token is shown only here"),
+    400: json(ErrorSchema, "`invalid_request`: missing or oversized username or password"),
+    401: json(ErrorSchema, "`invalid_credentials`: wrong username or password"),
+    426: json(ErrorSchema, "This app build is too old; show the update screen"),
+    429: {
+      ...json(ErrorSchema, "`rate_limited`: too many sign-in attempts from this network"),
+      headers: z.object({ "Retry-After": z.string().optional() }),
+    },
+    503: json(ErrorSchema, "`sign_in_unavailable`: host sign-in is not set up on this server"),
+    default: json(ErrorSchema, "Any other error"),
+  },
+});
+
+const getSessionRoute = createRoute({
+  method: "get",
+  path: "/admin/session",
+  operationId: "getHostSession",
+  tags: ["Host"],
+  summary: "Check the current host session",
+  security: HOST_SECURITY,
+  responses: {
+    200: json(HostSessionSchema, "The session is live"),
+    401: json(ErrorSchema, "`host_auth_required`: no token, or it expired, was signed out, or the admin password changed"),
+    426: json(ErrorSchema, "This app build is too old; show the update screen"),
+    default: json(ErrorSchema, "Any other error"),
+  },
+});
+
+const signOutRoute = createRoute({
+  method: "delete",
+  path: "/admin/session",
+  operationId: "signOut",
+  tags: ["Host"],
+  summary: "Sign out: the token stops working",
+  security: HOST_SECURITY,
+  responses: {
+    204: { description: "Signed out" },
+    401: json(ErrorSchema, "`host_auth_required`: no live session for this token"),
+    426: json(ErrorSchema, "This app build is too old; show the update screen"),
+    default: json(ErrorSchema, "Any other error"),
+  },
+});
+
+/** Exact match: `POST /admin/session/` or any other spelling stays gated. */
+const SIGN_IN_PATH = `/api/v1${signInRoute.path}`;
+const HOST_AUTH_REQUIRED = { error: "Sign in again.", code: "host_auth_required" };
+
+/**
+ * Every /admin route needs a live host session, except signing in. Sessions
+ * are checked on each request (one indexed query), so signing out or
+ * changing the admin password takes effect at once.
+ */
+const hostGate: MiddlewareHandler<V1Env> = async (c, next) => {
+  c.header("Cache-Control", "no-store");
+  if (c.req.method === "POST" && c.req.path === SIGN_IN_PATH) return next();
+  const token = bearerToken(c.req.header("Authorization"));
+  const session = token ? await resolveHostSession(c.env.DB, c.env, token) : null;
+  if (!session) {
+    c.header("WWW-Authenticate", 'Bearer realm="Moments"');
+    return c.json(HOST_AUTH_REQUIRED, 401);
+  }
+  c.set("hostSession", session);
+  return next();
+};
+
 /** Rejects iOS builds below MIN_IOS_BUILD with 426 so the app can force an update. */
 const clientVersionGate: MiddlewareHandler<V1Env> = async (c, next) => {
   if (isBelowMinimumBuild(parseIosBuild(c.req.header(CLIENT_HEADER)), c.env.MIN_IOS_BUILD)) {
@@ -475,6 +564,38 @@ v1.use("*", clientVersionGate);
 // Hono's "/*" also matches "/events/:slug" itself, so this one line gates
 // the event route and everything below it (registering both runs it twice).
 v1.use("/events/:slug/*", eventGate);
+v1.use("/admin/*", hostGate);
+
+v1.openapi(signInRoute, async (c) => {
+  // Counted before the password is checked, right or wrong: otherwise a
+  // limited client could still tell a correct guess from a wrong one.
+  const ip = c.req.header("CF-Connecting-IP") ?? "unknown";
+  if (!(await c.env.ADMIN_AUTH_LIMITER.limit({ key: `host-sign-in:${ip}` })).success) {
+    return c.json({ error: "Too many attempts. Try again in a minute.", code: "rate_limited" }, 429, { "Retry-After": "60" });
+  }
+  if (!isHostSignInConfigured(c.env)) {
+    console.error(JSON.stringify({ msg: "host_sign_in_unconfigured" }));
+    return c.json({ error: "Sign-in is not available right now.", code: "sign_in_unavailable" }, 503);
+  }
+  const { username, password } = c.req.valid("json");
+  if (!(await verifyHostCredentials(c.env, username, password))) {
+    // Never the username, the password or the IP.
+    console.warn(JSON.stringify({ msg: "host_sign_in_failed" }));
+    return c.json({ error: "Wrong username or password.", code: "invalid_credentials" }, 401);
+  }
+  const { token, session } = await createHostSession(c.env.DB, c.env);
+  return c.json({ token, token_type: "Bearer", subject: session.subject, expires_at: session.expiresAt }, 201);
+});
+
+v1.openapi(getSessionRoute, (c) => {
+  const session = c.get("hostSession");
+  return c.json({ subject: session.subject, expires_at: session.expiresAt }, 200);
+});
+
+v1.openapi(signOutRoute, async (c) => {
+  await deleteHostSession(c.env.DB, c.get("hostSession").id);
+  return c.body(null, 204);
+});
 
 v1.openapi(getEventRoute, async (c) => {
   c.header("Cache-Control", "no-store");
@@ -890,6 +1011,12 @@ export const OPENAPI_CONFIG = {
   },
   servers: [{ url: "/api/v1" }],
 };
+
+v1.openAPIRegistry.registerComponent("securitySchemes", "hostSession", {
+  type: "http",
+  scheme: "bearer",
+  description: "A host session token from `POST /admin/session`",
+});
 
 v1.doc31("/openapi.json", OPENAPI_CONFIG);
 

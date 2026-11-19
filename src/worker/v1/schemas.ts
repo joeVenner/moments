@@ -22,7 +22,7 @@ export const ErrorSchema = z
     error: z.string(),
     code: z.string().openapi({
       description:
-        "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, not_found, internal",
+        "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, not_found, internal",
     }),
   })
   .openapi("Error");
@@ -345,3 +345,22 @@ export const PartUrlsSchema = z
     ),
   })
   .openapi("PartUrls");
+
+export const HostSignInRequestSchema = z
+  .object({
+    username: z.string().min(1).max(256),
+    password: z.string().min(1).max(1024),
+  })
+  .openapi("HostSignInRequest");
+
+export const HostSessionSchema = z
+  .object({
+    subject: z.string().openapi({ description: "Who signed in: `operator` (the admin login) for now" }),
+    expires_at: z.string().openapi({ description: "UTC, `YYYY-MM-DD HH:MM:SS`; sign in again after it" }),
+  })
+  .openapi("HostSession");
+
+export const HostSignInResponseSchema = HostSessionSchema.extend({
+  token: z.string().openapi({ description: "Send as `Authorization: Bearer <token>`. Returned only here; keep it in the keychain." }),
+  token_type: z.string().openapi({ description: "`Bearer`" }),
+}).openapi("HostSignInResponse");

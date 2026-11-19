@@ -64,13 +64,33 @@ describe("openapi/v1.json", () => {
 
   it("gives every operation an operationId and an error schema", () => {
     const doc = v1.getOpenAPI31Document(OPENAPI_CONFIG);
-    const operations = Object.values(doc.paths ?? {}).flatMap((item) =>
-      Object.values(item as Record<string, { operationId?: string; responses?: Record<string, unknown> }>)
+    const operations = Object.entries(doc.paths ?? {}).flatMap(([path, item]) =>
+      Object.values(item as Record<string, { operationId?: string; responses?: Record<string, unknown> }>).map(
+        (operation) => ({ path, operation })
+      )
     );
     expect(operations.length).toBeGreaterThanOrEqual(4);
-    for (const operation of operations) {
+    for (const { path, operation } of operations) {
       expect(operation.operationId).toMatch(/^[a-z][A-Za-z]+$/);
-      expect(operation.responses).toHaveProperty("404");
+      expect(operation.responses).toHaveProperty("default");
+      // Event routes can always answer "no such event".
+      if (path.startsWith("/events/")) expect(operation.responses).toHaveProperty("404");
+    }
+  });
+
+  it("marks every admin operation except sign-in as needing a host session", () => {
+    const doc = v1.getOpenAPI31Document(OPENAPI_CONFIG);
+    const admin = Object.entries(doc.paths ?? {})
+      .filter(([path]) => path.startsWith("/admin/"))
+      .flatMap(([path, item]) =>
+        Object.entries(item as Record<string, { operationId?: string; security?: unknown }>).map(([method, operation]) => ({
+          route: `${method} ${path}`,
+          security: operation.security,
+        }))
+      );
+    expect(admin.length).toBeGreaterThanOrEqual(3);
+    for (const { route, security } of admin) {
+      expect(security, route).toEqual(route === "post /admin/session" ? undefined : [{ hostSession: [] }]);
     }
   });
 
