@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { sanitizeFilename, isAllowedContentType, pointsForContentType, putMedia } from "./storage";
+import { sanitizeFilename, isAllowedContentType, pointsForContentType, putMedia, momentKey } from "./storage";
 import type { Env } from "./types";
 
 describe("sanitizeFilename", () => {
@@ -72,5 +72,13 @@ describe("putMedia", () => {
       file,
       expect.objectContaining({ httpMetadata: { contentType: "image/jpeg" } })
     );
+  });
+});
+
+describe("momentKey", () => {
+  it("never ends like a thumbnail key", () => {
+    expect(momentKey("e1", "party.thumb.jpg")).toMatch(/^events\/e1\/moments\/[0-9a-f-]{36}-party_thumb\.jpg$/);
+    expect(momentKey("e1", "a.THUMB-UPLOAD.JPG")).toMatch(/-a_thumb-upload\.jpg$/i);
+    expect(momentKey("e1", "photo.jpg")).toMatch(/-photo\.jpg$/);
   });
 });

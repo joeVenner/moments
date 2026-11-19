@@ -5,11 +5,14 @@ import type { Env } from "./types";
 import { vi } from "vitest";
 import { abortUpload, getUploadById, startUpload, type StartUploadHooks, type UploadSessionRow } from "./uploadSessions";
 import { MULTIPART_PART_BYTES, type R2Part, R2RequestError } from "./multipartPresign";
+import { MAX_THUMBNAIL_BYTES } from "./thumbnails";
 
 let sqlite: SqliteD1;
 const MB8 = MULTIPART_PART_BYTES;
 const SIZE = 2 * MB8 + 100;
 const JPEG_START = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+/** A whole (tiny) JPEG, as a thumbnail must be. */
+const THUMB = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 0xff, 0xd9]);
 const HOOKS: StartUploadHooks = { canStartNew: async () => "ok", onCleanupError: () => undefined };
 
 interface FakeR2 {
@@ -22,6 +25,11 @@ interface FakeR2 {
     assembled: { contentType: string; size: number; start: Uint8Array };
     completeFails: boolean;
     calls: string[];
+    /** The thumbnail the app uploaded (`<key>.thumb-upload.jpg`), if any. */
+    thumb: { contentType: string; size: number; start: Uint8Array } | null;
+    thumbDeleted: boolean;
+    /** What the server copied to the served key. */
+    thumbCopy: Uint8Array | null;
   };
 }
 
@@ -33,7 +41,11 @@ function fakeR2(): FakeR2 {
     assembled: { contentType: "image/jpeg", size: SIZE, start: JPEG_START },
     completeFails: false,
     calls: [],
+    thumb: null,
+    thumbDeleted: false,
+    thumbCopy: null,
   };
+  const isThumb = (key: string) => key.endsWith(".thumb-upload.jpg");
   const backend: FinalizeBackend = {
     create: async () => "mp-1",
     presignPart: async () => "https://r2.test/part",
@@ -53,9 +65,25 @@ function fakeR2(): FakeR2 {
       state.multipartGone = true;
       if (state.completeFails) throw new R2RequestError("completeMultipartUpload", 500, "InternalError");
     },
-    head: async () => (state.object ? { contentType: state.object.contentType, size: state.object.size } : null),
-    readStart: async () => state.object?.start ?? null,
-    deleteObject: async () => {
+    head: async (key) => {
+      const object = isThumb(key) ? state.thumb : state.object;
+      return object ? { contentType: object.contentType, size: object.size } : null;
+    },
+    readStart: async (key) => (isThumb(key) ? state.thumb : state.object)?.start ?? null,
+    readAll: async (key) => (isThumb(key) ? state.thumb?.start ?? null : null),
+    put: async (_key, bytes) => {
+      state.thumbCopy = bytes;
+    },
+    deleteObject: async (key) => {
+      if (key.endsWith(".thumb.jpg")) {
+        state.thumbCopy = null;
+        return;
+      }
+      if (isThumb(key)) {
+        state.thumbDeleted = state.thumbDeleted || state.thumb !== null;
+        state.thumb = null;
+        return;
+      }
       state.calls.push("delete");
       state.object = null;
     },
@@ -141,6 +169,59 @@ describe("finalizeUpload", () => {
     ]);
     // The moment belongs to the session's guest.
     expect(sqlite.raw.prepare("SELECT participant_id FROM moments").get()).toEqual({ participant_id: "p1" });
+  });
+
+  it("records a valid thumbnail on the moment", async () => {
+    const r2 = fakeR2();
+    const session = await openSession(r2);
+    r2.state.parts = fullParts();
+    r2.state.thumb = { contentType: "image/jpeg", size: THUMB.length, start: THUMB };
+    expect((await finalizeUpload(sqlite.db, r2.backend, session)).kind).toBe("completed");
+    expect(sqlite.raw.prepare("SELECT thumb_key FROM moments").get()).toEqual({ thumb_key: `${session.key}.thumb.jpg` });
+    // Served from the server's own copy; the guest's upload slot is gone.
+    expect(r2.state.thumbCopy).toEqual(THUMB);
+    expect(r2.state.thumbDeleted).toBe(true);
+  });
+
+  it.each([
+    ["no thumbnail", null, false],
+    ["a thumbnail of another type", { contentType: "image/png", size: THUMB.length, start: THUMB }, true],
+    ["a thumbnail over the limit", { contentType: "image/jpeg", size: MAX_THUMBNAIL_BYTES + 1, start: THUMB }, true],
+    ["a thumbnail that isn't a JPEG", { contentType: "image/jpeg", size: 5, start: new TextEncoder().encode("<svg>") }, true],
+  ])("still creates the moment with %s, and drops a bad one", async (_name, thumb, deleted) => {
+    const r2 = fakeR2();
+    const session = await openSession(r2);
+    r2.state.parts = fullParts();
+    r2.state.thumb = thumb;
+    expect((await finalizeUpload(sqlite.db, r2.backend, session)).kind).toBe("completed");
+    expect(sqlite.raw.prepare("SELECT thumb_key FROM moments").get()).toEqual({ thumb_key: null });
+    expect(r2.state.thumbDeleted).toBe(deleted);
+    expect(r2.state.thumbCopy).toBeNull();
+  });
+
+  it("removes the thumbnail with a rejected file", async () => {
+    const r2 = fakeR2();
+    const session = await openSession(r2);
+    r2.state.parts = fullParts();
+    r2.state.assembled = { contentType: "text/html", size: SIZE, start: JPEG_START };
+    r2.state.thumb = { contentType: "image/jpeg", size: THUMB.length, start: THUMB };
+    expect((await finalizeUpload(sqlite.db, r2.backend, session)).kind).toBe("rejected");
+    expect(r2.state.thumbDeleted).toBe(true);
+  });
+
+  it("logs a storage error on the thumbnail and completes without one", async () => {
+    const r2 = fakeR2();
+    const session = await openSession(r2);
+    r2.state.parts = fullParts();
+    r2.state.thumb = { contentType: "image/jpeg", size: THUMB.length, start: THUMB };
+    r2.backend.readAll = async () => {
+      throw new Error("R2 down");
+    };
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect((await finalizeUpload(sqlite.db, r2.backend, session)).kind).toBe("completed");
+    expect(sqlite.raw.prepare("SELECT thumb_key FROM moments").get()).toEqual({ thumb_key: null });
+    expect(log.mock.calls.flat().join(" ")).toContain("thumbnail_check_failed");
+    log.mockRestore();
   });
 
   it("is idempotent: a replay returns the same moment", async () => {

@@ -44,6 +44,7 @@ import {
   syncStreamSigning,
 } from "./streamSigning";
 import { deleteMomentMedia } from "./moderation";
+import { isThumbnailUploadKey } from "./thumbnails";
 import { cleanupEvent, cleanupExpiredEvents, pruneAccessFailures } from "./lifecycle";
 import { abortOrphanUploads } from "./orphanUploads";
 import { finalizeReadyUploads } from "./uploadFinalize";
@@ -1622,8 +1623,25 @@ app.post("/api/admin/generate-banner", async (c) => {
 
 type MediaEvent = Pick<EventRow, "id" | "access_mode" | "invite_token" | "access_version">;
 
+/**
+ * On every /media answer: the bytes are guest uploads, so the browser must
+ * never sniff them into something else or run them as a page.
+ */
+const MEDIA_SAFETY_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "Content-Security-Policy": "default-src 'none'; sandbox",
+} as const;
+
+/** A served thumbnail is always the JPEG the server wrote; never trust metadata. */
+function mediaContentType(key: string, stored: string | undefined): string {
+  if (key.endsWith(".thumb.jpg")) return "image/jpeg";
+  return stored ?? "application/octet-stream";
+}
+
 app.get("/media/*", async (c) => {
   const key = c.req.path.slice("/media/".length);
+  // The app's thumbnail upload slot: still writable through its URL, never served.
+  if (isThumbnailUploadKey(key)) return c.notFound();
   const eventId = /^events\/([^/]+)\//.exec(key)?.[1];
   // Only what the access check needs; the three lookups are independent.
   const eventColumns = "id, access_mode, invite_token, access_version";
@@ -1673,7 +1691,8 @@ app.get("/media/*", async (c) => {
     if (!object) return c.notFound();
     return new Response(object.body, {
       headers: {
-        "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
+        ...MEDIA_SAFETY_HEADERS,
+        "Content-Type": mediaContentType(key, object.httpMetadata?.contentType),
         "Cache-Control": mediaCacheControl,
         "Accept-Ranges": "bytes",
         ETag: object.httpEtag,
@@ -1688,7 +1707,8 @@ app.get("/media/*", async (c) => {
   const total = meta.size;
   const etag = meta.httpEtag;
   const baseHeaders: Record<string, string> = {
-    "Content-Type": meta.httpMetadata?.contentType ?? "application/octet-stream",
+    ...MEDIA_SAFETY_HEADERS,
+    "Content-Type": mediaContentType(key, meta.httpMetadata?.contentType),
     "Cache-Control": mediaCacheControl,
     "Accept-Ranges": "bytes",
     ETag: etag,
