@@ -1717,6 +1717,16 @@
         }
       }
     },
+    "Photos and videos from your library": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos et vidéos de votre photothèque"
+          }
+        }
+      }
+    },
     "Photos and videos shared by guests will appear here.": {
       "extractionState": "manual",
       "localizations": {
@@ -2029,6 +2039,16 @@
         }
       }
     },
+    "Section": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Section"
+          }
+        }
+      }
+    },
     "Share": {
       "extractionState": "manual",
       "localizations": {
@@ -2083,17 +2103,6 @@
         }
       }
     },
-    "Share photos and videos": {
-      "extractionState": "manual",
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Partager photos et vidéos"
-          }
-        }
-      }
-    },
     "Share the event link": {
       "localizations": {
         "fr": {
@@ -2132,6 +2141,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Partage en cours"
+          }
+        }
+      }
+    },
+    "Sharing open until %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partage ouvert jusqu'au %@"
           }
         }
       }

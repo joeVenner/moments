@@ -32,6 +32,9 @@ public struct GuestEventView: View {
     /// Bumped when a batch is queued (for the haptic, played here because
     /// the sheet is already closing).
     @State private var sharedBatches = 0
+    @State private var section = GuestEventSection.moments
+    /// Sections are built when first shown, so joining loads only the feed.
+    @State private var openedSections: Set<GuestEventSection> = [.moments]
 
     public init(
         join: JoinModel, dependencies: GuestDependencies, rejoin: @escaping () -> Void,
@@ -49,21 +52,29 @@ public struct GuestEventView: View {
             if let feed, let highlights, let leaderboard, let thumbnails, let viewerImages {
                 VStack(spacing: 0) {
                     if join.hasUnsavedIdentity { unsavedBanner }
-                    TabView {
-                        FeedView(model: feed, thumbnails: thumbnails, viewerImages: viewerImages)
-                            .safeAreaInset(edge: .bottom, alignment: .trailing) { shareButton(feed) }
-                            .tabItem { Label("Moments", systemImage: "square.grid.3x3") }
-                        HighlightsView(model: highlights, thumbnails: thumbnails, viewerImages: viewerImages)
-                            .safeAreaInset(edge: .bottom, alignment: .trailing) { shareButton(feed) }
-                            .tabItem { Label("Highlights", systemImage: "heart") }
-                        LeaderboardView(model: leaderboard)
-                            .tabItem { Label("Leaderboard", systemImage: "trophy") }
+                    if leave != nil || progress != nil || onHome != nil { topBar }
+                    GuestEventHeader(event: feed.event, section: $section)
+                    // Every opened section stays alive, keeping its scroll.
+                    ZStack {
+                        FeedView(model: feed, thumbnails: thumbnails, viewerImages: viewerImages, isSelected: section == .moments)
+                            .sectionContent(isSelected: section == .moments)
+                        if openedSections.contains(.highlights) {
+                            HighlightsView(
+                                model: highlights, thumbnails: thumbnails, viewerImages: viewerImages,
+                                isSelected: section == .highlights
+                            )
+                                .sectionContent(isSelected: section == .highlights)
+                        }
+                        if openedSections.contains(.leaderboard) {
+                            LeaderboardView(model: leaderboard, isSelected: section == .leaderboard)
+                                .sectionContent(isSelected: section == .leaderboard)
+                        }
                     }
-                    .tint(MomentsColor.accent)
+                    .safeAreaInset(edge: .bottom) {
+                        if section != .leaderboard { shareButton(feed) }
+                    }
                     .haptic(.uploadComplete, trigger: sharedBatches)
-                    .safeAreaInset(edge: .top) {
-                        if leave != nil || progress != nil || onHome != nil { topBar }
-                    }
+                    .onChange(of: section) { openedSections.insert(section) }
                     if feed.phase == .accessLost || feed.phase == .guestRequired {
                         Button("Join again", action: rejoin)
                             .buttonStyle(.momentsPrimary)
@@ -272,8 +283,8 @@ public struct GuestEventView: View {
         }
     }
 
-    /// Shown at the bottom of a tab (above the tab bar, insetting the
-    /// tab's content) when uploads are available and the event is open.
+    /// Shown under Moments and Highlights (insetting their content) when
+    /// uploads are available and the event is open.
     @ViewBuilder private func shareButton(_ feed: FeedModel) -> some View {
         if let uploads = dependencies.uploads, feed.phase != .accessLost, feed.phase != .guestRequired,
            feed.phase != .failed(.eventGone) {
@@ -289,13 +300,14 @@ public struct GuestEventView: View {
             presentedUpload = model
             upload = model
         } label: {
-            Image(systemName: "plus")
-                .font(.title2.bold())
+            Label("Share moments", systemImage: "plus")
+                .font(MomentsFont.body().bold())
                 .foregroundStyle(MomentsColor.onAccent)
-                .frame(width: 56, height: 56)
-                .background(MomentsColor.accent, in: Circle())
+                .padding(.horizontal, Spacing.lg)
+                .frame(minHeight: 52)
+                .background(MomentsColor.accent, in: Capsule())
         }
-        .accessibilityLabel(Text("Share photos and videos"))
+        .accessibilityHint(Text("Photos and videos from your library"))
         .padding(Spacing.md)
     }
 
@@ -312,5 +324,79 @@ public struct GuestEventView: View {
         }
         .padding(.horizontal, Spacing.md)
         .background(MomentsColor.surface)
+    }
+}
+
+/// The event's three sections, switched under its header.
+enum GuestEventSection: String, CaseIterable, Identifiable, Hashable {
+    case moments, highlights, leaderboard
+
+    var id: String { rawValue }
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .moments: "Moments"
+        case .highlights: "Highlights"
+        case .leaderboard: "Leaderboard"
+        }
+    }
+}
+
+private extension View {
+    /// A section out of sight: no touches, nothing read by VoiceOver.
+    func sectionContent(isSelected: Bool) -> some View {
+        opacity(isSelected ? 1 : 0)
+            .allowsHitTesting(isSelected)
+            .accessibilityHidden(!isSelected)
+    }
+}
+
+/// The event's name, when sharing closes, and the section switcher.
+struct GuestEventHeader: View {
+    let event: Event
+    @Binding var section: GuestEventSection
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text(verbatim: event.title)
+                    .font(MomentsFont.display(.title))
+                    .foregroundStyle(MomentsColor.text)
+                    .accessibilityAddTraits(.isHeader)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let line = Self.sharingLine(event) {
+                    Text(line)
+                        .font(MomentsFont.caption())
+                        .foregroundStyle(MomentsColor.textMuted)
+                }
+            }
+            sectionPicker
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.bottom, Spacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder private var sectionPicker: some View {
+        let picker = Picker(selection: $section) {
+            ForEach(GuestEventSection.allCases) { Text($0.title).tag($0) }
+        } label: {
+            Text("Section")
+        }
+        .labelsHidden()
+        // Segments truncate at large text sizes; a menu keeps the words whole.
+        if typeSize.isAccessibilitySize {
+            picker.pickerStyle(.menu).tint(MomentsColor.accent)
+        } else {
+            picker.pickerStyle(.segmented)
+        }
+    }
+
+    /// "Sharing open until 21 Nov, 21:00"; nil once closed or with no end.
+    static func sharingLine(_ event: Event) -> LocalizedStringResource? {
+        guard event.areUploadsOpen, event.archivedAt == nil, let closesAt = event.effectiveUploadsCloseAt else { return nil }
+        let when = closesAt.formatted(date: .abbreviated, time: .shortened)
+        return "Sharing open until \(when)"
     }
 }

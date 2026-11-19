@@ -13,8 +13,12 @@ public struct HighlightsView: View {
 
     private static let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
 
-    public init(model: HighlightsModel, thumbnails: ThumbnailLoader, viewerImages: ThumbnailLoader) {
+    /// Shown in its event (sections stay alive while hidden).
+    let isSelected: Bool
+
+    public init(model: HighlightsModel, thumbnails: ThumbnailLoader, viewerImages: ThumbnailLoader, isSelected: Bool = true) {
         self.model = model
+        self.isSelected = isSelected
         self.thumbnails = thumbnails
         self.viewerImages = viewerImages
     }
@@ -22,16 +26,10 @@ public struct HighlightsView: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.md) {
-                VStack(alignment: .leading, spacing: Spacing.xxs) {
-                    Text("Highlights")
-                        .font(MomentsFont.display(.title))
-                        .foregroundStyle(MomentsColor.text)
-                        .accessibilityAddTraits(.isHeader)
-                    Text("The moments guests love most")
-                        .font(MomentsFont.body())
-                        .foregroundStyle(MomentsColor.textMuted)
-                }
-                .padding(.horizontal, Spacing.md)
+                Text("The moments guests love most")
+                    .font(MomentsFont.body())
+                    .foregroundStyle(MomentsColor.textMuted)
+                    .padding(.horizontal, Spacing.md)
                 content
             }
             .padding(.vertical, Spacing.md)
@@ -39,7 +37,10 @@ public struct HighlightsView: View {
         .refreshable { await model.refresh() }
         .background(MomentsColor.background)
         // Each time the tab is shown; the model skips fresh reloads.
-        .onAppear { Task { await model.loadIfStale() } }
+        // Each time the section is shown, like a tab's onAppear.
+        .onChange(of: isSelected, initial: true) {
+            if isSelected { Task { await model.loadIfStale() } }
+        }
         #if os(iOS)
         .fullScreenCover(item: $viewing) { request in
             MomentViewer(model: model, images: viewerImages, start: request.id)
