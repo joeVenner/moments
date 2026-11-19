@@ -12,11 +12,14 @@ export function LeaveEventButton({
   slug,
   disabled,
   onLeft,
+  onLeavingChange,
 }: {
   slug: string;
   /** True while an upload runs from this page; leaving would race it. */
   disabled: boolean;
   onLeft: () => void;
+  /** True from the confirm until the leave ends, before onLeft. */
+  onLeavingChange?: (isLeaving: boolean) => void;
 }) {
   const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
@@ -58,6 +61,7 @@ export function LeaveEventButton({
 
   const confirm = async () => {
     isLeavingRef.current = true;
+    onLeavingChange?.(true);
     setIsLeaving(true);
     setProblem(null);
     let outcome: LeaveOutcome;
@@ -67,6 +71,7 @@ export function LeaveEventButton({
       outcome = "failed";
     } finally {
       isLeavingRef.current = false;
+      onLeavingChange?.(false);
       setIsLeaving(false);
     }
     if (outcome === "left") {

@@ -1,3 +1,5 @@
+import { GUEST_REQUIRED_EVENT, GuestRequiredError, refusalAction, type GuestRequiredDetail } from "../lib/guestRequired";
+import { forgetGuest } from "../lib/webLeave";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
@@ -84,6 +86,8 @@ function EventPageForSlug() {
   // Whether this browser holds the guest's token (what "Leave" needs). State,
   // not a render-time read: a background rejoin can issue it later.
   const [hasGuestToken, setHasGuestToken] = useState(false);
+  const isLeavingRef = useRef(false);
+  const isForgettingRef = useRef(false);
   // Why the nickname prompt is back (another device owns the saved name).
   const [gateProblem, setGateProblem] = useState<JoinProblem | null>(null);
   const [loading, setLoading] = useState(true);
@@ -116,6 +120,39 @@ function EventPageForSlug() {
   // dim → throttle → kill the tab's upload. Foreground keep-alive only — see
   // useUploadWakeLock + multipartUpload.ts for the resumable-chunk fallback.
   useUploadWakeLock(uploading);
+
+  // The server refused this guest's token (they left from another tab, or
+  // the event was reset): forget them here and ask them to join again.
+  useEffect(() => {
+    if (!slug) return;
+    let isCurrent = true;
+    const onRefused = (event: Event) => {
+      const detail = (event as CustomEvent<GuestRequiredDetail>).detail;
+      // During a Leave the server revokes the token before this page forgets
+      // it: a request refused in that window is the leave, not a problem.
+      // Parallel part uploads can also report the same refusal several times.
+      if (detail?.slug !== slug || isLeavingRef.current || isForgettingRef.current) return;
+      const action = refusalAction(detail, getGuestToken(slug));
+      if (action === "ignore") return;
+      const showGate = () => {
+        isForgettingRef.current = false;
+        if (!isCurrent) return;
+        setNicknameState(null);
+        setHasGuestToken(false);
+        setGateProblem("guest_required");
+        setMyPoints(0);
+        setUploadError(null);
+      };
+      isForgettingRef.current = true;
+      if (action === "gate") showGate();
+      else void forgetGuest(slug).finally(showGate);
+    };
+    window.addEventListener(GUEST_REQUIRED_EVENT, onRefused);
+    return () => {
+      isCurrent = false;
+      window.removeEventListener(GUEST_REQUIRED_EVENT, onRefused);
+    };
+  }, [slug]);
 
   useEffect(() => {
     if (!slug) return;
@@ -233,6 +270,7 @@ function EventPageForSlug() {
           } catch (error) {
             if (
               !(error instanceof UploadAlreadyRunningError) &&
+              !(error instanceof GuestRequiredError) &&
               (!(error instanceof Error) || error.name !== "StreamUploadAlreadyRunningError")
             ) {
               shouldRetry = true;
@@ -407,7 +445,13 @@ function EventPageForSlug() {
         if (reason instanceof UploadInterruptedError || reason?.name === "StreamUploadInterruptedError") {
           // The durable queue owns it now and will retry automatically.
           pausedNames.push(pending[i].file.name);
-        } else if (!(reason instanceof UploadAlreadyRunningError) && reason?.name !== "StreamUploadAlreadyRunningError") {
+        } else if (
+          !(reason instanceof UploadAlreadyRunningError) &&
+          reason?.name !== "StreamUploadAlreadyRunningError" &&
+          !(reason instanceof GuestRequiredError && refusalAction(reason, getGuestToken(slug)) !== "ignore")
+        ) {
+          // A guest_required refusal that sends the guest to the gate isn't
+          // counted; one for an older token (another tab rejoined) is a failure.
           failures += 1;
         }
         setMoments((prev) => prev.filter((m) => m.id !== pending[i].tempId));
@@ -507,8 +551,14 @@ function EventPageForSlug() {
               {hasGuestToken && (
                 <LeaveEventButton
                   slug={slug!}
+                  onLeavingChange={(isLeaving) => {
+                    isLeavingRef.current = isLeaving;
+                  }}
                   disabled={uploading}
                   onLeft={() => {
+                    // Requests still in flight from before the leave come back refused:
+                    // ignore them until this browser joins again.
+                    isLeavingRef.current = true;
                     setNicknameState(null);
                     setHasGuestToken(false);
                     setGateProblem(null);
@@ -667,6 +717,7 @@ function EventPageForSlug() {
             saveNickname(slug!, name);
             setNicknameState(name);
             setHasGuestToken(getGuestToken(slug!) !== null);
+            isLeavingRef.current = false;
             setGateProblem(null);
             // Bump the strip so the new guest (and their avatar) show up
             // immediately without a page refresh. Also refetch page 1 with the

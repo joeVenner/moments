@@ -18,7 +18,7 @@ function randomSeed(): string {
  * is non-dismissable — a nickname is required to participate.
  */
 /** Why the join didn't go through; null when the guest is in. */
-export type JoinProblem = "rate_limited" | "nickname_taken";
+export type JoinProblem = "rate_limited" | "nickname_taken" | "guest_required";
 
 export function NicknameGate({
   event,
@@ -96,7 +96,7 @@ export function NicknameGate({
           />
           {problem && (
             <p id="nickname-gate-problem" role="alert" className="text-center text-sm text-[var(--color-accent)]">
-              {t(problem === "rate_limited" ? "joinRateLimited" : "joinNicknameTaken")}
+              {t(problem === "rate_limited" ? "joinRateLimited" : problem === "guest_required" ? "joinAgain" : "joinNicknameTaken")}
             </p>
           )}
           <button
