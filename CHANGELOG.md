@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Website: when the server no longer recognises a guest on this device (they left from another tab, or their identity expired), their next upload or heart takes them back to the nickname screen with "You're no longer joined to this event on this device. Pick a nickname to join again." The device forgets the old identity and its unfinished uploads. Those uploads stop at once instead of retrying in the background.
 - Website guests can "Leave" an event from the guest bar: after a confirmation, everything they shared from that browser is deleted, their nickname is freed, and the browser forgets them (saved uploads, nickname and identity).
 
 - Website: returning guests who never received their guest identity (they joined before it existed, or their join failed on the network) now get it in the background, so their nickname stays theirs once identities are required.
