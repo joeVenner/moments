@@ -178,6 +178,7 @@ const dict: Record<Lang, Record<string, Entry>> = {
     joinTheFeed: "Join the Feed",
     joinRateLimited: "Too many people are joining from this network. Try again in a minute.",
     joinNicknameTaken: "This nickname is already taken in this event. Pick another one.",
+    joinEventFull: "This event is full: it has as many guests as its host's plan allows.",
     joinAgain: "You're no longer joined to this event on this device. Pick a nickname to join again.",
 
     filesSelected: (v) =>
@@ -461,6 +462,7 @@ const dict: Record<Lang, Record<string, Entry>> = {
     joinTheFeed: "Rejoindre le fil",
     joinRateLimited: "Trop de personnes rejoignent depuis ce réseau. Réessayez dans une minute.",
     joinNicknameTaken: "Ce pseudo est déjà pris dans cet événement. Choisissez-en un autre.",
+    joinEventFull: "Cet événement est complet : il a autant d'invités que le permet l'offre de son organisateur.",
     joinAgain: "Vous n'êtes plus inscrit à cet événement sur cet appareil. Choisissez un pseudo pour le rejoindre à nouveau.",
 
     filesSelected: (v) =>
