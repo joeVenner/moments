@@ -653,6 +653,55 @@
         },
         "additionalProperties": false
       },
+      "UpdateEventAccessRequest": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "description": "`private` needs a PIN: one sent here, or the one it already has"
+          },
+          "pin": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 20,
+            "description": "A new PIN, 6-20 characters. Never returned. Setting one signs every guest out and replaces the invite link."
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateEventLifecycleRequest": {
+        "type": "object",
+        "properties": {
+          "uploads_close_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,3})?)?(Z|[+-]\\d{2}:\\d{2})$",
+            "description": "When guests can no longer share; may be in the past to close uploads now. ISO 8601 with a time zone (e.g. 2026-12-05T18:00:00+01:00), years 2000-2100; null clears it."
+          },
+          "purge_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,3})?)?(Z|[+-]\\d{2}:\\d{2})$",
+            "description": "When the event and its media are deleted; must be in the future. ISO 8601 with a time zone (e.g. 2026-12-05T18:00:00+01:00), years 2000-2100; null clears it."
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,3})?)?(Z|[+-]\\d{2}:\\d{2})$",
+            "description": "The single end date: closes uploads and deletes the event, so it must be in the future (to close uploads now, send uploads_close_at). Sent alone, it replaces both split dates. ISO 8601 with a time zone (e.g. 2026-12-05T18:00:00+01:00), years 2000-2100; null clears it."
+          }
+        },
+        "additionalProperties": false
+      },
       "EventResponse": {
         "type": "object",
         "properties": {
@@ -1996,6 +2045,206 @@
           },
           "502": {
             "description": "`media_delete_failed`: the files couldn't be removed; nothing was deleted, try again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/events/{id}/access": {
+      "patch": {
+        "operationId": "updateEventAccess",
+        "tags": [
+          "Host"
+        ],
+        "summary": "Make an event public or private, optionally with a new PIN",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "description": "The event's id (from the events list)"
+            },
+            "required": true,
+            "description": "The event's id (from the events list)",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEventAccessRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The event as it is now (with the new invite link when the PIN changed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminEventDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`: an unknown mode, a PIN of the wrong length, or private with no PIN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`host_auth_required`: sign in again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`event_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/events/{id}/lifecycle": {
+      "patch": {
+        "operationId": "updateEventLifecycle",
+        "tags": [
+          "Host"
+        ],
+        "summary": "Change when uploads close and when the event is deleted; un-archives it",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "description": "The event's id (from the events list)"
+            },
+            "required": true,
+            "description": "The event's id (from the events list)",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEventLifecycleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The event as it is now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminEventDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`: nothing to change, a bad date, a deletion date in the past, or uploads closing after deletion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`host_auth_required`: sign in again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`event_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
             "content": {
               "application/json": {
                 "schema": {

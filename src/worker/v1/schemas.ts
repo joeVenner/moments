@@ -1,6 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import { MAX_THUMBNAIL_BYTES } from "../thumbnails";
-import { MAX_PIN_LENGTH } from "../eventAccess";
+import { MAX_PIN_LENGTH, MIN_PIN_LENGTH } from "../eventAccess";
 import { MAX_NICKNAME_LENGTH } from "../guestIdentity";
 import { CLIENT_UPLOAD_ID_PATTERN, MAX_CAPTION_LENGTH } from "../uploadSessions";
 import { CAPTION_FORBIDDEN } from "../captionText";
@@ -483,6 +483,32 @@ export const UpdateAdminEventBodySchema = z
   .strict()
   .refine((body) => Object.values(body).some((value) => value !== undefined), { message: "nothing to change" })
   .openapi("UpdateAdminEventRequest");
+
+export const UpdateEventAccessBodySchema = z
+  .object({
+    mode: z.enum(["public", "private"]).openapi({ description: "`private` needs a PIN: one sent here, or the one it already has" }),
+    pin: z
+      .string()
+      .trim()
+      .min(MIN_PIN_LENGTH)
+      .max(MAX_PIN_LENGTH)
+      .optional()
+      .openapi({
+        description: `A new PIN, ${MIN_PIN_LENGTH}-${MAX_PIN_LENGTH} characters. Never returned. Setting one signs every guest out and replaces the invite link.`,
+      }),
+  })
+  .strict()
+  .openapi("UpdateEventAccessRequest");
+
+export const UpdateEventLifecycleBodySchema = z
+  .object({
+    uploads_close_at: eventDate("When guests can no longer share; may be in the past to close uploads now."),
+    purge_after: eventDate("When the event and its media are deleted; must be in the future."),
+    expires_at: eventDate("The single end date: closes uploads and deletes the event, so it must be in the future (to close uploads now, send uploads_close_at). Sent alone, it replaces both split dates."),
+  })
+  .strict()
+  .refine((body) => Object.values(body).some((value) => value !== undefined), { message: "nothing to change" })
+  .openapi("UpdateEventLifecycleRequest");
 
 export const HostSignInResponseSchema = HostSessionSchema.extend({
   token: z.string().openapi({ description: "Send as `Authorization: Bearer <token>`. Returned only here; keep it in the keychain." }),

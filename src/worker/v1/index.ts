@@ -49,6 +49,7 @@ import {
 import { ADMIN_RETRY_AFTER_SECONDS, attemptAdminLogin } from "../adminLogin";
 import { getAdminEventDetail, listAdminEvents } from "../adminEvents";
 import { insertEvent, normalizeDate, updateEventDetails } from "../eventWrites";
+import { lifecycleChangeFrom, type SettingsResult, updateEventAccess, updateEventLifecycle } from "../eventSettings";
 import { deleteAdminMoment, listAdminMoments, setMomentModeration } from "../adminModeration";
 import {
   AccessRequestSchema,
@@ -62,6 +63,8 @@ import {
   ModerationBodySchema,
   CreateAdminEventBodySchema,
   UpdateAdminEventBodySchema,
+  UpdateEventAccessBodySchema,
+  UpdateEventLifecycleBodySchema,
   ChangesQuerySchema,
   ErrorSchema,
   EventHeadersSchema,
@@ -586,6 +589,44 @@ const updateAdminEventRoute = createRoute({
   },
 });
 
+const updateEventAccessRoute = createRoute({
+  method: "patch",
+  path: "/admin/events/{id}/access",
+  operationId: "updateEventAccess",
+  tags: ["Host"],
+  summary: "Make an event public or private, optionally with a new PIN",
+  security: HOST_SECURITY,
+  request: {
+    params: AdminEventParamSchema,
+    body: { required: true, content: { "application/json": { schema: UpdateEventAccessBodySchema } } },
+  },
+  responses: {
+    200: json(AdminEventDetailSchema, "The event as it is now (with the new invite link when the PIN changed)"),
+    400: json(ErrorSchema, "`invalid_request`: an unknown mode, a PIN of the wrong length, or private with no PIN"),
+    404: json(ErrorSchema, "`event_not_found`"),
+    ...hostErrors,
+  },
+});
+
+const updateEventLifecycleRoute = createRoute({
+  method: "patch",
+  path: "/admin/events/{id}/lifecycle",
+  operationId: "updateEventLifecycle",
+  tags: ["Host"],
+  summary: "Change when uploads close and when the event is deleted; un-archives it",
+  security: HOST_SECURITY,
+  request: {
+    params: AdminEventParamSchema,
+    body: { required: true, content: { "application/json": { schema: UpdateEventLifecycleBodySchema } } },
+  },
+  responses: {
+    200: json(AdminEventDetailSchema, "The event as it is now"),
+    400: json(ErrorSchema, "`invalid_request`: nothing to change, a bad date, a deletion date in the past, or uploads closing after deletion"),
+    404: json(ErrorSchema, "`event_not_found`"),
+    ...hostErrors,
+  },
+});
+
 const signOutRoute = createRoute({
   method: "delete",
   path: "/admin/session",
@@ -825,6 +866,37 @@ v1.openapi(updateAdminEventRoute, async (c) => {
   const detail = await getAdminEventDetail(c.env.DB, c.env.EVENT_ACCESS_SECRET, id, new URL(c.req.url).origin);
   if (!detail) return c.json(EVENT_NOT_FOUND, 404);
   return c.json(detail, 200);
+});
+
+/** The event detail after a settings change, or the refusal as a v1 error. */
+async function settingsAnswer(c: Context<V1Env>, id: string, result: SettingsResult) {
+  if (result.kind === "not_found") return c.json(EVENT_NOT_FOUND, 404);
+  if (result.kind === "invalid") return c.json({ error: result.error, code: "invalid_request" }, 400);
+  const detail = await getAdminEventDetail(c.env.DB, c.env.EVENT_ACCESS_SECRET, id, new URL(c.req.url).origin);
+  if (!detail) return c.json(EVENT_NOT_FOUND, 404);
+  return c.json(detail, 200);
+}
+
+v1.openapi(updateEventAccessRoute, async (c) => {
+  const { id } = c.req.valid("param");
+  const { mode, pin } = c.req.valid("json");
+  const result = await updateEventAccess(c.env, id, { mode, pin }, (work) => c.executionCtx.waitUntil(work));
+  return settingsAnswer(c, id, result);
+});
+
+v1.openapi(updateEventLifecycleRoute, async (c) => {
+  const { id } = c.req.valid("param");
+  const body = c.req.valid("json");
+  const parsed = lifecycleChangeFrom(body);
+  if (parsed.kind === "invalid") return c.json(invalidField(parsed.field), 400);
+  // A past deletion date would delete the event at the next cleanup run;
+  // closing uploads now is fine. Both sides are "YYYY-MM-DD HH:MM:SS" UTC, so
+  // text order is time order.
+  const now = sqlTimestamp(new Date());
+  const { expiresAt, purgeAfter } = parsed.change;
+  if (purgeAfter && purgeAfter <= now) return c.json(invalidField("purge_after"), 400);
+  if (expiresAt && expiresAt <= now) return c.json(invalidField("expires_at"), 400);
+  return settingsAnswer(c, id, await updateEventLifecycle(c.env.DB, id, parsed.change));
 });
 
 v1.openapi(signOutRoute, async (c) => {
