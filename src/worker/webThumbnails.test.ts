@@ -246,3 +246,52 @@ describe("web complete with a thumbnail", () => {
     expect(objects.get(thumbnailKey(KEY))?.bytes).toEqual(JPEG);
   });
 });
+
+describe("web feed thumbnails", () => {
+  const get = (path: string) => {
+    const ctx = { waitUntil: vi.fn(), passThroughOnException: vi.fn() } as unknown as ExecutionContext;
+    return worker.fetch(new Request(`https://moments.test${path}`), env(), ctx);
+  };
+  type WebMoment = { media_url: string; thumb_url?: string | null; thumb_key?: unknown };
+
+  it("the feed, highlights and complete give thumb_url, never the storage key", async () => {
+    const sara = await join("Sara");
+    await openUpload(sara);
+    objects.set(thumbnailUploadKey(KEY), { bytes: JPEG, contentType: "image/jpeg" });
+    const done = (await (await complete(sara)).json()) as { moment: WebMoment };
+    expect(done.moment.thumb_url).toBe(`/media/${thumbnailKey(KEY)}`);
+    for (const column of ["thumb_key", "display_key", "poster_key", "participant_id"]) {
+      expect(done.moment).not.toHaveProperty(column);
+    }
+    // A replay answers the same way.
+    const replay = (await (await complete(sara)).json()) as { moment: WebMoment };
+    expect(replay.moment.thumb_url).toBe(`/media/${thumbnailKey(KEY)}`);
+    expect(replay.moment).not.toHaveProperty("thumb_key");
+
+    for (const path of ["/api/events/party/moments", "/api/events/party/highlights"]) {
+      const body = (await (await get(path)).json()) as { moments: WebMoment[] };
+      expect(body.moments).toHaveLength(1);
+      expect(body.moments[0].thumb_url).toBe(`/media/${thumbnailKey(KEY)}`);
+      expect(body.moments[0]).not.toHaveProperty("thumb_key");
+    }
+  });
+
+  it("a moment without a thumbnail says so with null", async () => {
+    const sara = await join("Sara");
+    await openUpload(sara);
+    await complete(sara);
+    const body = (await (await get("/api/events/party/moments")).json()) as { moments: WebMoment[] };
+    expect(body.moments[0].thumb_url).toBeNull();
+    expect(body.moments[0].media_url).toBe(`/media/${KEY}`);
+  });
+});
+
+describe("withWebThumbnail", () => {
+  it("never points outside the moment's own event", async () => {
+    const { withWebThumbnail } = await import("./media");
+    expect(withWebThumbnail({ event_id: "ev1", thumb_key: "events/ev2/moments/a.jpg.thumb.jpg" }).thumb_url).toBeNull();
+    expect(withWebThumbnail({ event_id: "ev1", thumb_key: "events/ev1/../ev2/a.thumb.jpg" }).thumb_url).toBeNull();
+    expect(withWebThumbnail({ event_id: "ev1", thumb_key: null }).thumb_url).toBeNull();
+    expect(withWebThumbnail({ event_id: "ev1", thumb_key: KEY + ".thumb.jpg" }).thumb_url).toBe(`/media/${KEY}.thumb.jpg`);
+  });
+});
