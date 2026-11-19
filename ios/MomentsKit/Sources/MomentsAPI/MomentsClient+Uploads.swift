@@ -12,6 +12,9 @@ public protocol UploadService: Sendable {
     func uploadProgress(slug: String, uploadID: String, credentials: EventCredentials) async throws -> UploadProgress
     /// Presigned part URLs: the given parts, or all of them when nil.
     func partURLs(slug: String, uploadID: String, parts: [Int]?, credentials: EventCredentials) async throws -> PartURLBatch
+    /// Where to PUT the session's feed thumbnail (`size` bytes, at most
+    /// `ThumbnailURL.maxSize`); call before `completeUpload`.
+    func thumbnailURL(slug: String, uploadID: String, size: Int, credentials: EventCredentials) async throws -> ThumbnailURL
     /// Asks the server to finish the session. Safe to repeat.
     func completeUpload(slug: String, uploadID: String, credentials: EventCredentials) async throws -> CompleteOutcome
     /// Cancels the session (repeating is harmless). Throws `.uploadNotOpen` once it completed: the moment exists.
@@ -106,6 +109,32 @@ extension MomentsClient: UploadService {
         }
     }
 
+    public func thumbnailURL(
+        slug: String, uploadID: String, size: Int, credentials: EventCredentials = .init()
+    ) async throws -> ThumbnailURL {
+        guard size > 0, size <= ThumbnailURL.maxSize else { throw MomentsAPIError.invalidRequest }
+        return try await perform {
+            let output = try await client.getThumbnailUrl(
+                path: .init(slug: slug, id: uploadID),
+                headers: .init(xEventAccess: credentials.accessGrant, xGuestToken: credentials.guestToken),
+                body: .json(.init(size: size))
+            )
+            switch output {
+            case let .ok(response): return try mapper.thumbnailURL(response.body.json)
+            case let .badRequest(response): throw Self.error(400, try? response.body.json.code)
+            case let .unauthorized(response): throw Self.error(401, try? response.body.json.code)
+            case let .forbidden(response): throw Self.error(403, try? response.body.json.code)
+            case let .notFound(response): throw Self.error(404, try? response.body.json.code)
+            case let .conflict(response): throw Self.error(409, try? response.body.json.code)
+            case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+            case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
+            case let .notImplemented(response): throw Self.error(501, try? response.body.json.code)
+            case let .badGateway(response): throw Self.error(502, try? response.body.json.code)
+            case let .default(status, response): throw Self.error(status, try? response.body.json.code)
+            }
+        }
+    }
+
     public func completeUpload(
         slug: String, uploadID: String, credentials: EventCredentials = .init()
     ) async throws -> CompleteOutcome {
@@ -178,6 +207,15 @@ extension WireMapper {
             contentType: wire.contentType, size: Int64(wire.size), partSize: Int64(wire.partSize),
             partCount: wire.partCount, createdAt: createdAt, completedAt: completedAt, momentID: wire.momentId
         )
+    }
+
+    /// The thumbnail URL, under the same rule as part URLs (plain https, no
+    /// userinfo); the uploader also checks the host before sending.
+    func thumbnailURL(_ wire: Components.Schemas.ThumbnailUrl) throws(MomentsAPIError) -> ThumbnailURL {
+        guard let expiresAt = ServerDate.parse(wire.expiresAt), let url = URL(string: wire.url),
+              url.scheme?.lowercased() == "https", url.host() != nil, url.user() == nil, url.password() == nil
+        else { throw .unexpectedResponse }
+        return ThumbnailURL(expiresAt: expiresAt, url: url)
     }
 
     /// Part URLs go straight to storage with the file's bytes, so only plain

@@ -62,6 +62,26 @@ private final class Counter: @unchecked Sendable {
         #expect(counter.count == 2)
     }
 
+    @Test func aRetryRightAfterAFailureLoadsAgain() async throws {
+        let counter = Counter()
+        // The first download fails; any later one works.
+        let loader = ThumbnailLoader { _ in
+            counter.increment()
+            if counter.count == 1 { throw URLError(.networkConnectionLost) }
+            return png(width: 40, height: 40)
+        }
+        let url = URL(string: "https://moments-hq.com/a.png")!
+        for _ in 0 ..< 20 {
+            await #expect(throws: URLError.self) { _ = try await loader.image(at: url, maxPixelSize: 20) }
+            // Immediately, with no chance for anything else to run first.
+            _ = try await loader.image(at: url, maxPixelSize: 20)
+            #expect(counter.count == 2)
+            await loader.removeAll()
+            counter.decrement()
+            counter.decrement()
+        }
+    }
+
     @Test func absurdlyLargeSourcesAreRefused() {
         // 8000 x 7000 = 56 MP, over the ceiling, though the file is small.
         #expect(ThumbnailLoader.downsample(png(width: 8000, height: 7000), maxPixelSize: 100) == nil)

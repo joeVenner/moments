@@ -99,6 +99,26 @@ public struct PartURLBatch: Sendable, Hashable, CustomStringConvertible, CustomD
     }
 }
 
+/// Where to PUT an upload's feed thumbnail: send exactly
+/// `Content-Type: image/jpeg` and the size asked for. The URL is a bearer
+/// credential, so it never shows in descriptions or logs.
+public struct ThumbnailURL: Sendable, Hashable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    public let expiresAt: Date
+    public let url: URL
+
+    /// The server's limit (`MAX_THUMBNAIL_BYTES`).
+    public static let maxSize = 200 * 1024
+
+    public init(expiresAt: Date, url: URL) {
+        self.expiresAt = expiresAt
+        self.url = url
+    }
+
+    public var description: String { "ThumbnailURL(redacted, expiresAt: \(expiresAt))" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
 /// Why the server refused an upload's bytes.
 public enum RejectReason: RawRepresentable, Sendable, Hashable {
     /// A part had the wrong length (often a resume bug: prepare the file anew).

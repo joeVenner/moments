@@ -67,12 +67,15 @@ public actor ThumbnailLoader {
         if let cached = cache.object(forKey: key as NSString) { return cached.image }
         let task = inFlight[key]?.task ?? start(key: key, url: url, maxPixelSize: maxPixelSize)
         inFlight[key]?.waiters += 1
-        let image = try await withTaskCancellationHandler {
-            try await task.value
+        let result = await withTaskCancellationHandler {
+            await task.result
         } onCancel: {
             Task { await self.abandon(key, task) }
         }
-        return image
+        // Settled here, not only by `finish` (which runs later): a retry right
+        // after a failure must start a new load, not join the failed one.
+        settle(key, task, result)
+        return try result.get()
     }
 
     private func start(key: String, url: URL, maxPixelSize: Int) -> Task<CGImage, any Error> {
@@ -96,8 +99,13 @@ public actor ThumbnailLoader {
         return task
     }
 
+    /// Catches loads every waiter abandoned (no one is left to settle them).
     private func finish(_ key: String, _ task: Task<CGImage, any Error>) async {
-        let result = await task.result
+        settle(key, task, await task.result)
+    }
+
+    /// Ends `task`'s entry once (later calls find it gone) and caches a success.
+    private func settle(_ key: String, _ task: Task<CGImage, any Error>, _ result: Result<CGImage, any Error>) {
         guard inFlight[key]?.task == task else { return }
         inFlight[key] = nil
         if case let .success(image) = result {

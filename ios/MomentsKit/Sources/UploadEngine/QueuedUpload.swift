@@ -144,6 +144,13 @@ public struct QueuedUpload: Codable, Sendable, Hashable, Identifiable {
     public let file: StagedFile
     public let caption: String?
     public let createdAt: Date
+    /// The feed thumbnail staged beside the file, if one was made. Sent
+    /// once per session, before the parts; never holds the upload back.
+    public let thumbnail: StagedFile?
+    /// The session the thumbnail was last sent (or tried) for. A failed try
+    /// isn't repeated for that session, not even by "Try again": the moment
+    /// just shows its file. A new session (after a restart) tries again.
+    public private(set) var thumbnailSentFor: String?
     /// Sent as `client_upload_id`.
     public private(set) var clientUploadID: UUID
     public private(set) var phase: Phase
@@ -161,10 +168,14 @@ public struct QueuedUpload: Codable, Sendable, Hashable, Identifiable {
     /// Not before this time.
     public private(set) var retryAt: Date?
 
-    public init(id: UUID = UUID(), eventSlug: String, file: StagedFile, caption: String?, createdAt: Date) {
+    public init(
+        id: UUID = UUID(), eventSlug: String, file: StagedFile, thumbnail: StagedFile? = nil, caption: String?, createdAt: Date
+    ) {
         self.id = id
         self.eventSlug = eventSlug
         self.file = file
+        self.thumbnail = thumbnail
+        thumbnailSentFor = nil
         self.caption = caption
         self.createdAt = createdAt
         clientUploadID = id
@@ -199,6 +210,18 @@ public struct QueuedUpload: Codable, Sendable, Hashable, Identifiable {
         }
     }
 
+    /// The thumbnail still to send for `session`: one the server can take
+    /// (a JPEG within its limit), not yet tried for this session.
+    func pendingThumbnail(for session: SessionRef) -> StagedFile? {
+        // Never the main file under another name (a tampered record).
+        guard let thumbnail, thumbnailSentFor != session.id, thumbnail.contentType == Self.thumbnailContentType,
+              thumbnail.size <= Int64(ThumbnailURL.maxSize), thumbnail.relativePath != file.relativePath
+        else { return nil }
+        return thumbnail
+    }
+
+    static let thumbnailContentType = "image/jpeg"
+
     /// The request that opens (or finds again) this item's session.
     public var newUpload: NewUpload {
         NewUpload(clientUploadID: clientUploadID, contentType: file.contentType, size: file.size, caption: caption, filename: nil)
@@ -211,6 +234,8 @@ public extension QueuedUpload {
     /// The next thing to do for this item.
     enum Action: Sendable, Hashable {
         case startSession(NewUpload)
+        /// Send the feed thumbnail (once per session, before the parts).
+        case sendThumbnail(session: SessionRef, file: StagedFile)
         /// Get URLs for these parts and send them.
         case uploadParts(session: SessionRef, parts: [Int])
         case complete(session: SessionRef)
@@ -234,6 +259,9 @@ public extension QueuedUpload {
         case requestFailed(MomentsAPIError, clientUploadID: UUID)
         /// The staged file can no longer be read as recorded.
         case fileLost(clientUploadID: UUID)
+        /// The thumbnail for session `sessionID` was sent, or failed: either
+        /// way it isn't tried again for that session.
+        case thumbnailHandled(sessionID: String)
     }
 
     func nextAction(now: Date) -> Action {
@@ -243,11 +271,11 @@ public extension QueuedUpload {
         switch (phase, session) {
         case (.prepared, _), (.uploading, nil), (.finishing, nil), (.checking, nil):
             return .startSession(newUpload)
-        case let (.uploading, session?):
+        case let (.uploading, session?), let (.finishing, session?):
+            if let thumbnail = pendingThumbnail(for: session) { return .sendThumbnail(session: session, file: thumbnail) }
+            guard phase == .uploading else { return .complete(session: session) }
             let missing = UploadPlan.missingParts(partCount: session.partCount, uploaded: uploaded)
             return missing.isEmpty ? .complete(session: session) : .uploadParts(session: session, parts: missing)
-        case let (.finishing, session?):
-            return .complete(session: session)
         case let (.checking, session?):
             return .readSession(session)
         case (.done, _), (.failed, _):
@@ -281,6 +309,9 @@ public extension QueuedUpload {
             guard requestClientID == clientUploadID else { return }
             phase = .failed(.fileLost)
             retryAt = nil
+        case let .thumbnailHandled(sessionID):
+            guard thumbnail != nil, let session, session.id == sessionID else { return }
+            thumbnailSentFor = sessionID
         }
     }
 
@@ -520,6 +551,11 @@ extension QueuedUpload {
         restarts = try c.decode(Int.self, forKey: .restarts)
         rounds = try c.decode(Int.self, forKey: .rounds)
         retryAt = try c.decodeIfPresent(Date.self, forKey: .retryAt)
+        // Optional extras (absent in records saved before thumbnails): a bad
+        // one is dropped, never the whole record.
+        let thumbnail = try? c.decodeIfPresent(StagedFile.self, forKey: .thumbnail)
+        self.thumbnail = thumbnail.flatMap { $0.contentType == Self.thumbnailContentType ? $0 : nil }
+        thumbnailSentFor = (try? c.decodeIfPresent(String.self, forKey: .thumbnailSentFor)).flatMap(Self.validID)
 
         if case let .done(momentID?) = phase, Self.validID(momentID) == nil {
             throw DecodingError.dataCorruptedError(forKey: .phase, in: c, debugDescription: "invalid moment id")

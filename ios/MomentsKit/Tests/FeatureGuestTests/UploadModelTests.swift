@@ -122,6 +122,24 @@ struct UploadModelTests {
         #expect(importer.imported == ["a.jpg", "b.mov"])
     }
 
+    @Test func queuesTheThumbnailWithItsFile() async throws {
+        let importer = FakeImporter()
+        var withThumbnail = PreparedMedia.photo()
+        withThumbnail.thumbnail = PreparedMedia.Thumbnail(name: "thumb.jpg", byteCount: 900)
+        importer.answer("a.jpg", .success(withThumbnail))
+        let submitter = FakeSubmitter()
+        let model = UploadModel(eventSlug: "party", staging: staging, importer: importer, submitter: submitter)
+        model.add([loader("a.jpg"), loader("b.jpg")])
+        await settle(model)
+        await model.share()
+        let sent = await submitter.submitted
+        let thumbnail = try #require(sent.first { $0.id == model.items[0].id }?.thumbnail)
+        #expect(thumbnail.relativePath == "\(model.items[0].id.uuidString)/thumb.jpg")
+        #expect(thumbnail.size == 900 && thumbnail.contentType == "image/jpeg")
+        // No thumbnail made: none queued.
+        #expect(sent.first { $0.id == model.items[1].id }?.thumbnail == nil)
+    }
+
     @Test func anEmptyCaptionIsSentAsNone() async throws {
         let submitter = FakeSubmitter()
         let model = UploadModel(eventSlug: "party", staging: staging, importer: FakeImporter(), submitter: submitter)
