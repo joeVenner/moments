@@ -156,7 +156,13 @@ struct AppEnvironment {
             }
         }
         return UploadDependencies(
-            staging: staging, submitter: QueueSubmitter(queue: queue, isReady: { await launch.value }), progress: queue
+            staging: staging, submitter: QueueSubmitter(queue: queue, isReady: { await launch.value }), progress: queue,
+            // A queue that didn't load holds nothing to remove; its records
+            // can't upload once the guest's token is gone.
+            leaving: LeavingUploads(
+                begin: { slug in if await launch.value { await queue.beginLeaving(eventSlug: slug) } },
+                end: { slug in await queue.endLeaving(eventSlug: slug) }
+            )
         )
     }
 

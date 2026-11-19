@@ -140,7 +140,10 @@ public struct GuestEventView: View {
             leaderboard = leaderboardModel
             feed = feedModel
             if let leaver = dependencies.leaver {
-                leave = LeaveModel(slug: join.slug, service: leaver, store: dependencies.store)
+                leave = LeaveModel(
+                    slug: join.slug, service: leaver, store: dependencies.store,
+                    uploads: dependencies.uploads?.leaving
+                )
             }
             if let source = dependencies.uploads?.progress {
                 progress = UploadProgressModel(eventSlug: join.slug.value, source: source)

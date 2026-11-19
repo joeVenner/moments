@@ -98,4 +98,33 @@ private final class FakeLeaver: LeaveService, @unchecked Sendable {
         #expect(leaver.calls.isEmpty)
         #expect(store.credentials(for: slug) == nil)
     }
+
+    @Test func closesTheEventsUploadsForTheWholeLeave() async {
+        let store = InMemoryEventCredentialStore([slug: saved])
+        let leaver = FakeLeaver([.success(true)])
+        let log = CallLog()
+        let uploads = LeavingUploads(
+            begin: { await log.add("begin \($0)@\(leaver.calls.count)") },
+            end: { await log.add("end \($0)@\(leaver.calls.count)") }
+        )
+        let model = LeaveModel(slug: slug, service: leaver, store: store, uploads: uploads)
+        await model.leave()
+        #expect(model.phase == .left)
+        #expect(await log.entries == ["begin party@0", "end party@1"])
+    }
+
+    @Test func reopensUploadsWhenTheLeaveFails() async {
+        let store = InMemoryEventCredentialStore([slug: saved])
+        let log = CallLog()
+        let uploads = LeavingUploads(begin: { await log.add("begin \($0)") }, end: { await log.add("end \($0)") })
+        let model = LeaveModel(slug: slug, service: FakeLeaver([.failure(.rateLimited)]), store: store, uploads: uploads)
+        await model.leave()
+        #expect(model.phase == .failed(.busy))
+        #expect(await log.entries == ["begin party", "end party"])
+    }
+}
+
+private actor CallLog {
+    private(set) var entries: [String] = []
+    func add(_ entry: String) { entries.append(entry) }
 }

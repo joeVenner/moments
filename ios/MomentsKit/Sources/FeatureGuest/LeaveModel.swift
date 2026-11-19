@@ -39,12 +39,19 @@ public final class LeaveModel {
     @ObservationIgnored private let slug: EventSlug
     @ObservationIgnored private let service: any LeaveService
     @ObservationIgnored private let store: any EventCredentialStore
+    @ObservationIgnored private let uploads: LeavingUploads?
     @ObservationIgnored private let logger = Logger(subsystem: "moments", category: "leave")
 
-    public init(slug: EventSlug, service: any LeaveService, store: any EventCredentialStore) {
+    /// `uploads` drops this event's queued uploads before the server
+    /// deletes the guest's, and keeps the event closed to uploads until the
+    /// leave ends, so none finishes after leaving.
+    public init(
+        slug: EventSlug, service: any LeaveService, store: any EventCredentialStore, uploads: LeavingUploads? = nil
+    ) {
         self.slug = slug
         self.service = service
         self.store = store
+        self.uploads = uploads
     }
 
     /// Back to idle after the guest chose not to retry a failure.
@@ -55,6 +62,14 @@ public final class LeaveModel {
     public func leave() async {
         guard phase != .leaving, phase != .left else { return }
         phase = .leaving
+        // Leaving deletes the guest's uploads, so pending ones are dropped
+        // first, even if leaving then fails (a retry continues).
+        await uploads?.begin(slug.value)
+        await leaveAndForget()
+        await uploads?.end(slug.value)
+    }
+
+    private func leaveAndForget() async {
         do {
             let stored = try store.credentials(for: slug)
             let credentials = EventCredentials(accessGrant: stored?.validAccessGrant(), guestToken: stored?.guestToken)
