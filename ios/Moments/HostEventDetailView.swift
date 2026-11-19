@@ -6,8 +6,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 import UIKit
 
-/// One hosted event: its QR code and link to share, the private invite link,
-/// and its stats. Pull to refresh.
+/// One hosted event: a card with its QR code and links to share, its stats,
+/// then a row per thing to manage (moderate, privacy, dates, details).
+/// Pull to refresh.
 struct HostEventDetailView: View {
     @State private var model: HostEventDetailModel
     /// The list row, shown while the detail loads.
@@ -82,18 +83,6 @@ struct HostEventDetailView: View {
                     .contentShape(Rectangle())
             }
             Spacer()
-            if model.detail != nil {
-                Menu {
-                    Button { editing = .details } label: { Label("Details", systemImage: "pencil") }
-                    Button { editing = .privacy } label: { Label("Privacy", systemImage: "lock") }
-                    Button { editing = .dates } label: { Label("Dates", systemImage: "calendar") }
-                } label: {
-                    Text("Edit")
-                        .frame(minWidth: Radius.minimumTapTarget, minHeight: Radius.minimumTapTarget, alignment: .trailing)
-                        .contentShape(Rectangle())
-                }
-                .accessibilityLabel(Text("Edit event"))
-            }
         }
         .font(MomentsFont.body())
         .foregroundStyle(MomentsColor.text)
@@ -116,11 +105,8 @@ struct HostEventDetailView: View {
             if let message = Self.message(for: model.phase) { notice(message) }
             if let detail = model.detail {
                 shareSection(detail.share)
-                NavigationLink(value: HostModerationRoute(eventID: event.id, title: event.title)) {
-                    Label("Moderate moments", systemImage: "square.grid.3x3")
-                }
-                .buttonStyle(.momentsSecondary)
                 HostEventStatsView(analytics: detail.analytics)
+                manageRows
             } else if model.phase == .loading || model.phase == .idle {
                 ProgressView()
                     .tint(MomentsColor.text)
@@ -133,6 +119,46 @@ struct HostEventDetailView: View {
     }
 
     private var event: Event { model.detail?.summary.event ?? summary.event }
+
+    /// Everything the host can change, one row each, in one card.
+    private var manageRows: some View {
+        VStack(spacing: 0) {
+            NavigationLink(value: HostModerationRoute(eventID: event.id, title: event.title)) {
+                HostManageRow(title: "Moderate moments", detail: String(localized: "Hide or delete what shouldn't stay"), systemImage: "square.grid.3x3")
+            }
+            rowDivider
+            Button { editing = .privacy } label: {
+                HostManageRow(title: "Privacy", detail: Self.privacyLine(event), systemImage: "lock")
+            }
+            rowDivider
+            Button { editing = .dates } label: {
+                HostManageRow(title: "Dates", detail: Self.datesLine(event), systemImage: "calendar")
+            }
+            rowDivider
+            Button { editing = .details } label: {
+                HostManageRow(title: "Details", detail: String(localized: "Title, names and description"), systemImage: "pencil")
+            }
+        }
+        .buttonStyle(.plain)
+        .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.card))
+    }
+
+    private var rowDivider: some View {
+        MomentsColor.border.frame(height: 1).padding(.leading, Spacing.md)
+    }
+
+    static func privacyLine(_ event: Event) -> String {
+        event.accessMode == .private
+            ? String(localized: "Private: guests need the PIN or invite link")
+            : String(localized: "Public: anyone with the link can join")
+    }
+
+    /// When uploads stop (or stopped), and when it all goes.
+    static func datesLine(_ event: Event) -> String {
+        event.archivedAt == nil && event.areUploadsOpen
+            ? HostEventsView.liveLine(event)
+            : HostEventsView.pastLine(event)
+    }
 
     private func shareSection(_ share: EventShareLinks) -> some View {
         VStack(spacing: Spacing.md) {
@@ -158,7 +184,9 @@ struct HostEventDetailView: View {
                     .multilineTextAlignment(.center)
             }
         }
+        .padding(Spacing.md)
         .frame(maxWidth: .infinity)
+        .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.sheet))
     }
 
     /// Shows a saved event as the server returned it (a reload could be
@@ -196,6 +224,44 @@ struct HostEventDetailView: View {
         case .failed(.appTooOld): String(localized: "Update Moments to see this event.")
         case .failed(.failed): String(localized: "This event couldn't be loaded. Pull down to try again.")
         }
+    }
+}
+
+/// One thing to manage: icon, title, current state, chevron.
+struct HostManageRow: View {
+    let title: LocalizedStringKey
+    let detail: String
+    let systemImage: String
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            // Large text: the words need the width more than the icon does.
+            if !typeSize.isAccessibilitySize {
+                Image(systemName: systemImage)
+                    .font(.system(size: 18))
+                    .foregroundStyle(MomentsColor.accent)
+                    .frame(width: 28)
+                    .accessibilityHidden(true)
+            }
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text(title)
+                    .font(MomentsFont.body())
+                    .foregroundStyle(MomentsColor.text)
+                Text(detail)
+                    .font(MomentsFont.caption())
+                    .foregroundStyle(MomentsColor.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Image(systemName: "chevron.forward")
+                .foregroundStyle(MomentsColor.textMuted)
+                .accessibilityHidden(true)
+        }
+        .padding(Spacing.md)
+        .frame(minHeight: Radius.minimumTapTarget)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 }
 
