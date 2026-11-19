@@ -39,9 +39,21 @@ struct WireMapper: Sendable {
               url.user() == nil, url.password() == nil,
               let scheme = url.scheme?.lowercased(), let host = url.host()?.lowercased()
         else { return nil }
-        let isSameOrigin = scheme == origin.scheme && host == originHost && url.port == origin.port
         let isStream = scheme == "https" && url.port == nil && host.wholeMatch(of: Self.streamHost) != nil
-        return isSameOrigin || isStream ? url.absoluteString : nil
+        return isSameOrigin(url) || isStream ? url.absoluteString : nil
+    }
+
+    /// Like `resolve`, but only an absolute URL on our own origin (no Stream
+    /// host, no bare path): for links the app hands to people, like share links.
+    func resolveSameOrigin(_ value: String) -> URL? {
+        guard value.lowercased().hasPrefix("\(origin.scheme ?? "https")://"),
+              let resolved = resolve(value), let url = URL(string: resolved), isSameOrigin(url)
+        else { return nil }
+        return url
+    }
+
+    private func isSameOrigin(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == origin.scheme && url.host()?.lowercased() == originHost && url.port == origin.port
     }
 
     /// Optional URLs that fail to resolve become nil rather than dropping the row.

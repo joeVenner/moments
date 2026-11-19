@@ -28,3 +28,77 @@ public struct AdminEventList: Sendable, Hashable {
         self.isTruncated = isTruncated
     }
 }
+
+/// What a host shares for one event. Printing it never shows the invite
+/// link (it opens a private event without the PIN).
+public struct EventShareLinks: Sendable, Hashable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    /// The guest page: what the QR code opens.
+    public let eventURL: URL
+    /// Private events only. It opens the event without its PIN, so the app
+    /// shares it only on an explicit tap.
+    public let inviteURL: URL?
+
+    public init(eventURL: URL, inviteURL: URL?) {
+        self.eventURL = eventURL
+        self.inviteURL = inviteURL
+    }
+
+    public var description: String {
+        "EventShareLinks(eventURL: \(eventURL), inviteURL: \(inviteURL == nil ? "nil" : "redacted"))"
+    }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror {
+        Mirror(self, children: ["eventURL": eventURL, "hasInvite": inviteURL != nil])
+    }
+}
+
+/// An event's activity, as the web admin shows it.
+public struct EventAnalytics: Sendable, Hashable {
+    public struct DayCount: Sendable, Hashable {
+        /// UTC `YYYY-MM-DD`.
+        public let day: String
+        public let count: Int
+
+        public init(day: String, count: Int) {
+            self.day = day
+            self.count = count
+        }
+    }
+
+    public let totalMoments: Int
+    public let hiddenMoments: Int
+    public let photos: Int
+    public let videos: Int
+    public let storageBytes: Int
+    public let participants: Int
+    public let reactions: Int
+    /// Moments per day over the last two weeks, oldest first; empty days absent.
+    public let activity: [DayCount]
+
+    public init(
+        totalMoments: Int, hiddenMoments: Int, photos: Int, videos: Int, storageBytes: Int,
+        participants: Int, reactions: Int, activity: [DayCount]
+    ) {
+        self.totalMoments = totalMoments
+        self.hiddenMoments = hiddenMoments
+        self.photos = photos
+        self.videos = videos
+        self.storageBytes = storageBytes
+        self.participants = participants
+        self.reactions = reactions
+        self.activity = activity
+    }
+}
+
+/// One event for the host's detail screen.
+public struct AdminEventDetail: Sendable, Hashable {
+    public let summary: AdminEvent
+    public let share: EventShareLinks
+    public let analytics: EventAnalytics
+
+    public init(summary: AdminEvent, share: EventShareLinks, analytics: EventAnalytics) {
+        self.summary = summary
+        self.share = share
+        self.analytics = analytics
+    }
+}

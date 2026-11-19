@@ -29,6 +29,8 @@ final class FakeHostService: HostService, @unchecked Sendable {
     private var _signInCalls = 0
     private var _signOutTokens: [String] = []
     private var _eventTokens: [String] = []
+    private var _detailResult: Result<AdminEventDetail, Error> = .failure(MomentsAPIError.eventNotFound)
+    private var _detailCalls: [(token: String, id: String)] = []
     /// Runs before a sign-in or events request answers (to hold it open).
     let beforeAnswer: Gate?
     private let holdsSignIn: Bool
@@ -51,6 +53,11 @@ final class FakeHostService: HostService, @unchecked Sendable {
         get { lock.withLock { _signOutError } }
         set { lock.withLock { _signOutError = newValue } }
     }
+    var detailResult: Result<AdminEventDetail, Error> {
+        get { lock.withLock { _detailResult } }
+        set { lock.withLock { _detailResult = newValue } }
+    }
+    var detailCalls: [(token: String, id: String)] { lock.withLock { _detailCalls } }
     var signInCalls: Int { lock.withLock { _signInCalls } }
     var signOutTokens: [String] { lock.withLock { _signOutTokens } }
     var eventTokens: [String] { lock.withLock { _eventTokens } }
@@ -65,6 +72,11 @@ final class FakeHostService: HostService, @unchecked Sendable {
     func signOut(token: String) async throws {
         let error = lock.withLock { _signOutTokens.append(token); return _signOutError }
         if let error { throw error }
+    }
+    func adminEvent(token: String, id: String) async throws -> AdminEventDetail {
+        let result = lock.withLock { _detailCalls.append((token, id)); return _detailResult }
+        if let beforeAnswer { await beforeAnswer.wait() }
+        return try result.get()
     }
     func adminEvents(token: String) async throws -> AdminEventList {
         let result = lock.withLock { _eventTokens.append(token); return _eventsResult }
@@ -419,5 +431,109 @@ private func event(_ id: String) -> AdminEvent {
         clock.set(later)
         await model.load()
         #expect(host.state == .signedOut && service.eventTokens.isEmpty)
+    }
+}
+
+private func detail(_ id: String) -> AdminEventDetail {
+    AdminEventDetail(
+        summary: event(id),
+        share: EventShareLinks(eventURL: URL(string: "https://moments.test/e/\(id)")!, inviteURL: nil),
+        analytics: EventAnalytics(
+            totalMoments: 1, hiddenMoments: 0, photos: 1, videos: 0, storageBytes: 10,
+            participants: 2, reactions: 3, activity: []
+        )
+    )
+}
+
+@Suite @MainActor struct HostEventDetailModelTests {
+    @Test func loadsTheEventWithTheStoredToken() async {
+        let service = FakeHostService()
+        service.detailResult = .success(detail("a"))
+        let model = HostEventDetailModel(eventID: "a", service: service, account: account(service, store: FlakyHostStore(live)))
+        await model.load()
+        #expect(model.phase == .loaded && model.detail == detail("a"))
+        #expect(service.detailCalls.map(\.token) == ["hs_live"] && service.detailCalls.map(\.id) == ["a"])
+    }
+
+    @Test func aDeletedEventIsGone() async {
+        let service = FakeHostService()
+        service.detailResult = .success(detail("a"))
+        let model = HostEventDetailModel(eventID: "a", service: service, account: account(service, store: FlakyHostStore(live)))
+        await model.load()
+        service.detailResult = .failure(MomentsAPIError.eventNotFound)
+        await model.load()
+        #expect(model.phase == .gone && model.detail == nil)
+    }
+
+    @Test func aFailureKeepsTheLastDetail() async {
+        let service = FakeHostService()
+        service.detailResult = .success(detail("a"))
+        let model = HostEventDetailModel(eventID: "a", service: service, account: account(service, store: FlakyHostStore(live)))
+        await model.load()
+        service.detailResult = .failure(MomentsAPIError.upgradeRequired)
+        await model.load()
+        #expect(model.phase == .failed(.appTooOld) && model.detail == detail("a"))
+    }
+
+    @Test func aDeadSessionSignsTheHostOutAndClears() async {
+        let service = FakeHostService()
+        service.detailResult = .failure(MomentsAPIError.hostAuthRequired)
+        let host = account(service, store: FlakyHostStore(live))
+        let model = HostEventDetailModel(eventID: "a", service: service, account: host)
+        await model.load()
+        #expect(host.state == .signedOut && model.phase == .idle && model.detail == nil)
+    }
+
+    @Test func signingOutDuringALoadDropsTheAnswer() async {
+        let gate = Gate()
+        let service = FakeHostService(holding: gate)
+        service.detailResult = .success(detail("a"))
+        let host = account(service, store: FlakyHostStore(live))
+        let model = HostEventDetailModel(eventID: "a", service: service, account: host)
+        let loading = Task { await model.load() }
+        while service.detailCalls.isEmpty { await Task.yield() }
+        await host.signOut()
+        await gate.open()
+        await loading.value
+        #expect(model.detail == nil && model.phase == .idle)
+    }
+
+    @Test func signedOutLoadsNothing() async {
+        let service = FakeHostService()
+        let model = HostEventDetailModel(eventID: "a", service: service, account: account(service))
+        await model.load()
+        #expect(model.phase == .idle && service.detailCalls.isEmpty)
+    }
+
+    @Test func signingInAgainDuringALoadLoadsForTheNewSession() async {
+        let gate = Gate()
+        let service = FakeHostService(holding: gate, holdsSignIn: false)
+        service.detailResult = .success(detail("a"))
+        service.signInResult = .success(HostSession(token: "hs_new", subject: "operator", expiresAt: later))
+        let host = account(service, store: FlakyHostStore(live))
+        let model = HostEventDetailModel(eventID: "a", service: service, account: host)
+        let loading = Task { await model.load() }
+        while service.detailCalls.isEmpty { await Task.yield() }
+        await host.signOut()
+        _ = await host.signIn(username: "admin", password: "pw")
+        await gate.open()
+        await loading.value
+        #expect(service.detailCalls.map(\.token) == ["hs_live", "hs_new"])
+        #expect(model.phase == .loaded && model.detail == detail("a"))
+    }
+
+    @Test func aCancelledLoadKeepsWhatWasShown() async {
+        let gate = Gate()
+        let service = FakeHostService(holding: gate)
+        service.detailResult = .failure(CancellationError())
+        let model = HostEventDetailModel(eventID: "a", service: service, account: account(service, store: FlakyHostStore(live)))
+        await gate.open()
+        await model.load()
+        #expect(model.phase == .idle && model.detail == nil)
+        service.detailResult = .success(detail("a"))
+        await model.load()
+        service.detailResult = .failure(CancellationError())
+        await model.load()
+        #expect(model.phase == .loaded && model.detail == detail("a"))
     }
 }

@@ -32,6 +32,8 @@ public protocol HostService: Sendable {
     /// The token stops working on the server.
     func signOut(token: String) async throws
     func adminEvents(token: String) async throws -> AdminEventList
+    /// `.eventNotFound` when the event is gone.
+    func adminEvent(token: String, id: String) async throws -> AdminEventDetail
 }
 
 extension MomentsClient: HostService {
@@ -96,16 +98,24 @@ extension MomentsClient: HostService {
             case let .ok(response):
                 let body = try response.body.json
                 // A row this build can't read is skipped, not fatal for the list.
-                let events = body.events.compactMap { wire -> AdminEvent? in
-                    guard let event = try? mapper.event(wire.value1) else { return nil }
-                    return AdminEvent(
-                        event: event,
-                        momentCount: max(0, wire.value2.momentCount),
-                        participantCount: max(0, wire.value2.participantCount)
-                    )
-                }
+                let events = body.events.compactMap { try? mapper.adminEvent($0) }
                 return AdminEventList(events: events, isTruncated: body.truncated)
             case let .unauthorized(response): throw Self.hostError(401, try? response.body.json.code)
+            case let .upgradeRequired(response): throw Self.hostError(426, try? response.body.json.code)
+            case let .default(status, response): throw Self.hostError(status, try? response.body.json.code)
+            }
+        }
+    }
+
+    public func adminEvent(token: String, id: String) async throws -> AdminEventDetail {
+        guard !id.isEmpty, id.count <= 100 else { throw MomentsAPIError.eventNotFound }
+        return try await withHostToken(token) {
+            let output = try await client.getAdminEvent(path: .init(id: id))
+            switch output {
+            case let .ok(response):
+                return try mapper.adminEventDetail(try response.body.json)
+            case let .unauthorized(response): throw Self.hostError(401, try? response.body.json.code)
+            case let .notFound(response): throw Self.hostError(404, try? response.body.json.code)
             case let .upgradeRequired(response): throw Self.hostError(426, try? response.body.json.code)
             case let .default(status, response): throw Self.hostError(status, try? response.body.json.code)
             }
@@ -135,7 +145,7 @@ extension MomentsClient: HostService {
 /// set by `withHostToken`, so the token can never ride on a guest request.
 struct HostAuthMiddleware: ClientMiddleware {
     @TaskLocal static var token: String?
-    static let hostOperations: Set<String> = ["getHostSession", "signOut", "listAdminEvents"]
+    static let hostOperations: Set<String> = ["getHostSession", "signOut", "listAdminEvents", "getAdminEvent"]
 
     func intercept(
         _ request: HTTPRequest,
@@ -150,5 +160,42 @@ struct HostAuthMiddleware: ClientMiddleware {
         var request = request
         request.headerFields[.authorization] = "Bearer \(token)"
         return try await next(request, body, baseURL)
+    }
+}
+
+extension WireMapper {
+    func adminEvent(_ wire: Components.Schemas.AdminEvent) throws(MomentsAPIError) -> AdminEvent {
+        // AdminEvent = Event (value1) + the two counts (value2).
+        AdminEvent(
+            event: try event(wire.value1),
+            momentCount: max(0, wire.value2.momentCount),
+            participantCount: max(0, wire.value2.participantCount)
+        )
+    }
+
+    /// Share links must be on our own origin, like media: the app puts them in
+    /// a QR code and the share sheet, so a link elsewhere is refused outright.
+    func adminEventDetail(_ wire: Components.Schemas.AdminEventDetail) throws(MomentsAPIError) -> AdminEventDetail {
+        guard let eventURL = resolveSameOrigin(wire.share.eventUrl) else { throw .unexpectedResponse }
+        var inviteURL: URL?
+        if let invite = wire.share.inviteUrl {
+            guard let url = resolveSameOrigin(invite) else { throw .unexpectedResponse }
+            inviteURL = url
+        }
+        let summary = wire.analytics.summary
+        return AdminEventDetail(
+            summary: try adminEvent(wire.event),
+            share: EventShareLinks(eventURL: eventURL, inviteURL: inviteURL),
+            analytics: EventAnalytics(
+                totalMoments: max(0, summary.totalMoments),
+                hiddenMoments: max(0, summary.hiddenMoments),
+                photos: max(0, summary.photos),
+                videos: max(0, summary.videos),
+                storageBytes: max(0, summary.storageBytes),
+                participants: max(0, summary.participants),
+                reactions: max(0, summary.reactions),
+                activity: wire.analytics.activity.map { EventAnalytics.DayCount(day: $0.day, count: max(0, $0.count)) }
+            )
+        )
     }
 }
