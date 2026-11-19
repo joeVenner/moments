@@ -178,6 +178,16 @@
         }
       }
     },
+    "Anyone with this link can open the event without its PIN. Share it only with your guests.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toute personne ayant ce lien peut ouvrir l'événement sans son code. Ne le partagez qu'avec vos invités."
+          }
+        }
+      }
+    },
     "Camera": {
       "localizations": {
         "fr": {
@@ -304,6 +314,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fermer"
+          }
+        }
+      }
+    },
+    "Copy invite link": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copier le lien d'invitation"
+          }
+        }
+      }
+    },
+    "Copy the invite link?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copier le lien d'invitation ?"
           }
         }
       }
@@ -535,6 +565,16 @@
         }
       }
     },
+    "Events": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Événements"
+          }
+        }
+      }
+    },
     "Every moment, together": {
       "localizations": {
         "fr": {
@@ -556,12 +596,32 @@
         }
       }
     },
+    "For private events. It skips the PIN, so share it only with your guests.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pour les événements privés. Il permet d'entrer sans code : ne le partagez qu'avec vos invités."
+          }
+        }
+      }
+    },
     "Get started": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Commencer"
+          }
+        }
+      }
+    },
+    "Guests": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invités"
           }
         }
       }
@@ -584,6 +644,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aimez vos souvenirs préférés et ils apparaîtront ici."
+          }
+        }
+      }
+    },
+    "Hearts": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cœurs"
+          }
+        }
+      }
+    },
+    "Hidden": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masqués"
           }
         }
       }
@@ -646,6 +726,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Identifiant ou mot de passe incorrect."
+          }
+        }
+      }
+    },
+    "Invite link copied": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lien d'invitation copié"
           }
         }
       }
@@ -1048,6 +1138,16 @@
         }
       }
     },
+    "Photos": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos"
+          }
+        }
+      }
+    },
     "Photos and videos shared by guests will appear here.": {
       "extractionState": "manual",
       "localizations": {
@@ -1130,6 +1230,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Les événements privés sont indisponibles"
+          }
+        }
+      }
+    },
+    "QR code for the event link": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR code du lien de l'événement"
           }
         }
       }
@@ -1305,6 +1415,16 @@
         }
       }
     },
+    "Share the event link": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partager le lien de l'événement"
+          }
+        }
+      }
+    },
     "Share your photos and videos, heart your favourites, and climb the leaderboard.": {
       "localizations": {
         "fr": {
@@ -1418,6 +1538,16 @@
         }
       }
     },
+    "Stats": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statistiques"
+          }
+        }
+      }
+    },
     "Still preparing.": {
       "extractionState": "manual",
       "localizations": {
@@ -1436,6 +1566,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arrêté."
+          }
+        }
+      }
+    },
+    "Storage": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stockage"
           }
         }
       }
@@ -1547,6 +1687,16 @@
         }
       }
     },
+    "This event couldn't be loaded. Pull down to try again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de charger cet événement. Tirez vers le bas pour réessayer."
+          }
+        }
+      }
+    },
     "This event has ended": {
       "extractionState": "manual",
       "localizations": {
@@ -1565,6 +1715,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cet événement n'existe plus."
+          }
+        }
+      }
+    },
+    "This event was deleted.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet événement a été supprimé."
           }
         }
       }
@@ -1766,6 +1926,16 @@
         }
       }
     },
+    "Update Moments to see this event.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettez Moments à jour pour voir cet événement."
+          }
+        }
+      }
+    },
     "Update Moments to see your events.": {
       "localizations": {
         "fr": {
@@ -1830,6 +2000,26 @@
         }
       }
     },
+    "Uploads in the last 14 days: %lld": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envois sur les 14 derniers jours : %lld"
+          }
+        }
+      }
+    },
+    "Uploads, last 14 days": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envois, 14 derniers jours"
+          }
+        }
+      }
+    },
     "Username": {
       "localizations": {
         "fr": {
@@ -1880,6 +2070,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vidéo de %@ : %@"
+          }
+        }
+      }
+    },
+    "Videos": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vidéos"
           }
         }
       }

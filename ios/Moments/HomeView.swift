@@ -2,6 +2,7 @@ import AVFoundation
 import DesignSystem
 import FeatureGuest
 import FeatureHost
+import MomentsAPI
 import SwiftUI
 
 /// The home screen: the events joined on this phone, then opening another
@@ -18,6 +19,7 @@ struct HomeView: View {
     struct Host {
         let account: HostAccount
         let events: HostEventsModel
+        let service: any HostService
     }
 
     @Environment(\.scenePhase) private var scenePhase
@@ -114,7 +116,7 @@ struct HomeView: View {
             }
         }
         .fullScreenCover(isPresented: $isShowingHostEvents) {
-            HostEventsView(account: host.account, model: host.events) { isShowingHostEvents = false }
+            HostEventsView(account: host.account, model: host.events, service: host.service) { isShowingHostEvents = false }
         }
         // Picks up expiry and a keychain that was locked at launch.
         .onChange(of: scenePhase, initial: true) {
