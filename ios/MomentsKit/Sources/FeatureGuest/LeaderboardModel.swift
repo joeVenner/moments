@@ -46,6 +46,8 @@ public final class LeaderboardModel {
     /// The first three by position (ranks can tie: 1, 1, 3).
     public var podium: ArraySlice<LeaderboardEntry> { entries.prefix(Self.podiumSize) }
     public var others: ArraySlice<LeaderboardEntry> { entries.dropFirst(Self.podiumSize) }
+    /// This guest's points; 0 until they're on the board.
+    public var myPoints: Int { entries.first { $0.participantID == participantID }?.totalPoints ?? 0 }
     public var myEntry: LeaderboardEntry? { entries.first { $0.participantID == participantID } }
 
     public func loadIfStale() async {

@@ -73,6 +73,10 @@ public struct LeaderboardView: View {
                 }
             }
             .padding(.horizontal, Spacing.md)
+            if let progress = Points.progress(toward: model.myPoints) {
+                MilestoneCard(progress: progress)
+                    .padding(.horizontal, Spacing.md)
+            }
         }
     }
 
@@ -116,6 +120,32 @@ public struct LeaderboardView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(LeaderboardLabels.entry(entry, isMe: isMe))
+    }
+}
+
+/// How far this guest is from their next milestone.
+struct MilestoneCard: View {
+    let progress: Points.MilestoneProgress
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("^[\(progress.remaining) point](inflect: true) to your next milestone")
+                .font(MomentsFont.body().weight(.semibold))
+                .foregroundStyle(MomentsColor.text)
+                .fixedSize(horizontal: false, vertical: true)
+            ProgressView(value: progress.fraction)
+                .tint(MomentsColor.accent)
+                .accessibilityHidden(true)
+            Text("Each photo earns ^[\(Points.photoPoints) point](inflect: true), each video ^[\(Points.videoPoints) point](inflect: true).")
+                .font(MomentsFont.caption())
+                .foregroundStyle(MomentsColor.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(MomentsColor.border))
+        .accessibilityElement(children: .combine)
     }
 }
 

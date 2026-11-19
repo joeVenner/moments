@@ -801,6 +801,16 @@
         }
       }
     },
+    "Each photo earns ^[%lld point](inflect: true), each video ^[%lld point](inflect: true).": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaque photo rapporte ^[%lld point](inflect: true), chaque vidéo ^[%lld point](inflect: true)."
+          }
+        }
+      }
+    },
     "Edit details": {
       "localizations": {
         "fr": {
@@ -3554,6 +3564,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "^[%lld point](inflect: true)"
+          }
+        }
+      }
+    },
+    "^[%lld point](inflect: true) to your next milestone": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus que ^[%lld point](inflect: true) avant votre prochain palier"
           }
         }
       }
