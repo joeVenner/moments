@@ -22,7 +22,7 @@ export const ErrorSchema = z
     error: z.string(),
     code: z.string().openapi({
       description:
-        "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, media_delete_failed, not_found, internal",
+        "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, media_delete_failed, plan_required, no_events_left, test_event_dates_fixed, not_found, internal",
     }),
   })
   .openapi("Error");
@@ -361,6 +361,10 @@ export const HostSessionSchema = z
   .openapi("HostSession");
 
 export const AdminEventSchema = EventSchema.extend({
+  kind: z.enum(["legacy", "operator", "main", "test"]).openapi({
+    description:
+      "legacy: from before hosting plans; operator: the operator's own; main: paid by the host's plan; test: the plan's one-month test event (its dates are fixed)",
+  }),
   moment_count: z.number().int().openapi({ description: "All moments, hidden ones included" }),
   participant_count: z.number().int().openapi({ description: "Guests currently in the event (those who left are not counted)" }),
 }).openapi("AdminEvent");
@@ -471,7 +475,11 @@ export const CreateAdminEventBodySchema = z
     main_characters: optionalText(200, "Who it's about, e.g. Sara & Omar."),
     description: optionalText(1000, "Shown to guests under the title."),
     starts_at: eventDate("When the event happens."),
-    expires_at: eventDate("When uploads stop and the event is later deleted; null keeps it open."),
+    expires_at: eventDate("When uploads stop and the event is later deleted; null keeps it open. Not allowed for a test event."),
+    kind: z.enum(["main", "test"]).optional().openapi({
+      description:
+        "Which of the plan's events to use (default main). A test event's dates come from the plan: uploads close a month after purchase and it is deleted a week later.",
+    }),
   })
   .strict()
   .openapi("CreateAdminEventRequest");

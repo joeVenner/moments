@@ -74,7 +74,7 @@ export async function getActiveEventBySlug(db: D1Database, slug: string): Promis
 
 export type PublicEvent = Omit<
   EventRow,
-  "access_pin_hash" | "access_pin_salt" | "invite_token" | "access_version" | "owner_user_id"
+  "access_pin_hash" | "access_pin_salt" | "invite_token" | "access_version" | "owner_user_id" | "kind"
 > & {
   /** Whether new uploads are accepted right now. */
   uploads_open: boolean;
@@ -92,6 +92,8 @@ export function toPublicEvent(event: EventRow): PublicEvent {
     access_version: _version,
     // Who hosts it is nobody else's business (it will be their App Store account token).
     owner_user_id: _owner,
+    // Billing detail; the host API adds it back. Guests get a test badge later.
+    kind: _kind,
     ...publicEvent
   } = event;
   return { ...publicEvent, uploads_open: areUploadsOpen(event) };

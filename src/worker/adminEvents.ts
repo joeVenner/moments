@@ -3,8 +3,8 @@ import { toPublicEvent, type PublicEvent } from "./events";
 import { withGuestMediaGrant } from "./mediaAccess";
 import type { EventRow } from "./types";
 
-/** An event as the host's list shows it: public fields plus two counts. */
-export type AdminEventSummary = PublicEvent & { moment_count: number; participant_count: number };
+/** An event as the host's list shows it: public fields, its billing kind and two counts. */
+export type AdminEventSummary = PublicEvent & Pick<EventRow, "kind"> & { moment_count: number; participant_count: number };
 
 type AdminEventRow = EventRow & { moment_count: number; participant_count: number };
 
@@ -26,7 +26,7 @@ async function toAdminEventSummary(
 ): Promise<AdminEventSummary> {
   const publicEvent = toPublicEvent(event);
   const cover = await withGuestMediaGrant(secret, event, publicEvent.cover_image_url, nowSeconds);
-  return { ...publicEvent, cover_image_url: cover, moment_count, participant_count };
+  return { ...publicEvent, kind: event.kind, cover_image_url: cover, moment_count, participant_count };
 }
 
 /** Hard cap on one list; far above what a single host runs. */

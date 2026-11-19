@@ -17,7 +17,7 @@ private func adminEvent(id: String, slug: String, accessMode: String = "public",
     {"id":"\(id)","slug":"\(slug)","title":"Party","type":"Party","main_characters":null,"description":null,
      "cover_image_url":null,"created_at":"2026-11-17 18:30:00","starts_at":null,"expires_at":null,
      "uploads_close_at":null,"purge_after":null,"archived_at":null,"access_mode":"\(accessMode)",
-     "uploads_open":true,"moment_count":\(moments),"participant_count":\(guests)}
+     "uploads_open":true,"kind":"main","moment_count":\(moments),"participant_count":\(guests)}
     """
 }
 

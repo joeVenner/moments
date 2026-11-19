@@ -58,7 +58,7 @@ describe("event writes", () => {
           : sqlite.db.prepare(sql),
       batch: (statements: D1PreparedStatement[]) => sqlite.db.batch(statements),
     } as unknown as D1Database;
-    const id = await insertPlanEvent(blindDb, { ...newEvent, ownerUserId: host }, planId);
+    const id = await insertPlanEvent(blindDb, { ...newEvent, ownerUserId: host }, { id: planId, kind: "main", dates: null });
     expect(id).not.toBeNull();
     expect(sqlite.raw.prepare("SELECT slug FROM events WHERE id = ?").get(id)).toEqual({ slug: expect.stringMatching(/^party-/) });
     // The failed first try rolled back: exactly one allowance used, the included one.
