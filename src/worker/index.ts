@@ -57,6 +57,7 @@ import {
 import { cleanupEvent, cleanupExpiredEvents, pruneAccessFailures } from "./lifecycle";
 import { abortOrphanUploads } from "./orphanUploads";
 import { finalizeReadyUploads, r2FinalizeBackend } from "./uploadFinalize";
+import { withWebThumbnail } from "./media";
 import { attemptEventAccess } from "./accessAttempt";
 import {
   CHANGES_MAX_LIMIT,
@@ -454,7 +455,7 @@ app.patch("/api/admin/events/:id/lifecycle", async (c) => {
 // The web feed's moment shape. Explicit so new internal columns (R2 keys,
 // media metadata) never leak to guests by default.
 const WEB_MOMENT_COLUMNS = `m.id, m.event_id, m.uploader_name, m.media_url, m.caption, m.points_awarded,
-  m.created_at, m.size_bytes, m.mime_type, m.moderation_status`;
+  m.created_at, m.size_bytes, m.mime_type, m.moderation_status, m.thumb_key`;
 
 app.get("/api/events/:slug/moments", async (c) => {
   const event = await getActiveEventBySlug(c.env.DB, c.req.param("slug"));
@@ -515,7 +516,7 @@ app.get("/api/events/:slug/moments", async (c) => {
   // `reacted` is this guest's (token): never let a cache share it.
   c.header("Cache-Control", "no-store");
   return c.json({
-    moments: await signMomentsForEvent(c.env, event, results),
+    moments: await signMomentsForEvent(c.env, event, results.map(withWebThumbnail)),
     hasMore: results.length === limit,
     total,
     your_points,
@@ -611,7 +612,7 @@ app.post("/api/events/:slug/moments", async (c) => {
     .bind(id)
     .first<MomentRow>();
 
-  return c.json({ moment: moment && guestMoment(moment), points_awarded: points }, 201);
+  return c.json({ moment: moment && guestMoment(withWebThumbnail(moment)), points_awarded: points }, 201);
 });
 
 app.get("/api/events/:slug/highlights", async (c) => {
@@ -635,7 +636,7 @@ app.get("/api/events/:slug/highlights", async (c) => {
   ).bind(reactorId, event.id).all<MomentRow>();
   // `reacted` is this guest's (token): never let a cache share it.
   c.header("Cache-Control", "no-store");
-  return c.json({ moments: await signMomentsForEvent(c.env, event, results) });
+  return c.json({ moments: await signMomentsForEvent(c.env, event, results.map(withWebThumbnail)) });
 });
 
 app.post("/api/events/:slug/moments/:id/reactions", async (c) => {
@@ -1014,7 +1015,7 @@ app.post("/api/events/:slug/moments/stream/complete", async (c) => {
     // A replay; a moment hidden meanwhile isn't handed back.
     if (existingMoment.moderation_status !== "approved") return c.json({ error: "upload not found" }, 404);
     const [signedExisting] = await signMomentsForEvent(c.env, event, [existingMoment]);
-    return c.json({ moment: guestMoment(signedExisting), points_awarded: existingMoment.points_awarded });
+    return c.json({ moment: guestMoment(withWebThumbnail(signedExisting)), points_awarded: existingMoment.points_awarded });
   }
   if (upload.status !== "open") return c.json({ error: "upload is not open" }, 409);
 
@@ -1084,7 +1085,7 @@ app.post("/api/events/:slug/moments/stream/complete", async (c) => {
   });
   if (!moment) return c.json({ error: "moment not found" }, 500);
   const [signedMoment] = await signMomentsForEvent(c.env, event, [moment]);
-  return c.json({ moment: signedMoment && guestMoment(signedMoment), points_awarded: points }, 201);
+  return c.json({ moment: signedMoment && guestMoment(withWebThumbnail(signedMoment)), points_awarded: points }, 201);
 });
 
 app.post("/api/events/:slug/moments/stream/abort", async (c) => {
@@ -1427,7 +1428,7 @@ app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
       momentId: existingMoment.id,
     });
     if (existingMoment.moderation_status !== "approved") return c.json({ error: "upload not found" }, 404);
-    return c.json({ moment: guestMoment(existingMoment), points_awarded: existingMoment.points_awarded });
+    return c.json({ moment: guestMoment(withWebThumbnail(existingMoment)), points_awarded: existingMoment.points_awarded });
   }
   let validated: { contentType: string; size: number } | Response | undefined;
   if (upload.status !== "open") {
@@ -1531,7 +1532,7 @@ app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
     sizeBytes: validated.size,
     contentType: validated.contentType,
   });
-  return c.json({ moment: moment && guestMoment(moment), points_awarded: points }, 201);
+  return c.json({ moment: moment && guestMoment(withWebThumbnail(moment)), points_awarded: points }, 201);
 });
 
 // Cancel: frees the storage held by uploaded parts. Always call on give-up.

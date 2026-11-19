@@ -75,6 +75,17 @@ export function mediaKeyUrl(key: string | null | undefined, eventId: string): st
   return `/media/${key}`;
 }
 
+/**
+ * A web feed row with its grid thumbnail as `thumb_url` (null when it has
+ * none) instead of the storage key. Additive: older web pages ignore it.
+ */
+export function withWebThumbnail<T extends { event_id: string; thumb_key?: string | null }>(
+  row: T
+): Omit<T, "thumb_key"> & { thumb_url: string | null } {
+  const { thumb_key: thumbKey, ...rest } = row;
+  return { ...rest, thumb_url: mediaKeyUrl(thumbKey, row.event_id) };
+}
+
 export function buildMomentMedia(row: MediaSourceRow & { event_id: string }): MomentMedia {
   const stream = parseStreamMediaUrl(row.media_url);
   const streamBase = stream ? `https://${stream.host}/${stream.uid}` : null;

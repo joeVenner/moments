@@ -90,8 +90,19 @@ export function uploadRefusal(access: Exclude<UploadAccess, "ok">): UploadRefusa
     : ({ body: { error: "upload not found" }, status: 404 } as const);
 }
 
-/** A moment as guests may see it: without the owner's participant id. */
-export function guestMoment<T extends Pick<MomentRow, "id">>(moment: T): Omit<T, "participant_id"> {
-  const { participant_id: _owner, ...rest } = moment as T & { participant_id?: unknown };
+type ServerOnlyColumn = "participant_id" | "thumb_key" | "display_key" | "poster_key";
+
+/**
+ * A moment as guests may see it: without the owner's participant id or raw
+ * storage keys (guests get URLs, e.g. `withWebThumbnail`'s `thumb_url`).
+ */
+export function guestMoment<T extends Pick<MomentRow, "id">>(moment: T): Omit<T, ServerOnlyColumn> {
+  const {
+    participant_id: _owner,
+    thumb_key: _thumb,
+    display_key: _display,
+    poster_key: _poster,
+    ...rest
+  } = moment as T & Partial<Record<ServerOnlyColumn, unknown>>;
   return rest;
 }
