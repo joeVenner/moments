@@ -88,6 +88,16 @@ struct HostEventDetailsFields: View {
 
     @FocusState private var focus: Field?
     private enum Field { case title, type, people, description }
+    /// "Other" is chosen: the type is typed in. Starts on for an event whose
+    /// stored type is a custom one. Read once: both sheets build these fields
+    /// afresh each time they open.
+    @State private var isOtherType: Bool
+
+    init(form: Binding<EventForm>, focusesTitle: Bool) {
+        _form = form
+        self.focusesTitle = focusesTitle
+        _isOtherType = State(initialValue: EventTypePreset.isCustom(form.wrappedValue.type))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
@@ -95,15 +105,20 @@ struct HostEventDetailsFields: View {
                 TextField(text: $form.title, prompt: prompt("Sara & Omar's wedding")) { Text("Title") }
                     .focused($focus, equals: .title)
                     .submitLabel(.next)
-                    .onSubmit { focus = .type }
+                    .onSubmit { focus = isOtherType ? .type : .people }
                     .momentsField()
             }
             HostFormField(label: "Type") {
-                TextField(text: $form.type, prompt: prompt("Wedding, birthday, party…")) { Text("Type") }
-                    .focused($focus, equals: .type)
-                    .submitLabel(.next)
-                    .onSubmit { focus = .people }
-                    .momentsField()
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    HostEventTypeChips(selection: selectedChip, onSelect: select)
+                    if isOtherType {
+                        TextField(text: $form.type, prompt: prompt("Baby shower, reunion…")) { Text("Type") }
+                            .focused($focus, equals: .type)
+                            .submitLabel(.next)
+                            .onSubmit { focus = .people }
+                            .momentsField()
+                    }
+                }
             }
             HostFormField(label: "Who it's about (optional)") {
                 TextField(text: $form.mainCharacters, prompt: prompt("Sara & Omar")) { Text("Who it's about") }
@@ -129,10 +144,89 @@ struct HostEventDetailsFields: View {
             )
         }
         .onAppear { if focusesTitle { focus = .title } }
+        // Focuses the field once it exists (it appears with Other).
+        .onChange(of: isOtherType) { if isOtherType { focus = .type } }
+    }
+
+    /// The lit chip: Other while typing a custom type, else the preset the
+    /// type matches (none for a new, empty form).
+    private var selectedChip: HostEventTypeChips.Choice? {
+        if isOtherType { return .other }
+        return EventTypePreset.matching(form.type).map(HostEventTypeChips.Choice.preset)
+    }
+
+    private func select(_ choice: HostEventTypeChips.Choice) {
+        switch choice {
+        case let .preset(preset):
+            isOtherType = false
+            // Keeps a stored "wedding" as is, so re-tapping isn't an edit.
+            if EventTypePreset.matching(form.type) != preset { form.type = preset.storedValue }
+        case .other:
+            isOtherType = true
+            // A preset's word would only need deleting.
+            if EventTypePreset.matching(form.type) != nil { form.type = "" }
+        }
     }
 
     private func prompt(_ text: LocalizedStringKey) -> Text {
         Text(text).foregroundStyle(MomentsColor.textMuted)
+    }
+}
+
+/// One-tap event types, then Other for anything else.
+struct HostEventTypeChips: View {
+    enum Choice: Hashable {
+        case preset(EventTypePreset)
+        case other
+    }
+
+    let selection: Choice?
+    let onSelect: (Choice) -> Void
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: Spacing.xs) {
+            ForEach(EventTypePreset.allCases) { preset in
+                chip(.preset(preset), title: Self.title(for: preset))
+            }
+            chip(.other, title: "Other")
+                .accessibilityHint(Text("Type your own"))
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("Type"))
+    }
+
+    private var columns: [GridItem] {
+        typeSize.isAccessibilitySize
+            ? [GridItem(.flexible())]
+            : [GridItem(.adaptive(minimum: 112), spacing: Spacing.xs)]
+    }
+
+    private func chip(_ choice: Choice, title: LocalizedStringKey) -> some View {
+        let isSelected = selection == choice
+        return Button { onSelect(choice) } label: {
+            Text(title)
+                .font(MomentsFont.body())
+                .fontWeight(isSelected ? .semibold : .regular)
+                .foregroundStyle(isSelected ? MomentsColor.onAccent : MomentsColor.text)
+                .padding(.horizontal, Spacing.sm)
+                .frame(maxWidth: .infinity, minHeight: Radius.minimumTapTarget)
+                .background(isSelected ? MomentsColor.accent : MomentsColor.surface, in: Capsule())
+                .overlay(Capsule().stroke(isSelected ? MomentsColor.accent : MomentsColor.border))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    static func title(for preset: EventTypePreset) -> LocalizedStringKey {
+        switch preset {
+        case .wedding: "Wedding"
+        case .birthday: "Birthday"
+        case .graduation: "Graduation"
+        case .corporate: "Corporate"
+        case .party: "Party"
+        }
     }
 }
 
