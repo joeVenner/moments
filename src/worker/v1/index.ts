@@ -47,11 +47,13 @@ import {
   resolveHostSession,
 } from "../hostSessions";
 import { ADMIN_RETRY_AFTER_SECONDS, attemptAdminLogin } from "../adminLogin";
-import { listAdminEvents } from "../adminEvents";
+import { getAdminEventDetail, listAdminEvents } from "../adminEvents";
 import {
   AccessRequestSchema,
   AccessResponseSchema,
+  AdminEventDetailSchema,
   AdminEventListSchema,
+  AdminEventParamSchema,
   ChangesQuerySchema,
   ErrorSchema,
   EventHeadersSchema,
@@ -472,6 +474,23 @@ const listAdminEventsRoute = createRoute({
   },
 });
 
+const getAdminEventRoute = createRoute({
+  method: "get",
+  path: "/admin/events/{id}",
+  operationId: "getAdminEvent",
+  tags: ["Host"],
+  summary: "One event with its share links and analytics",
+  security: HOST_SECURITY,
+  request: { params: AdminEventParamSchema },
+  responses: {
+    200: json(AdminEventDetailSchema, "The event"),
+    401: json(ErrorSchema, "`host_auth_required`: sign in again"),
+    404: json(ErrorSchema, "`event_not_found`"),
+    426: json(ErrorSchema, "This app build is too old; show the update screen"),
+    default: json(ErrorSchema, "Any other error"),
+  },
+});
+
 const signOutRoute = createRoute({
   method: "delete",
   path: "/admin/session",
@@ -620,6 +639,13 @@ v1.openapi(getSessionRoute, (c) => {
 
 v1.openapi(listAdminEventsRoute, async (c) => {
   return c.json(await listAdminEvents(c.env.DB, c.env.EVENT_ACCESS_SECRET), 200);
+});
+
+v1.openapi(getAdminEventRoute, async (c) => {
+  const { id } = c.req.valid("param");
+  const detail = await getAdminEventDetail(c.env.DB, c.env.EVENT_ACCESS_SECRET, id, new URL(c.req.url).origin);
+  if (!detail) return c.json({ error: "Event not found.", code: "event_not_found" }, 404);
+  return c.json(detail, 200);
 });
 
 v1.openapi(signOutRoute, async (c) => {

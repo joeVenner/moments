@@ -247,6 +247,142 @@
           "uploads_open"
         ]
       },
+      "AdminEventDetail": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/AdminEvent"
+          },
+          "share": {
+            "$ref": "#/components/schemas/EventShareLinks"
+          },
+          "analytics": {
+            "$ref": "#/components/schemas/EventAnalytics"
+          }
+        },
+        "required": [
+          "event",
+          "share",
+          "analytics"
+        ]
+      },
+      "EventShareLinks": {
+        "type": "object",
+        "properties": {
+          "event_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The guest page; put this in the QR code"
+          },
+          "invite_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri",
+            "description": "Private events only: opens the event without its PIN. Share with care."
+          }
+        },
+        "required": [
+          "event_url",
+          "invite_url"
+        ]
+      },
+      "EventAnalytics": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "object",
+            "properties": {
+              "total_moments": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "hidden_moments": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "videos": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "photos": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "storage_bytes": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Bytes of all originals"
+              },
+              "participants": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "reactions": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "total_moments",
+              "hidden_moments",
+              "videos",
+              "photos",
+              "storage_bytes",
+              "participants",
+              "reactions"
+            ]
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "day": {
+                  "type": "string",
+                  "description": "UTC `YYYY-MM-DD`"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "day",
+                "count"
+              ]
+            },
+            "description": "Moments per UTC day since 13×24 h ago (so the oldest day may be partial), oldest first; days with none are absent"
+          },
+          "upload_states": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "description": "`open`, `completed` or `aborted` today; treat any other value as unknown"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "status",
+                "count"
+              ]
+            },
+            "description": "Upload attempts by state"
+          }
+        },
+        "required": [
+          "summary",
+          "activity",
+          "upload_states"
+        ]
+      },
       "EventResponse": {
         "type": "object",
         "properties": {
@@ -1151,6 +1287,86 @@
           },
           "401": {
             "description": "`host_auth_required`: sign in again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/events/{id}": {
+      "get": {
+        "operationId": "getAdminEvent",
+        "tags": [
+          "Host"
+        ],
+        "summary": "One event with its share links and analytics",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "description": "The event's id (from the events list)"
+            },
+            "required": true,
+            "description": "The event's id (from the events list)",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminEventDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`host_auth_required`: sign in again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`event_not_found`",
             "content": {
               "application/json": {
                 "schema": {

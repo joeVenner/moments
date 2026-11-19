@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import { secureHeaders } from "hono/secure-headers";
+import { getEventAnalytics } from "./adminAnalytics";
 import type { Env, EventRow, MomentRow, LeaderboardEntry, UploadRow } from "./types";
 import { slugify, randomSuffix } from "./slugify";
 import { putMedia, pointsForContentType, isAllowedContentType, MAX_UPLOAD_BYTES, momentKey } from "./storage";
@@ -697,37 +698,7 @@ app.get("/api/admin/events/:slug/analytics", async (c) => {
   const event = await c.env.DB.prepare("SELECT id FROM events WHERE slug = ?")
     .bind(c.req.param("slug")).first<{ id: string }>();
   if (!event) return c.json({ error: "event not found" }, 404);
-  const [summary, participants, reactions, activity, uploadStates] = await Promise.all([
-    c.env.DB.prepare(
-      `SELECT COUNT(*) AS total_moments,
-              SUM(CASE WHEN moderation_status = 'hidden' THEN 1 ELSE 0 END) AS hidden_moments,
-              SUM(CASE WHEN mime_type LIKE 'video/%' THEN 1 ELSE 0 END) AS videos,
-              SUM(CASE WHEN mime_type NOT LIKE 'video/%' OR mime_type IS NULL THEN 1 ELSE 0 END) AS photos,
-              COALESCE(SUM(size_bytes), 0) AS storage_bytes
-         FROM moments WHERE event_id = ?`
-    ).bind(event.id).first(),
-    c.env.DB.prepare("SELECT COUNT(*) AS count FROM participants WHERE event_id = ?")
-      .bind(event.id).first<{ count: number }>(),
-    c.env.DB.prepare("SELECT COUNT(*) AS count FROM moment_reactions WHERE event_id = ?")
-      .bind(event.id).first<{ count: number }>(),
-    c.env.DB.prepare(
-      `SELECT date(created_at) AS day, COUNT(*) AS count
-         FROM moments WHERE event_id = ? AND created_at >= datetime('now', '-13 days')
-        GROUP BY date(created_at) ORDER BY day ASC`
-    ).bind(event.id).all<{ day: string; count: number }>(),
-    c.env.DB.prepare(
-      "SELECT status, COUNT(*) AS count FROM uploads WHERE event_id = ? GROUP BY status"
-    ).bind(event.id).all<{ status: string; count: number }>(),
-  ]);
-  return c.json({
-    summary: {
-      ...(summary ?? {}),
-      participants: participants?.count ?? 0,
-      reactions: reactions?.count ?? 0,
-    },
-    activity: activity.results,
-    upload_states: uploadStates.results,
-  });
+  return c.json(await getEventAnalytics(c.env.DB, event.id));
 });
 
 app.patch("/api/admin/moments/:id", async (c) => {
