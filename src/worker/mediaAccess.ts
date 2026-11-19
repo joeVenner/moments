@@ -65,19 +65,31 @@ export async function verifyMediaView(
  * Adds `?mv=` to R2 media URLs so the admin dashboard can load hidden and
  * private-event moments. Without EVENT_ACCESS_SECRET, URLs are left as-is.
  */
-export async function withAdminViewUrls<T extends { media_url: string }>(
+export async function withAdminViewUrls<T extends { media_url: string; media?: MomentMedia }>(
   secret: string | undefined,
   moments: readonly T[],
   nowSeconds: number = Math.floor(Date.now() / 1000)
 ): Promise<T[]> {
   if (!secret) return [...moments];
   const hmacKey = await importHmacKey(secret);
+  const sign = async (url: string) => {
+    if (!url.startsWith("/media/") || url.includes("?")) return url;
+    const token = await signMediaView(hmacKey, url.slice("/media/".length), nowSeconds);
+    return `${url}?${MEDIA_VIEW_PARAM}=${token}`;
+  };
+  const signOptional = async (url: string | null) => (url === null ? null : sign(url));
   return Promise.all(
     moments.map(async (moment) => {
-      if (!moment.media_url.startsWith("/media/") || moment.media_url.includes("?")) return moment;
-      const key = moment.media_url.slice("/media/".length);
-      const token = await signMediaView(hmacKey, key, nowSeconds);
-      return { ...moment, media_url: `${moment.media_url}?${MEDIA_VIEW_PARAM}=${token}` };
+      const mediaUrl = await sign(moment.media_url);
+      if (!moment.media) return { ...moment, media_url: mediaUrl };
+      // The app's moderation grid loads thumbnails of hidden moments too.
+      const [url, thumb, display, poster] = await Promise.all([
+        sign(moment.media.url),
+        signOptional(moment.media.thumb_url),
+        signOptional(moment.media.display_url),
+        signOptional(moment.media.poster_url),
+      ]);
+      return { ...moment, media_url: mediaUrl, media: { ...moment.media, url, thumb_url: thumb, display_url: display, poster_url: poster } };
     })
   );
 }

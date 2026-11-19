@@ -47,6 +47,21 @@ describe("media view tokens", () => {
     const [already] = await withAdminViewUrls(SECRET, [{ media_url: "/media/a.jpg?mv=x" }], NOW);
     expect(already.media_url).toBe("/media/a.jpg?mv=x");
   });
+
+  it("signs each R2 URL of a media object for its own key", async () => {
+    const media = {
+      kind: "image" as const, url: "/media/events/e1/a.jpg", thumb_url: "/media/events/e1/a-thumb.jpg",
+      display_url: null, poster_url: null, hls_url: null, width: null, height: null, duration_ms: null, blurhash: null,
+    };
+    const [moment] = await withAdminViewUrls(SECRET, [{ media_url: media.url, media }], NOW);
+    const thumbToken = new URL(`https://x${moment.media.thumb_url}`).searchParams.get("mv") ?? undefined;
+    expect(await verifyMediaView(SECRET, "events/e1/a-thumb.jpg", thumbToken, NOW)).toBe(true);
+    expect(await verifyMediaView(SECRET, "events/e1/a.jpg", thumbToken, NOW)).toBe(false);
+    expect(moment.media.url).toBe(moment.media_url);
+    expect(moment.media.display_url).toBeNull();
+    const [unsigned] = await withAdminViewUrls(undefined, [{ media_url: media.url, media }], NOW);
+    expect(unsigned.media).toEqual(media);
+  });
 });
 
 describe("guest media grants", () => {
