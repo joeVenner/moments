@@ -46,6 +46,8 @@ export interface Env {
   GUEST_TOKENS_ENFORCED?: string;
   /** Oldest iOS build number the v1 API accepts; older builds get 426. Unset = no minimum. */
   MIN_IOS_BUILD?: string;
+  /** Numeric App Store id; turns on the Smart App Banner on event pages. Unset until the app is listed. */
+  APP_STORE_ID?: string;
 }
 
 export interface EventRow {

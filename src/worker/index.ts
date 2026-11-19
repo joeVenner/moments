@@ -90,7 +90,13 @@ import {
   randomAccessToken,
   verifyEventAccess,
 } from "./eventAccess";
-import { APPLE_APP_SITE_ASSOCIATION_PATH, appleAppSiteAssociation } from "./appleApp";
+import {
+  APPLE_APP_SITE_ASSOCIATION_PATH,
+  appleAppSiteAssociation,
+  isSmartAppBannerOn,
+  withoutValidators,
+  withSmartAppBanner,
+} from "./appleApp";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -1859,8 +1865,8 @@ app.get("/media/*", async (c) => {
   return new Response(object.body, { headers: baseHeaders });
 });
 
-async function serveNoIndexSpa(c: Context<{ Bindings: Env }>): Promise<Response> {
-  const response = await c.env.ASSETS.fetch(c.req.raw);
+async function serveNoIndexSpa(c: Context<{ Bindings: Env }>, request: Request = c.req.raw): Promise<Response> {
+  const response = await c.env.ASSETS.fetch(request);
   const headers = new Headers(response.headers);
   headers.set("X-Robots-Tag", NO_INDEX);
   return new Response(response.body, {
@@ -1870,9 +1876,13 @@ async function serveNoIndexSpa(c: Context<{ Bindings: Env }>): Promise<Response>
   });
 }
 
-app.get("/admin", serveNoIndexSpa);
-app.get("/admin/*", serveNoIndexSpa);
-app.get("/e/*", serveNoIndexSpa);
+app.get("/admin", (c) => serveNoIndexSpa(c));
+app.get("/admin/*", (c) => serveNoIndexSpa(c));
+app.get("/e/*", async (c) => {
+  if (!isSmartAppBannerOn(c.env.APP_STORE_ID)) return serveNoIndexSpa(c);
+  const page = await serveNoIndexSpa(c, withoutValidators(c.req.raw));
+  return withSmartAppBanner(page, { pageUrl: new URL(c.req.url), appStoreId: c.env.APP_STORE_ID });
+});
 
 app.onError((err, c) => {
   // Fail closed: without a working key we cannot hand out private video URLs.
