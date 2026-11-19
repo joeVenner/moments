@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../index";
 import { ADMIN_EVENTS_LIMIT } from "../adminEvents";
 import { OPERATOR_USER_ID } from "../hostSessions";
+import { addDays, startPlan } from "../plans";
+import { insertPlan } from "../plansRepo";
 import { createSqliteD1, type SqliteD1 } from "../testing/sqliteD1";
 import type { Env } from "../types";
 import { OPENAPI_CONFIG, v1 } from "./index";
@@ -129,6 +131,7 @@ describe("event ownership on the host API", () => {
   });
 
   it("gives a new event to the host who created it", async () => {
+    await insertPlan(sqlite.db, HOST_A, startPlan("host_50", new Date(), addDays(new Date(), 30)));
     const response = await call("/admin/events", await sessionFor(HOST_A), {
       method: "POST",
       body: JSON.stringify({ title: "Garden party", type: "Party" }),
