@@ -360,6 +360,18 @@ export const HostSessionSchema = z
   })
   .openapi("HostSession");
 
+export const AdminEventSchema = EventSchema.extend({
+  moment_count: z.number().int().openapi({ description: "All moments, hidden ones included" }),
+  participant_count: z.number().int().openapi({ description: "Guests currently in the event (those who left are not counted)" }),
+}).openapi("AdminEvent");
+
+export const AdminEventListSchema = z
+  .object({
+    events: z.array(AdminEventSchema).openapi({ description: "Newest first; at most 500" }),
+    truncated: z.boolean().openapi({ description: "True when older events were left out by the 500 cap" }),
+  })
+  .openapi("AdminEventList");
+
 export const HostSignInResponseSchema = HostSessionSchema.extend({
   token: z.string().openapi({ description: "Send as `Authorization: Bearer <token>`. Returned only here; keep it in the keychain." }),
   token_type: z.string().openapi({ description: "`Bearer`" }),
