@@ -36,6 +36,8 @@ export interface NewEvent {
   coverImageUrl: string | null;
   startsAt: string | null;
   expiresAt: string | null;
+  /** The host who owns it (`users.id`). */
+  ownerUserId: string;
 }
 
 /** How often a create races another for the same slug before giving up. */
@@ -52,10 +54,21 @@ export async function insertEvent(db: D1Database, event: NewEvent, id: string = 
     try {
       await db
         .prepare(
-          `INSERT INTO events (id, slug, title, type, main_characters, description, cover_image_url, starts_at, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO events (id, slug, title, type, main_characters, description, cover_image_url, starts_at, expires_at, owner_user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .bind(id, slug, event.title, event.type, event.mainCharacters, event.description, event.coverImageUrl, event.startsAt, event.expiresAt)
+        .bind(
+          id,
+          slug,
+          event.title,
+          event.type,
+          event.mainCharacters,
+          event.description,
+          event.coverImageUrl,
+          event.startsAt,
+          event.expiresAt,
+          event.ownerUserId
+        )
         .run();
       return id;
     } catch (error) {

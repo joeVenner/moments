@@ -1,13 +1,23 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { insertEvent, normalizeDate, updateEventDetails } from "./eventWrites";
 import { createSqliteD1, type SqliteD1 } from "./testing/sqliteD1";
+import { OPERATOR_USER_ID } from "./hostSessions";
 
 let sqlite: SqliteD1;
 beforeEach(() => {
   sqlite = createSqliteD1();
 });
 
-const newEvent = { title: "Party", type: "Party", mainCharacters: null, description: null, coverImageUrl: null, startsAt: null, expiresAt: null };
+const newEvent = {
+  title: "Party",
+  type: "Party",
+  mainCharacters: null,
+  description: null,
+  coverImageUrl: null,
+  startsAt: null,
+  expiresAt: null,
+  ownerUserId: OPERATOR_USER_ID,
+};
 
 describe("event writes", () => {
   it("creates a public event with no PIN or invite", async () => {

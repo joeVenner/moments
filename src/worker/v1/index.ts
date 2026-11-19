@@ -48,6 +48,7 @@ import {
 } from "../hostSessions";
 import { ADMIN_RETRY_AFTER_SECONDS, attemptAdminLogin } from "../adminLogin";
 import { getAdminEventDetail, listAdminEvents } from "../adminEvents";
+import { hostCanAccessEvent, hostCanAccessMoment, ownerScope } from "../eventOwnership";
 import { insertEvent, normalizeDate, updateEventDetails } from "../eventWrites";
 import { lifecycleChangeFrom, type SettingsResult, updateEventAccess, updateEventLifecycle } from "../eventSettings";
 import { deleteAdminMoment, listAdminMoments, setMomentModeration } from "../adminModeration";
@@ -664,6 +665,29 @@ const hostGate: MiddlewareHandler<V1Env> = async (c, next) => {
   return next();
 };
 
+const EVENT_NOT_FOUND = { error: "Event not found.", code: "event_not_found" } as const;
+const MOMENT_NOT_FOUND = { error: "Moment not found.", code: "moment_not_found" } as const;
+
+/**
+ * Another host's event or moment answers exactly like a missing one (404),
+ * so ids can't be probed. The operator passes for every event.
+ */
+function ownerGate(
+  canAccess: (db: D1Database, session: HostSession, id: string) => Promise<boolean>,
+  notFound: typeof EVENT_NOT_FOUND | typeof MOMENT_NOT_FOUND
+): MiddlewareHandler<V1Env> {
+  return async (c, next) => {
+    const id = c.req.param("id") ?? "";
+    // A malformed id reaches no query: the route's validator answers 400.
+    if (id.length === 0 || id.length > 100) return next();
+    if (!(await canAccess(c.env.DB, c.get("hostSession"), id))) return c.json(notFound, 404);
+    return next();
+  };
+}
+
+const eventOwnerGate = ownerGate(hostCanAccessEvent, EVENT_NOT_FOUND);
+const momentOwnerGate = ownerGate(hostCanAccessMoment, MOMENT_NOT_FOUND);
+
 /** Rejects iOS builds below MIN_IOS_BUILD with 426 so the app can force an update. */
 const clientVersionGate: MiddlewareHandler<V1Env> = async (c, next) => {
   if (isBelowMinimumBuild(parseIosBuild(c.req.header(CLIENT_HEADER)), c.env.MIN_IOS_BUILD)) {
@@ -737,6 +761,11 @@ v1.use("*", clientVersionGate);
 // the event route and everything below it (registering both runs it twice).
 v1.use("/events/:slug/*", eventGate);
 v1.use("/admin/*", hostGate);
+// After hostGate: every route on one event or moment checks its owner first.
+v1.use("/admin/events/:id", eventOwnerGate);
+v1.use("/admin/events/:id/*", eventOwnerGate);
+v1.use("/admin/moments/:id", momentOwnerGate);
+v1.use("/admin/moments/:id/*", momentOwnerGate);
 
 v1.openapi(signInRoute, async (c) => {
   // Counted before the password is checked, right or wrong: otherwise a
@@ -774,25 +803,25 @@ v1.openapi(getSessionRoute, (c) => {
 });
 
 v1.openapi(listAdminEventsRoute, async (c) => {
-  return c.json(await listAdminEvents(c.env.DB, c.env.EVENT_ACCESS_SECRET), 200);
+  return c.json(await listAdminEvents(c.env.DB, c.env.EVENT_ACCESS_SECRET, ownerScope(c.get("hostSession"))), 200);
 });
 
 v1.openapi(getAdminEventRoute, async (c) => {
   const { id } = c.req.valid("param");
   const detail = await getAdminEventDetail(c.env.DB, c.env.EVENT_ACCESS_SECRET, id, new URL(c.req.url).origin);
-  if (!detail) return c.json({ error: "Event not found.", code: "event_not_found" }, 404);
+  if (!detail) return c.json(EVENT_NOT_FOUND, 404);
   return c.json(detail, 200);
 });
 
 v1.openapi(listAdminMomentsRoute, async (c) => {
   const list = await listAdminMoments(c.env, c.req.valid("param").id);
-  if (!list) return c.json({ error: "Event not found.", code: "event_not_found" }, 404);
+  if (!list) return c.json(EVENT_NOT_FOUND, 404);
   return c.json(list, 200);
 });
 
 v1.openapi(moderateMomentRoute, async (c) => {
   const moment = await setMomentModeration(c.env, c.req.valid("param").id, c.req.valid("json").status);
-  if (!moment) return c.json({ error: "Moment not found.", code: "moment_not_found" }, 404);
+  if (!moment) return c.json(MOMENT_NOT_FOUND, 404);
   return c.json({ moment }, 200);
 });
 
@@ -800,7 +829,7 @@ v1.openapi(deleteMomentRoute, async (c) => {
   const id = c.req.valid("param").id;
   try {
     if ((await deleteAdminMoment(c.env, id)) === "not_found") {
-      return c.json({ error: "Moment not found.", code: "moment_not_found" }, 404);
+      return c.json(MOMENT_NOT_FOUND, 404);
     }
   } catch (error) {
     // Only the error type: storage messages can name internal endpoints.
@@ -816,7 +845,6 @@ const storedText = (value: string | null | undefined): string | null | undefined
 
 /** A 400 that names the field, so the app can point at it. */
 const invalidField = (field: string) => ({ error: `${field} is invalid`, code: "invalid_request" }) as const;
-const EVENT_NOT_FOUND = { error: "Event not found.", code: "event_not_found" } as const;
 
 /** Each host may create a few events a minute: plenty by hand, not a flood. */
 async function isCreateLimited(c: Context<V1Env>): Promise<boolean> {
@@ -844,6 +872,7 @@ v1.openapi(createAdminEventRoute, async (c) => {
     coverImageUrl: null,
     startsAt,
     expiresAt,
+    ownerUserId: c.get("hostSession").userId,
   });
   const detail = await getAdminEventDetail(c.env.DB, c.env.EVENT_ACCESS_SECRET, id, new URL(c.req.url).origin);
   if (!detail) throw new HTTPException(500, { message: "created event missing" });

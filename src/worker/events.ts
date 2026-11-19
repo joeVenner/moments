@@ -66,7 +66,10 @@ export async function getActiveEventBySlug(db: D1Database, slug: string): Promis
   return db.prepare(`SELECT * FROM events WHERE ${ACTIVE_EVENT_FILTER}`).bind(slug).first<EventRow>();
 }
 
-export type PublicEvent = Omit<EventRow, "access_pin_hash" | "access_pin_salt" | "invite_token" | "access_version"> & {
+export type PublicEvent = Omit<
+  EventRow,
+  "access_pin_hash" | "access_pin_salt" | "invite_token" | "access_version" | "owner_user_id"
+> & {
   /** Whether new uploads are accepted right now. */
   uploads_open: boolean;
 };
@@ -81,6 +84,8 @@ export function toPublicEvent(event: EventRow): PublicEvent {
     access_pin_salt: _salt,
     invite_token: _token,
     access_version: _version,
+    // Who hosts it is nobody else's business (it will be their App Store account token).
+    owner_user_id: _owner,
     ...publicEvent
   } = event;
   return { ...publicEvent, uploads_open: areUploadsOpen(event) };

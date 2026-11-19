@@ -71,6 +71,8 @@ export interface EventRow {
   access_pin_salt: string | null;
   invite_token: string | null;
   access_version: number;
+  /** The host who owns it (`users.id`); never sent to guests. */
+  owner_user_id: string | null;
 }
 
 export interface MomentRow {

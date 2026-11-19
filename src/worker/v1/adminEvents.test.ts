@@ -104,7 +104,7 @@ describe("listAdminEvents", () => {
     const { ADMIN_EVENTS_LIMIT, listAdminEvents } = await import("../adminEvents");
     const insert = sqlite.raw.prepare("INSERT INTO events (id, slug, title, type, access_mode) VALUES (?, ?, 'E', 'Party', 'public')");
     for (let index = 0; index <= ADMIN_EVENTS_LIMIT; index++) insert.run(`e${index}`, `s${index}`);
-    const result = await listAdminEvents(sqlite.db, undefined);
+    const result = await listAdminEvents(sqlite.db, undefined, null);
     expect(result.events).toHaveLength(ADMIN_EVENTS_LIMIT);
     expect(result.truncated).toBe(true);
   });
