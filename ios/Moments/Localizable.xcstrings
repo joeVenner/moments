@@ -1,6 +1,16 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ · as %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · en tant que %@"
+          }
+        }
+      }
+    },
     "%lld in progress": {
       "extractionState": "manual",
       "localizations": {
@@ -358,6 +368,16 @@
         }
       }
     },
+    "Details unavailable right now": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Détails indisponibles pour le moment"
+          }
+        }
+      }
+    },
     "Done": {
       "extractionState": "manual",
       "localizations": {
@@ -376,6 +396,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saisissez un nom de 1 à 60 caractères."
+          }
+        }
+      }
+    },
+    "Enter the PIN again to open it": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisissez à nouveau le code pour l'ouvrir"
           }
         }
       }
@@ -505,6 +535,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Favoris"
+          }
+        }
+      }
+    },
+    "Home": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accueil"
           }
         }
       }
@@ -809,6 +850,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "L'ouvre en plein écran"
+          }
+        }
+      }
+    },
+    "Opens the event": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvre l'événement"
           }
         }
       }
@@ -1615,6 +1666,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Votre accès à cet événement a expiré. Saisissez à nouveau le code."
+          }
+        }
+      }
+    },
+    "Your events": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos événements"
+          }
+        }
+      }
+    },
+    "Your events can't be shown right now. Pull down to try again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos événements ne peuvent pas être affichés pour le moment. Tirez vers le bas pour réessayer."
           }
         }
       }

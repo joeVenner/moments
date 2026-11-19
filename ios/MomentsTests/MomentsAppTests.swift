@@ -116,4 +116,24 @@ private let invite = String(repeating: "ab12", count: 16)
         flow.show(3)
         #expect(flow.page == 0)
     }
+
+    @Test func pickingAJoinedEventOpensItWithoutAnInvite() {
+        let navigation = AppNavigation(router: AppRouter())
+        navigation.handle(URL(string: "https://moments-hq.com/e/party?invite=\(invite)")!)
+        navigation.open(EventSlug("party")!)
+        #expect(navigation.destination == .event(EventSlug("party")!))
+        #expect(navigation.takeInvite(for: EventSlug("party")!) == nil)
+        #expect(navigation.openCount == 2)
+    }
+
+    @Test func goingHomeClearsTheEventAndALinkReopensIt() {
+        let navigation = AppNavigation(router: AppRouter())
+        let link = URL(string: "https://moments-hq.com/e/party")!
+        navigation.handle(link)
+        navigation.goHome()
+        #expect(navigation.destination == nil && navigation.openCount == 2)
+        // The same link right away is a new open, not a duplicate delivery.
+        navigation.handle(link)
+        #expect(navigation.destination == .event(EventSlug("party")!) && navigation.openCount == 3)
+    }
 }

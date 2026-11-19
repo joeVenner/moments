@@ -1,11 +1,13 @@
 import DesignSystem
+import FeatureGuest
 import SwiftUI
 
-/// The first screen: opens an event from its link. Universal links and the
-/// App Clip open events directly; this covers a link that arrived some other
-/// way (a message, a copied URL) and the simulator, which has no camera.
+/// The home screen: the events joined on this phone, then opening another
+/// event from its link (one that arrived by message or a copied URL; the
+/// camera opens QR links directly).
 struct HomeView: View {
     let navigation: AppNavigation
+    let myEvents: MyEventsModel
     /// Shown above the link field, e.g. after a slideshow link.
     let notice: String?
 
@@ -20,6 +22,14 @@ struct HomeView: View {
                 Text("Moments")
                     .font(MomentsFont.display())
                     .foregroundStyle(MomentsColor.text)
+                if !myEvents.entries.isEmpty { MyEventsList(entries: myEvents.entries, open: navigation.open) }
+                if myEvents.phase == .unavailable {
+                    // The keychain is locked (or unreadable); pull to refresh retries.
+                    Text("Your events can't be shown right now. Pull down to try again.")
+                        .font(MomentsFont.caption())
+                        .foregroundStyle(MomentsColor.textMuted)
+                        .multilineTextAlignment(.center)
+                }
                 Text(notice ?? String(localized: "Scan the event's QR code with your camera, or paste its link here."))
                     .font(MomentsFont.body())
                     .foregroundStyle(MomentsColor.textMuted)
@@ -48,6 +58,9 @@ struct HomeView: View {
         .scrollDismissesKeyboard(.interactively)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(MomentsColor.background)
+        // Reloads each time home shows, e.g. after joining or leaving an event.
+        .task { await myEvents.load() }
+        .refreshable { await myEvents.load() }
     }
 
     private func open() {

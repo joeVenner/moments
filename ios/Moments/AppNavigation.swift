@@ -61,6 +61,22 @@ final class AppNavigation {
         return handle(url)
     }
 
+    /// An event picked on the home screen (already joined: no invite).
+    func open(_ slug: EventSlug) {
+        pendingInvite = nil
+        lastLink = nil
+        destination = .event(slug)
+        openCount += 1
+    }
+
+    /// Back to the home screen from an event.
+    func goHome() {
+        pendingInvite = nil
+        lastLink = nil
+        destination = nil
+        openCount += 1
+    }
+
     /// The invite that came with the link to `slug`, at most once.
     func takeInvite(for slug: EventSlug) -> InviteToken? {
         guard let pending = pendingInvite, pending.slug == slug else { return nil }

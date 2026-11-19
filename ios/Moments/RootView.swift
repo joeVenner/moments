@@ -10,7 +10,14 @@ struct RootView: View {
     let navigation: AppNavigation
     let environment: AppEnvironment
     @State private var joinModel: JoinModel?
+    @State private var myEvents: MyEventsModel
     @AppStorage(OnboardingFlow.completedKey) private var hasOnboarded = false
+
+    init(navigation: AppNavigation, environment: AppEnvironment) {
+        self.navigation = navigation
+        self.environment = environment
+        _myEvents = State(initialValue: MyEventsModel(service: environment.service, store: environment.credentials))
+    }
 
     var body: some View {
         Group {
@@ -19,14 +26,16 @@ struct RootView: View {
                     // Access changed under the feed: start over with the PIN.
                     self.joinModel = makeJoinModel(slug: joinModel.slug, invite: nil)
                 } onLeft: {
-                    self.joinModel = nil
+                    navigation.goHome()
+                } onHome: {
+                    navigation.goHome()
                 }
                 // A new model per open restarts the flow cleanly.
                 .id(joinModel.id)
             } else if OnboardingFlow.shouldShow(completed: hasOnboarded, isShowingEvent: false) {
                 OnboardingView { hasOnboarded = true }
             } else {
-                HomeView(navigation: navigation, notice: notice)
+                HomeView(navigation: navigation, myEvents: myEvents, notice: notice)
             }
         }
         // Universal links arrive here; App Clip invocations arrive as a
