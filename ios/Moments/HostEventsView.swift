@@ -7,10 +7,11 @@ import SwiftUI
 /// The signed-in host's events, newest first. Pull to refresh; sign out in
 /// the top bar; tap an event for its QR code, links and stats.
 struct HostEventsView: View {
-    let account: HostAccount
-    let model: HostEventsModel
-    let service: any HostService
+    let host: HomeView.Host
     let onClose: () -> Void
+
+    private var account: HostAccount { host.account }
+    private var model: HostEventsModel { host.events }
 
     @Environment(\.scenePhase) private var scenePhase
     @State private var isConfirmingSignOut = false
@@ -26,7 +27,10 @@ struct HostEventsView: View {
             .background(MomentsColor.background.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: AdminEvent.self) { item in
-                HostEventDetailView(summary: item, service: service, account: account)
+                HostEventDetailView(summary: item, host: host)
+            }
+            .navigationDestination(for: HostModerationRoute.self) { route in
+                HostModerationView(route: route, host: host)
             }
         }
         .task { await model.load() }

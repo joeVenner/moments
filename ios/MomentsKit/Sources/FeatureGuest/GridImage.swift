@@ -3,7 +3,8 @@ import Foundation
 import MomentsAPI
 
 /// How a grid cell picks among a moment's images (`Media.gridImageURLs`).
-enum GridImage {
+/// Shared with the host's moderation grid.
+public enum GridImage {
     enum Problem: Error, Equatable {
         /// The moment has no image a cell can show.
         case noImage
@@ -18,7 +19,7 @@ enum GridImage {
     /// into view), larger one included: rare, since finalize only keeps
     /// whole JPEGs. An original over the loader's byte cap stops the chain
     /// (`unexpectedResponse`), so a fallback never downloads more than that.
-    static func load(_ urls: [URL], with image: @Sendable (URL) async throws -> CGImage) async throws -> CGImage {
+    public static func load(_ urls: [URL], with image: @Sendable (URL) async throws -> CGImage) async throws -> CGImage {
         var lastError: any Error = Problem.noImage
         for url in urls {
             do {
