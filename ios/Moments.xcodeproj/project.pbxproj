@@ -15,6 +15,7 @@
 		346EFBD0F25D0B713B876CC8 /* CredentialStore in Frameworks */ = {isa = PBXBuildFile; productRef = 60B03C2EE5B4FA5FA5827BED /* CredentialStore */; };
 		E9FDAC3499B371D410E2B1C8 /* AppRouting in Frameworks */ = {isa = PBXBuildFile; productRef = 11F742D66A422DB2C6DE4F46 /* AppRouting */; };
 		43462B9A4D01C014FBD4A3A9 /* FeatureGuest in Frameworks */ = {isa = PBXBuildFile; productRef = 372DE7E05122E178FD89FE58 /* FeatureGuest */; };
+		7A1C2E3F4B5D6E7F8A9B0C1D /* FeatureHost in Frameworks */ = {isa = PBXBuildFile; productRef = 8B2D3F4A5C6E7F8A9B0C1D2E /* FeatureHost */; };
 		5E1A0C2B7D3F4A6B8C9D0E1F /* UploadEngine in Frameworks */ = {isa = PBXBuildFile; productRef = 6F2B1D3C8E4A5B7C9D0E1F2A /* UploadEngine */; };
 		B4074831FB2CF022FBE7789B /* MomentsAPI in Frameworks */ = {isa = PBXBuildFile; productRef = C96976A483AF8B7DB302374B /* MomentsAPI */; };
 /* End PBXBuildFile section */
@@ -58,6 +59,7 @@
 				5EA60B84A910AB8A34E81BF0 /* AppRouting in Frameworks */,
 				8DBC006D750F45B40D9D6734 /* CredentialStore in Frameworks */,
 				43462B9A4D01C014FBD4A3A9 /* FeatureGuest in Frameworks */,
+				7A1C2E3F4B5D6E7F8A9B0C1D /* FeatureHost in Frameworks */,
 				5E1A0C2B7D3F4A6B8C9D0E1F /* UploadEngine in Frameworks */,
 				B4074831FB2CF022FBE7789B /* MomentsAPI in Frameworks */,
 			);
@@ -128,6 +130,7 @@
 				75145B2E14727A1C65C3E271 /* AppRouting */,
 				771321923501E50EA15BC6E1 /* CredentialStore */,
 				372DE7E05122E178FD89FE58 /* FeatureGuest */,
+				8B2D3F4A5C6E7F8A9B0C1D2E /* FeatureHost */,
 				C96976A483AF8B7DB302374B /* MomentsAPI */,
 				6F2B1D3C8E4A5B7C9D0E1F2A /* UploadEngine */,
 			);
@@ -403,6 +406,10 @@
 		372DE7E05122E178FD89FE58 /* FeatureGuest */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = FeatureGuest;
+		};
+		8B2D3F4A5C6E7F8A9B0C1D2E /* FeatureHost */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FeatureHost;
 		};
 		6F2B1D3C8E4A5B7C9D0E1F2A /* UploadEngine */ = {
 			isa = XCSwiftPackageProductDependency;
