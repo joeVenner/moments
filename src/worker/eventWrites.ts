@@ -43,38 +43,101 @@ export interface NewEvent {
 /** How often a create races another for the same slug before giving up. */
 const SLUG_ATTEMPTS = 3;
 
+const EVENT_COLUMNS =
+  "id, slug, title, type, main_characters, description, cover_image_url, starts_at, expires_at, owner_user_id";
+
+function eventValues(event: NewEvent, id: string, slug: string): unknown[] {
+  return [
+    id,
+    slug,
+    event.title,
+    event.type,
+    event.mainCharacters,
+    event.description,
+    event.coverImageUrl,
+    event.startsAt,
+    event.expiresAt,
+    event.ownerUserId,
+  ];
+}
+
 /**
- * Creates an event (public, open for uploads) and returns its id. The slug
- * check and the insert aren't atomic: when another create took the same
- * slug in between (the UNIQUE constraint fires), it tries a suffixed one.
+ * Runs `insert` with a free slug. The slug check and the insert aren't
+ * atomic: when another create took the same slug in between (the UNIQUE
+ * constraint fires), it tries a suffixed one.
  */
-export async function insertEvent(db: D1Database, event: NewEvent, id: string = crypto.randomUUID()): Promise<string> {
+async function withFreeSlug<T>(db: D1Database, title: string, insert: (slug: string) => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt++) {
-    const slug = await uniqueSlug(db, event.title, attempt === 0);
+    const slug = await uniqueSlug(db, title, attempt === 0);
     try {
-      await db
-        .prepare(
-          `INSERT INTO events (id, slug, title, type, main_characters, description, cover_image_url, starts_at, expires_at, owner_user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .bind(
-          id,
-          slug,
-          event.title,
-          event.type,
-          event.mainCharacters,
-          event.description,
-          event.coverImageUrl,
-          event.startsAt,
-          event.expiresAt,
-          event.ownerUserId
-        )
-        .run();
-      return id;
+      return await insert(slug);
     } catch (error) {
       if (attempt + 1 >= SLUG_ATTEMPTS || !isSlugTaken(error)) throw error;
     }
   }
+}
+
+/** Creates an event (public, open for uploads) and returns its id. */
+export async function insertEvent(db: D1Database, event: NewEvent, id: string = crypto.randomUUID()): Promise<string> {
+  return withFreeSlug(db, event.title, async (slug) => {
+    await db
+      .prepare(`INSERT INTO events (${EVENT_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(...eventValues(event, id, slug))
+      .run();
+    return id;
+  });
+}
+
+/**
+ * An unused main-event allowance of the plan in ?11, which must belong to the
+ * new event's owner (?10) and not be purged. Included events go before
+ * bought ones (`source = 'addon'` sorts false, i.e. included, first).
+ */
+const FREE_MAIN_ALLOWANCE = `
+  SELECT a.id FROM event_allowances a JOIN plans p ON p.id = a.plan_id
+  WHERE p.id = ?11 AND p.user_id = ?10 AND p.state != 'purged' AND a.kind = 'main' AND a.consumed_event_id IS NULL
+  ORDER BY a.source = 'addon', a.created_at, a.id
+  LIMIT 1`;
+
+/**
+ * Creates an event paid for by one of the plan's main-event allowances, and
+ * marks that allowance used, in one batch: either both happen or neither.
+ * Returns the id, or null when the plan has no main event left.
+ */
+export async function insertPlanEvent(
+  db: D1Database,
+  event: NewEvent,
+  planId: string,
+  id: string = crypto.randomUUID()
+): Promise<string | null> {
+  return withFreeSlug(db, event.title, async (slug) => {
+    // ?1–?10 are the event's columns, ?11 the plan.
+    const values = [...eventValues(event, id, slug), planId];
+    const [inserted, spent] = await db.batch([
+      db
+        .prepare(
+          `INSERT INTO events (${EVENT_COLUMNS})
+           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10
+           WHERE EXISTS (${FREE_MAIN_ALLOWANCE})`
+        )
+        .bind(...values),
+      // Same transaction, so the allowance the insert saw is still free. It
+      // binds the same list as the insert (it uses only ?1, ?10 and ?11).
+      db
+        .prepare(
+          `UPDATE event_allowances SET consumed_event_id = ?1
+           WHERE id = (${FREE_MAIN_ALLOWANCE}) AND EXISTS (SELECT 1 FROM events WHERE id = ?1)`
+        )
+        .bind(...values),
+    ]);
+    // Can't happen inside one transaction; a guard in case the SQL changes.
+    // The batch is committed by now, so an unpaid event is removed again.
+    if (inserted.meta.changes !== spent.meta.changes) {
+      await db.prepare("DELETE FROM events WHERE id = ?").bind(id).run();
+      throw new Error("event and allowance out of step");
+    }
+    return inserted.meta.changes === 1 ? id : null;
+  });
 }
 
 function isSlugTaken(error: unknown): boolean {

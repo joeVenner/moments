@@ -49,7 +49,9 @@ import {
 import { ADMIN_RETRY_AFTER_SECONDS, attemptAdminLogin } from "../adminLogin";
 import { getAdminEventDetail, listAdminEvents } from "../adminEvents";
 import { hostCanAccessEvent, hostCanAccessMoment, ownerScope } from "../eventOwnership";
-import { insertEvent, normalizeDate, updateEventDetails } from "../eventWrites";
+import { insertEvent, insertPlanEvent, normalizeDate, type NewEvent, updateEventDetails } from "../eventWrites";
+import { planAccess } from "../plans";
+import { loadLivePlan } from "../plansRepo";
 import { lifecycleChangeFrom, type SettingsResult, updateEventAccess, updateEventLifecycle } from "../eventSettings";
 import { deleteAdminMoment, listAdminMoments, setMomentModeration } from "../adminModeration";
 import {
@@ -566,6 +568,8 @@ const createAdminEventRoute = createRoute({
   responses: {
     201: json(AdminEventDetailSchema, "The new event"),
     400: json(ErrorSchema, "`invalid_request`: a missing title or type, a field too long, a bad date, or an end date that is past or before the start"),
+    402: json(ErrorSchema, "`plan_required`: no hosting plan that allows new events (none, ended, or a payment is failing)"),
+    409: json(ErrorSchema, "`no_events_left`: every event the plan includes is used; an Extra event adds one"),
     429: json(ErrorSchema, "`rate_limited`: too many new events in a minute; see Retry-After"),
     ...hostErrors,
   },
@@ -851,6 +855,16 @@ async function isCreateLimited(c: Context<V1Env>): Promise<boolean> {
   return !(await c.env.ADMIN_AUTH_LIMITER.limit({ key: `host-create:${c.get("hostSession").id}` })).success;
 }
 
+/**
+ * A host's event, paid for by one of their plan's events: its id, or why
+ * there is none. The operator's events need no plan.
+ */
+async function insertHostEvent(db: D1Database, event: NewEvent): Promise<string | "plan_required" | "no_events_left"> {
+  const stored = await loadLivePlan(db, event.ownerUserId);
+  if (!stored || !planAccess(stored.plan, new Date()).hostCanEdit) return "plan_required";
+  return (await insertPlanEvent(db, event, stored.id)) ?? "no_events_left";
+}
+
 v1.openapi(createAdminEventRoute, async (c) => {
   const body = c.req.valid("json");
   const startsAt = normalizeDate(body.starts_at ?? null);
@@ -864,7 +878,8 @@ v1.openapi(createAdminEventRoute, async (c) => {
   if (await isCreateLimited(c)) {
     return c.json({ error: "Too many new events; try again in a minute.", code: "rate_limited" }, 429, { "Retry-After": "60" });
   }
-  const id = await insertEvent(c.env.DB, {
+  const session = c.get("hostSession");
+  const event: NewEvent = {
     title: body.title,
     type: body.type,
     mainCharacters: storedText(body.main_characters) ?? null,
@@ -872,8 +887,14 @@ v1.openapi(createAdminEventRoute, async (c) => {
     coverImageUrl: null,
     startsAt,
     expiresAt,
-    ownerUserId: c.get("hostSession").userId,
-  });
+    ownerUserId: session.userId,
+  };
+  const created = session.role === "operator" ? await insertEvent(c.env.DB, event) : await insertHostEvent(c.env.DB, event);
+  if (created === "plan_required") {
+    return c.json({ error: "A hosting plan is needed to create events.", code: "plan_required" }, 402);
+  }
+  if (created === "no_events_left") return c.json({ error: "Your plan has no events left.", code: "no_events_left" }, 409);
+  const id = created;
   const detail = await getAdminEventDetail(c.env.DB, c.env.EVENT_ACCESS_SECRET, id, new URL(c.req.url).origin);
   if (!detail) throw new HTTPException(500, { message: "created event missing" });
   return c.json(detail, 201);

@@ -1608,6 +1608,26 @@
               }
             }
           },
+          "402": {
+            "description": "`plan_required`: no hosting plan that allows new events (none, ended, or a payment is failing)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`no_events_left`: every event the plan includes is used; an Extra event adds one",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "426": {
             "description": "This app build is too old; show the update screen",
             "content": {
