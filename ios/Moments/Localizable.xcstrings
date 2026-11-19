@@ -206,6 +206,16 @@
         }
       }
     },
+    "%lld to %lld characters": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld à %lld caractères"
+          }
+        }
+      }
+    },
     "Access changed": {
       "extractionState": "manual",
       "localizations": {
@@ -256,6 +266,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Autorisez l'accès à l'appareil photo dans Réglages pour scanner les QR codes, ou collez plutôt le lien de l'événement."
+          }
+        }
+      }
+    },
+    "Anyone with the event link or QR code can open the event.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toute personne ayant le lien ou le QR code de l'événement peut l'ouvrir."
           }
         }
       }
@@ -363,6 +383,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vérifiez votre connexion et réessayez."
+          }
+        }
+      }
+    },
+    "Choose a PIN to make the event private.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez un code PIN pour rendre l'événement privé."
           }
         }
       }
@@ -837,6 +867,16 @@
         }
       }
     },
+    "Everyone will need the new PIN or invite link. Guests already in are signed out, and the old invite link stops working.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout le monde aura besoin du nouveau code PIN ou du lien d'invitation. Les invités déjà présents sont déconnectés et l'ancien lien d'invitation ne fonctionne plus."
+          }
+        }
+      }
+    },
     "Finishing": {
       "extractionState": "manual",
       "localizations": {
@@ -894,6 +934,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Les invités peuvent partager jusqu'à cette date. L'événement, ses photos et ses vidéos sont ensuite supprimés."
+          }
+        }
+      }
+    },
+    "Guests need the PIN or the invite link to open the event.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les invités ont besoin du code PIN ou du lien d'invitation pour ouvrir l'événement."
           }
         }
       }
@@ -1129,6 +1179,16 @@
         }
       }
     },
+    "Leave empty to keep the current PIN": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laissez vide pour garder le code PIN actuel"
+          }
+        }
+      }
+    },
     "Leave event…": {
       "extractionState": "manual",
       "localizations": {
@@ -1264,6 +1324,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Souvenirs : %lld · Invités : %lld"
+          }
+        }
+      }
+    },
+    "New PIN": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau code PIN"
           }
         }
       }
@@ -1554,6 +1624,16 @@
         }
       }
     },
+    "Privacy": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confidentialité"
+          }
+        }
+      }
+    },
     "Private": {
       "localizations": {
         "fr": {
@@ -1582,6 +1662,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Les événements privés sont indisponibles"
+          }
+        }
+      }
+    },
+    "Public": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Public"
           }
         }
       }
@@ -1688,6 +1778,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enregistrer"
+          }
+        }
+      }
+    },
+    "Save and sign guests out": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer et déconnecter les invités"
           }
         }
       }
@@ -1910,6 +2010,16 @@
         }
       }
     },
+    "Sign everyone out?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déconnecter tout le monde ?"
+          }
+        }
+      }
+    },
     "Sign in": {
       "localizations": {
         "fr": {
@@ -2049,6 +2159,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ce n'est pas un lien d'événement Moments."
+          }
+        }
+      }
+    },
+    "The PIN must be %lld to %lld characters.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le code PIN doit contenir de %lld à %lld caractères."
           }
         }
       }
@@ -2255,6 +2375,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ces modifications n'ont pas pu être enregistrées. Vérifiez les dates et réessayez."
+          }
+        }
+      }
+    },
+    "These changes couldn't be saved. Try again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ces modifications n'ont pas pu être enregistrées. Réessayez."
+          }
+        }
+      }
+    },
+    "This PIN couldn't be saved. Try another one.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce code PIN n'a pas pu être enregistré. Essayez-en un autre."
           }
         }
       }
@@ -2805,6 +2945,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Que faire de ce souvenir ?"
+          }
+        }
+      }
+    },
+    "Who can join": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qui peut rejoindre"
           }
         }
       }
