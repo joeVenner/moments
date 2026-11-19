@@ -31,6 +31,14 @@ final class FakeHostService: HostService, @unchecked Sendable {
     private var _eventTokens: [String] = []
     private var _detailResult: Result<AdminEventDetail, Error> = .failure(MomentsAPIError.eventNotFound)
     private var _detailCalls: [(token: String, id: String)] = []
+    private var _momentsResult: Result<AdminMomentList, Error> = .success(AdminMomentList(moments: [], isTruncated: false))
+    private var _moderateError: Error?
+    private var _deleteError: Error?
+    private var _moderateCalls: [(id: String, status: AdminMoment.Status)] = []
+    private var _deleteCalls: [String] = []
+    private var _actionGate: Gate?
+    private var _listGate: Gate?
+    private var _listCalls = 0
     /// Runs before a sign-in or events request answers (to hold it open).
     let beforeAnswer: Gate?
     private let holdsSignIn: Bool
@@ -58,6 +66,31 @@ final class FakeHostService: HostService, @unchecked Sendable {
         set { lock.withLock { _detailResult = newValue } }
     }
     var detailCalls: [(token: String, id: String)] { lock.withLock { _detailCalls } }
+    var momentsResult: Result<AdminMomentList, Error> {
+        get { lock.withLock { _momentsResult } }
+        set { lock.withLock { _momentsResult = newValue } }
+    }
+    var moderateError: Error? {
+        get { lock.withLock { _moderateError } }
+        set { lock.withLock { _moderateError = newValue } }
+    }
+    var deleteError: Error? {
+        get { lock.withLock { _deleteError } }
+        set { lock.withLock { _deleteError = newValue } }
+    }
+    /// Holds hide, show and delete requests open until opened.
+    var actionGate: Gate? {
+        get { lock.withLock { _actionGate } }
+        set { lock.withLock { _actionGate = newValue } }
+    }
+    /// Holds moment list requests open until opened.
+    var listGate: Gate? {
+        get { lock.withLock { _listGate } }
+        set { lock.withLock { _listGate = newValue } }
+    }
+    var listCalls: Int { lock.withLock { _listCalls } }
+    var moderateCalls: [(id: String, status: AdminMoment.Status)] { lock.withLock { _moderateCalls } }
+    var deleteCalls: [String] { lock.withLock { _deleteCalls } }
     var signInCalls: Int { lock.withLock { _signInCalls } }
     var signOutTokens: [String] { lock.withLock { _signOutTokens } }
     var eventTokens: [String] { lock.withLock { _eventTokens } }
@@ -77,6 +110,22 @@ final class FakeHostService: HostService, @unchecked Sendable {
         let result = lock.withLock { _detailCalls.append((token, id)); return _detailResult }
         if let beforeAnswer { await beforeAnswer.wait() }
         return try result.get()
+    }
+    func adminMoments(token: String, eventID: String) async throws -> AdminMomentList {
+        let (result, gate) = lock.withLock { _listCalls += 1; return (_momentsResult, _listGate) }
+        if let gate { await gate.wait() }
+        return try result.get()
+    }
+    func moderate(token: String, momentID: String, status: AdminMoment.Status) async throws -> AdminMoment {
+        let (error, gate) = lock.withLock { _moderateCalls.append((momentID, status)); return (_moderateError, _actionGate) }
+        if let gate { await gate.wait() }
+        if let error { throw error }
+        return adminMoment(momentID, status: status)
+    }
+    func deleteMoment(token: String, momentID: String) async throws {
+        let (error, gate) = lock.withLock { _deleteCalls.append(momentID); return (_deleteError, _actionGate) }
+        if let gate { await gate.wait() }
+        if let error { throw error }
     }
     func adminEvents(token: String) async throws -> AdminEventList {
         let result = lock.withLock { _eventTokens.append(token); return _eventsResult }
@@ -535,5 +584,201 @@ private func detail(_ id: String) -> AdminEventDetail {
         service.detailResult = .failure(CancellationError())
         await model.load()
         #expect(model.phase == .loaded && model.detail == detail("a"))
+    }
+}
+
+func adminMoment(_ id: String, status: AdminMoment.Status = .approved) -> AdminMoment {
+    AdminMoment(
+        id: id, eventID: "a", uploaderName: "Sara", createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+        status: status, media: Media(kind: .image, url: "https://moments.test/media/\(id).jpg")
+    )
+}
+
+@Suite @MainActor struct HostModerationModelTests {
+    private func loaded(
+        _ moments: [AdminMoment] = [adminMoment("m1"), adminMoment("m2", status: .hidden)]
+    ) async -> (HostModerationModel, FakeHostService, HostAccount) {
+        let service = FakeHostService()
+        service.momentsResult = .success(AdminMomentList(moments: moments, isTruncated: false))
+        let host = account(service, store: FlakyHostStore(live))
+        let model = HostModerationModel(eventID: "a", service: service, account: host)
+        await model.load()
+        return (model, service, host)
+    }
+
+    @Test func loadsTheMomentsAndCountsTheHiddenOnes() async {
+        let (model, _, _) = await loaded()
+        #expect(model.phase == .loaded && model.moments.map(\.id) == ["m1", "m2"] && model.hiddenCount == 1)
+    }
+
+    @Test func aDeletedEventIsGone() async {
+        let (model, service, _) = await loaded()
+        service.momentsResult = .failure(MomentsAPIError.eventNotFound)
+        await model.load()
+        #expect(model.phase == .gone && model.moments.isEmpty)
+    }
+
+    @Test func hidingShowsRightAwayAndKeepsTheServersAnswer() async {
+        let (model, service, _) = await loaded()
+        let gate = Gate()
+        service.actionGate = gate
+        let hiding = Task { await model.setHidden(true, momentID: "m1") }
+        while service.moderateCalls.isEmpty { await Task.yield() }
+        #expect(model.moments[0].isHidden && model.pendingIDs == ["m1"])
+        await gate.open()
+        await hiding.value
+        #expect(model.moments[0].isHidden && model.pendingIDs.isEmpty && model.actionFailure == nil)
+        #expect(service.moderateCalls.map(\.status) == [.hidden])
+    }
+
+    @Test func aFailedHideIsUndoneAndExplained() async {
+        let (model, service, _) = await loaded()
+        service.moderateError = MomentsAPIError.transport(.notConnectedToInternet)
+        await model.setHidden(true, momentID: "m1")
+        #expect(!model.moments[0].isHidden && model.actionFailure == .offline)
+        model.dismissActionFailure()
+        #expect(model.actionFailure == nil)
+    }
+
+    @Test func showingAMomentThatIsAlreadyVisibleSendsNothing() async {
+        let (model, service, _) = await loaded()
+        await model.setHidden(false, momentID: "m1")
+        await model.setHidden(true, momentID: "unknown")
+        #expect(service.moderateCalls.isEmpty)
+    }
+
+    @Test func aSecondTapWhileOneIsOnItsWayIsIgnored() async {
+        let (model, service, _) = await loaded()
+        let gate = Gate()
+        service.actionGate = gate
+        let hiding = Task { await model.setHidden(true, momentID: "m1") }
+        while service.moderateCalls.isEmpty { await Task.yield() }
+        await model.delete(momentID: "m1")
+        await gate.open()
+        await hiding.value
+        #expect(service.deleteCalls.isEmpty && model.moments.count == 2)
+    }
+
+    @Test func aMomentDeletedElsewhereLeavesTheList() async {
+        let (model, service, _) = await loaded()
+        service.moderateError = MomentsAPIError.momentNotFound
+        await model.setHidden(true, momentID: "m1")
+        #expect(model.moments.map(\.id) == ["m2"] && model.actionFailure == nil)
+    }
+
+    @Test func deletingRemovesOnlyOnceTheServerConfirms() async {
+        let (model, service, _) = await loaded()
+        let gate = Gate()
+        service.actionGate = gate
+        let deleting = Task { await model.delete(momentID: "m2") }
+        while service.deleteCalls.isEmpty { await Task.yield() }
+        #expect(model.moments.map(\.id) == ["m1", "m2"] && model.pendingIDs == ["m2"])
+        await gate.open()
+        await deleting.value
+        #expect(model.moments.map(\.id) == ["m1"] && model.pendingIDs.isEmpty)
+    }
+
+    @Test func filesThatCouldntBeDeletedKeepTheMoment() async {
+        let (model, service, _) = await loaded()
+        service.deleteError = MomentsAPIError.mediaDeleteFailed
+        await model.delete(momentID: "m1")
+        #expect(model.moments.count == 2 && model.actionFailure == .mediaKept)
+    }
+
+    @Test func anAlreadyDeletedMomentLeavesTheList() async {
+        let (model, service, _) = await loaded()
+        service.deleteError = MomentsAPIError.momentNotFound
+        await model.delete(momentID: "m1")
+        #expect(model.moments.map(\.id) == ["m2"] && model.actionFailure == nil)
+    }
+
+    @Test func aDeadSessionDuringAnActionSignsOutAndClears() async {
+        let (model, service, host) = await loaded()
+        service.deleteError = MomentsAPIError.hostAuthRequired
+        await model.delete(momentID: "m1")
+        #expect(host.state == .signedOut && model.moments.isEmpty && model.phase == .idle)
+    }
+
+    @Test func aReloadDuringAFailedHideWins() async {
+        let (model, service, _) = await loaded()
+        let gate = Gate()
+        service.actionGate = gate
+        service.moderateError = MomentsAPIError.server(status: 500, code: nil)
+        let hiding = Task { await model.setHidden(true, momentID: "m1") }
+        while service.moderateCalls.isEmpty { await Task.yield() }
+        // Hidden on another device meanwhile: the reload shows it hidden.
+        service.momentsResult = .success(AdminMomentList(moments: [adminMoment("m1", status: .hidden)], isTruncated: false))
+        await model.load()
+        await gate.open()
+        await hiding.value
+        #expect(model.moments[0].isHidden && model.actionFailure == .failed)
+    }
+
+    @Test func aLoadThatStartedBeforeADeleteDoesntBringItBack() async {
+        let (model, service, _) = await loaded()
+        let gate = Gate()
+        service.listGate = gate
+        let reloading = Task { await model.load() }
+        while service.listCalls < 2 { await Task.yield() }
+        // The server still listed m1 when this load started.
+        await model.delete(momentID: "m1")
+        service.momentsResult = .success(AdminMomentList(moments: [adminMoment("m2", status: .hidden)], isTruncated: false))
+        await gate.open()
+        await reloading.value
+        #expect(model.moments.map(\.id) == ["m2"] && service.listCalls == 3)
+    }
+
+    @Test func anActionFromBeforeAResetDoesntTouchANewOne() async {
+        let (model, service, _) = await loaded()
+        let gate = Gate()
+        service.actionGate = gate
+        let old = Task { await model.setHidden(true, momentID: "m1") }
+        while service.moderateCalls.isEmpty { await Task.yield() }
+        model.reset()
+        await model.load()
+        let newGate = Gate()
+        service.actionGate = newGate
+        let new = Task { await model.delete(momentID: "m1") }
+        while service.deleteCalls.isEmpty { await Task.yield() }
+        await gate.open()
+        await old.value
+        // The old answer is dropped and the delete is still marked as on its way.
+        #expect(model.pendingIDs == ["m1"] && !model.moments[0].isHidden)
+        await newGate.open()
+        await new.value
+        #expect(model.moments.map(\.id) == ["m2"] && model.pendingIDs.isEmpty)
+    }
+
+    @Test func aResetDuringALoadDropsItsAnswer() async {
+        let (model, service, _) = await loaded()
+        let gate = Gate()
+        service.listGate = gate
+        let reloading = Task { await model.load() }
+        while service.listCalls < 2 { await Task.yield() }
+        model.reset()
+        await gate.open()
+        await reloading.value
+        #expect(model.moments.isEmpty && model.phase == .idle)
+    }
+
+    @Test func anOfflineDeleteKeepsTheMomentAndSaysSo() async {
+        let (model, service, _) = await loaded()
+        service.deleteError = MomentsAPIError.transport(.notConnectedToInternet)
+        await model.delete(momentID: "m1")
+        #expect(model.moments.count == 2 && model.actionFailure == .offline && model.pendingIDs.isEmpty)
+    }
+
+    @Test func actionsOnDifferentMomentsRunSideBySide() async {
+        let (model, service, _) = await loaded()
+        let gate = Gate()
+        service.actionGate = gate
+        let hiding = Task { await model.setHidden(true, momentID: "m1") }
+        let deleting = Task { await model.delete(momentID: "m2") }
+        while service.moderateCalls.isEmpty || service.deleteCalls.isEmpty { await Task.yield() }
+        #expect(model.pendingIDs == ["m1", "m2"])
+        await gate.open()
+        await hiding.value
+        await deleting.value
+        #expect(model.moments.map(\.id) == ["m1"] && model.moments[0].isHidden && model.pendingIDs.isEmpty)
     }
 }

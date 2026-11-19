@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS groundwork for moderating an event from the app: listing its moments (hidden ones included), hiding or showing one, and deleting one. A hide shows at once and is undone if the server refuses; a delete waits for the server, and a moment whose files couldn't be removed is kept with a message. No screen yet.
 - iOS: hosted event detail. Tap an event in "Hosted events" to see its QR code, share its link, and for private events copy the invite link after a warning that it skips the PIN. The copied link stays on this phone and leaves the clipboard after 10 minutes. The screen also shows stats (moments, hidden, photos, videos, guests, hearts, storage) and uploads over the last 14 days. English and French.
 - iOS (groundwork): the app can load one hosted event with its share links and analytics, ready for the event detail screen. Share links are accepted only on the app's own site, and the invite link never shows up in logs or debug output.
 - App API: host moderation. `GET /api/v1/admin/events/{id}/moments` lists every moment, hidden ones included, with signed thumbnails. `PATCH /api/v1/admin/moments/{id}` hides or shows a moment. `DELETE /api/v1/admin/moments/{id}` deletes it and its files. The web admin's delete uses the same code.

@@ -459,7 +459,7 @@ private extension QueuedUpload {
         case .nicknameTaken, .momentNotFound, .server, .transport, .rateLimited, .tooManyUploads,
              .storageUnavailable, .unexpectedResponse,
              // Host-only errors; an upload never gets them.
-             .invalidCredentials, .hostAuthRequired, .signInUnavailable:
+             .invalidCredentials, .hostAuthRequired, .signInUnavailable, .mediaDeleteFailed:
             giveUp()
         }
     }

@@ -54,6 +54,9 @@ public enum MomentsAPIError: Error, Sendable, Equatable {
     case hostAuthRequired
     /// Host sign-in isn't configured on the server.
     case signInUnavailable
+    /// Deleting a moment: its files couldn't be removed, so the moment was
+    /// kept. Safe to retry.
+    case mediaDeleteFailed
     /// Any other status, with the server's stable `code` when it sent one.
     case server(status: Int, code: String?)
 }

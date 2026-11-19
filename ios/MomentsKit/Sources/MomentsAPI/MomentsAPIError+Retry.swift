@@ -13,7 +13,7 @@ public extension MomentsAPIError {
         case .accessRequired, .invalidAccess, .tooManyAttempts, .accessUnavailable, .eventNotFound,
              .upgradeRequired, .nicknameTaken, .momentNotFound, .guestRequired, .invalidRequest,
              .uploadsClosed, .uploadNotFound, .uploadNotOpen, .uploadConflict, .invalidUpload, .uploadsUnavailable,
-             .invalidCredentials, .hostAuthRequired, .signInUnavailable:
+             .invalidCredentials, .hostAuthRequired, .signInUnavailable, .mediaDeleteFailed:
             false
         }
     }

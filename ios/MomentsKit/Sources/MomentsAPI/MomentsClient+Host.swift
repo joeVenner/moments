@@ -34,6 +34,15 @@ public protocol HostService: Sendable {
     func adminEvents(token: String) async throws -> AdminEventList
     /// `.eventNotFound` when the event is gone.
     func adminEvent(token: String, id: String) async throws -> AdminEventDetail
+    /// Newest first, hidden ones included. `.eventNotFound` when the event is gone.
+    func adminMoments(token: String, eventID: String) async throws -> AdminMomentList
+    /// Hides a moment from guests or shows it again; returns it as saved
+    /// (another device may have changed it again meanwhile).
+    /// `.momentNotFound` when it was deleted.
+    func moderate(token: String, momentID: String, status: AdminMoment.Status) async throws -> AdminMoment
+    /// Deletes a moment and its files. `.momentNotFound` when it's already
+    /// gone; `.mediaDeleteFailed` when the files stayed (the moment too).
+    func deleteMoment(token: String, momentID: String) async throws
 }
 
 extension MomentsClient: HostService {
@@ -108,7 +117,7 @@ extension MomentsClient: HostService {
     }
 
     public func adminEvent(token: String, id: String) async throws -> AdminEventDetail {
-        guard !id.isEmpty, id.count <= 100 else { throw MomentsAPIError.eventNotFound }
+        guard Self.isValidPathID(id) else { throw MomentsAPIError.eventNotFound }
         return try await withHostToken(token) {
             let output = try await client.getAdminEvent(path: .init(id: id))
             switch output {
@@ -121,6 +130,60 @@ extension MomentsClient: HostService {
             }
         }
     }
+
+    public func adminMoments(token: String, eventID: String) async throws -> AdminMomentList {
+        guard Self.isValidPathID(eventID) else { throw MomentsAPIError.eventNotFound }
+        return try await withHostToken(token) {
+            let output = try await client.listAdminMoments(path: .init(id: eventID))
+            switch output {
+            case let .ok(response):
+                let body = try response.body.json
+                // A row this build can't read is skipped, not fatal for the list.
+                return AdminMomentList(moments: body.moments.compactMap(mapper.adminMoment), isTruncated: body.truncated)
+            case let .unauthorized(response): throw Self.hostError(401, try? response.body.json.code)
+            case let .notFound(response): throw Self.hostError(404, try? response.body.json.code)
+            case let .upgradeRequired(response): throw Self.hostError(426, try? response.body.json.code)
+            case let .default(status, response): throw Self.hostError(status, try? response.body.json.code)
+            }
+        }
+    }
+
+    public func moderate(token: String, momentID: String, status: AdminMoment.Status) async throws -> AdminMoment {
+        guard Self.isValidPathID(momentID) else { throw MomentsAPIError.momentNotFound }
+        return try await withHostToken(token) {
+            let output = try await client.moderateMoment(path: .init(id: momentID), body: .json(.init(status: status.rawValue)))
+            switch output {
+            case let .ok(response):
+                // Its status may differ when another device changed it too:
+                // the saved row is the truth.
+                guard let moment = mapper.adminMoment(try response.body.json.moment), moment.id == momentID
+                else { throw MomentsAPIError.unexpectedResponse }
+                return moment
+            case let .unauthorized(response): throw Self.hostError(401, try? response.body.json.code)
+            case let .notFound(response): throw Self.hostError(404, try? response.body.json.code)
+            case let .upgradeRequired(response): throw Self.hostError(426, try? response.body.json.code)
+            case let .default(status, response): throw Self.hostError(status, try? response.body.json.code)
+            }
+        }
+    }
+
+    public func deleteMoment(token: String, momentID: String) async throws {
+        guard Self.isValidPathID(momentID) else { throw MomentsAPIError.momentNotFound }
+        try await withHostToken(token) {
+            let output = try await client.deleteMoment(path: .init(id: momentID))
+            switch output {
+            case .noContent: return
+            case let .unauthorized(response): throw Self.hostError(401, try? response.body.json.code)
+            case let .notFound(response): throw Self.hostError(404, try? response.body.json.code)
+            case let .upgradeRequired(response): throw Self.hostError(426, try? response.body.json.code)
+            case let .badGateway(response): throw Self.hostError(502, try? response.body.json.code)
+            case let .default(status, response): throw Self.hostError(status, try? response.body.json.code)
+            }
+        }
+    }
+
+    /// The server's path ids are 1–100 characters; anything else can't exist.
+    static func isValidPathID(_ id: String) -> Bool { !id.isEmpty && id.count <= 100 }
 
     /// Runs one host call with the bearer token attached by `HostAuthMiddleware`.
     private func withHostToken<T: Sendable>(_ token: String, _ operation: () async throws -> T) async throws -> T {
@@ -136,6 +199,7 @@ extension MomentsClient: HostService {
         case (401, "invalid_credentials"): .invalidCredentials
         case (401, _): .hostAuthRequired
         case (503, "sign_in_unavailable"): .signInUnavailable
+        case (502, "media_delete_failed"): .mediaDeleteFailed
         default: error(status, code)
         }
     }
@@ -145,7 +209,10 @@ extension MomentsClient: HostService {
 /// set by `withHostToken`, so the token can never ride on a guest request.
 struct HostAuthMiddleware: ClientMiddleware {
     @TaskLocal static var token: String?
-    static let hostOperations: Set<String> = ["getHostSession", "signOut", "listAdminEvents", "getAdminEvent"]
+    static let hostOperations: Set<String> = [
+        "getHostSession", "signOut", "listAdminEvents", "getAdminEvent",
+        "listAdminMoments", "moderateMoment", "deleteMoment",
+    ]
 
     func intercept(
         _ request: HTTPRequest,
@@ -196,6 +263,20 @@ extension WireMapper {
                 reactions: max(0, summary.reactions),
                 activity: wire.analytics.activity.map { EventAnalytics.DayCount(day: $0.day, count: max(0, $0.count)) }
             )
+        )
+    }
+
+    /// Nil when the row can't be shown safely: an unknown moderation status
+    /// (never guess it's visible or hidden), an unreadable date or media.
+    func adminMoment(_ wire: Components.Schemas.AdminMoment) -> AdminMoment? {
+        guard let status = AdminMoment.Status(rawValue: wire.moderationStatus),
+              let createdAt = ServerDate.parse(wire.createdAt),
+              let media = media(wire.media)
+        else { return nil }
+        return AdminMoment(
+            id: wire.id, eventID: wire.eventId, uploaderName: wire.uploaderName, caption: wire.caption,
+            createdAt: createdAt, sizeBytes: wire.sizeBytes.map { max(0, $0) }, status: status,
+            reactionCount: max(0, wire.reactionCount), media: media
         )
     }
 }

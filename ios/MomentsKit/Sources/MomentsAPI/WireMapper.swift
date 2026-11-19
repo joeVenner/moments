@@ -82,23 +82,25 @@ struct WireMapper: Sendable {
 
     /// Nil when the row can't be shown safely (see type docs).
     func moment(_ wire: Components.Schemas.Moment) -> Moment? {
-        guard let kind = Media.Kind(rawValue: wire.media.kind),
-              let url = resolve(wire.media.url),
-              let createdAt = ServerDate.parse(wire.createdAt)
-        else { return nil }
-        let media = Media(
-            kind: kind, url: url,
-            thumbURL: resolveOptional(wire.media.thumbUrl),
-            displayURL: resolveOptional(wire.media.displayUrl),
-            posterURL: resolveOptional(wire.media.posterUrl),
-            hlsURL: resolveOptional(wire.media.hlsUrl),
-            width: wire.media.width, height: wire.media.height,
-            durationMilliseconds: wire.media.durationMs, blurhash: wire.media.blurhash
-        )
+        guard let media = media(wire.media), let createdAt = ServerDate.parse(wire.createdAt) else { return nil }
         return Moment(
             id: wire.id, eventID: wire.eventId, uploaderName: wire.uploaderName, caption: wire.caption,
             pointsAwarded: wire.pointsAwarded, createdAt: createdAt, seq: wire.seq, changeSeq: wire.changeSeq,
             reactionCount: wire.reactionCount, hasReacted: wire.reacted, media: media
+        )
+    }
+
+    /// Nil for an unknown kind or an original URL that doesn't resolve.
+    func media(_ wire: Components.Schemas.Media) -> Media? {
+        guard let kind = Media.Kind(rawValue: wire.kind), let url = resolve(wire.url) else { return nil }
+        return Media(
+            kind: kind, url: url,
+            thumbURL: resolveOptional(wire.thumbUrl),
+            displayURL: resolveOptional(wire.displayUrl),
+            posterURL: resolveOptional(wire.posterUrl),
+            hlsURL: resolveOptional(wire.hlsUrl),
+            width: wire.width, height: wire.height,
+            durationMilliseconds: wire.durationMs, blurhash: wire.blurhash
         )
     }
 

@@ -102,3 +102,54 @@ public struct AdminEventDetail: Sendable, Hashable {
         self.analytics = analytics
     }
 }
+
+/// One moment as the host sees it, hidden ones included.
+public struct AdminMoment: Sendable, Hashable, Identifiable {
+    public enum Status: String, Sendable, Hashable {
+        /// Visible to guests.
+        case approved
+        /// Hidden from guests; only the host sees it.
+        case hidden
+    }
+
+    public let id: String
+    public let eventID: String
+    public let uploaderName: String
+    public let caption: String?
+    public let createdAt: Date
+    public let sizeBytes: Int?
+    public var status: Status
+    public let reactionCount: Int
+    /// Its `/media/...` URLs carry a short-lived host view signature; reload
+    /// the list for fresh ones.
+    public let media: Media
+
+    public init(
+        id: String, eventID: String, uploaderName: String, caption: String? = nil, createdAt: Date,
+        sizeBytes: Int? = nil, status: Status, reactionCount: Int = 0, media: Media
+    ) {
+        self.id = id
+        self.eventID = eventID
+        self.uploaderName = uploaderName
+        self.caption = caption
+        self.createdAt = createdAt
+        self.sizeBytes = sizeBytes
+        self.status = status
+        self.reactionCount = reactionCount
+        self.media = media
+    }
+
+    public var isHidden: Bool { status == .hidden }
+}
+
+/// An event's moments for moderation, newest first.
+public struct AdminMomentList: Sendable, Hashable {
+    public let moments: [AdminMoment]
+    /// True when older moments were left out (the server sends at most 500).
+    public let isTruncated: Bool
+
+    public init(moments: [AdminMoment], isTruncated: Bool) {
+        self.moments = moments
+        self.isTruncated = isTruncated
+    }
+}
