@@ -236,7 +236,7 @@ public enum PhotoPreparer {
 
     /// A JPEG of just the pixels: no properties are copied from the
     /// source, so none of its metadata can survive.
-    static func encode(_ image: CGImage) throws(Problem) -> Data {
+    static func encode(_ image: CGImage, quality: Double = PhotoPreparer.quality) throws(Problem) -> Data {
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, UTType.jpeg.identifier as CFString, 1, nil) else {
             throw .writeFailed

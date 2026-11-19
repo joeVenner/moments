@@ -109,6 +109,13 @@ public struct PreparedMedia: Sendable, Equatable {
     public let height: Int
     /// Nil for photos.
     public let duration: TimeInterval?
+    /// The feed thumbnail beside it (`thumbnailName`), if one could be made.
+    public internal(set) var thumbnail: Thumbnail?
+
+    public struct Thumbnail: Sendable, Equatable {
+        public let name: String
+        public let byteCount: Int64
+    }
 }
 
 /// Turns a picked file into the upload file in its item's folder.
@@ -134,6 +141,7 @@ public enum MediaImporter {
 
     public static let photoName = "photo.jpg"
     public static let videoName = "video.mp4"
+    public static let thumbnailName = "thumb.jpg"
 
     /// Prepares `picked` into `folder` (the item's staging folder, created
     /// if needed and kept out of backups; leftovers of an interrupted
@@ -184,6 +192,28 @@ public enum MediaImporter {
             throw (error as? CocoaError)?.code == .fileWriteOutOfSpace ? .noSpace : .failed
         }
         PhotoPreparer.removeLeftovers(in: folder)
+        var media = try await prepareFile(picked, into: folder, videoLimits: videoLimits)
+        media.thumbnail = await thumbnail(of: media, in: folder)
+        return media
+    }
+
+    /// The feed thumbnail for a prepared file, or nil (never an error: the
+    /// upload goes ahead without one). Only this result says a thumbnail
+    /// exists: a `thumb.jpg` an earlier attempt left must never be trusted.
+    private static func thumbnail(of media: PreparedMedia, in folder: URL) async -> PreparedMedia.Thumbnail? {
+        guard let destination = try? fresh(folder.appending(path: thumbnailName, directoryHint: .notDirectory)) else { return nil }
+        let file = folder.appending(path: media.name, directoryHint: .notDirectory)
+        let byteCount = if media.duration == nil {
+            ThumbnailMaker.fromPhoto(file, destination: destination)
+        } else {
+            await ThumbnailMaker.fromVideo(file, destination: destination)
+        }
+        return byteCount.map { PreparedMedia.Thumbnail(name: thumbnailName, byteCount: $0) }
+    }
+
+    private static func prepareFile(
+        _ picked: PickedMedia, into folder: URL, videoLimits: VideoPreparer.Limits
+    ) async throws(Problem) -> PreparedMedia {
         switch picked.kind {
         case .photo:
             let destination = try fresh(folder.appending(path: photoName, directoryHint: .notDirectory))
