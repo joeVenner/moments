@@ -43,6 +43,27 @@ public final class UploadProgressModel {
     public var activeCount: Int { rows.count { !$0.isFinished } }
     public var failedCount: Int { rows.count { if case .failed = $0.status { true } else { false } } }
     public var doneCount: Int { rows.count { $0.status == .done } }
+    /// How far the batch is, 0...1, over the items that can still arrive
+    /// (a failed one would otherwise fill the bar).
+    public var overallFraction: Double {
+        let counted = rows.filter { if case .failed = $0.status { false } else { true } }
+        guard !counted.isEmpty else { return 0 }
+        return counted.map(\.fraction).reduce(0, +) / Double(counted.count)
+    }
+
+    public enum Headline: Equatable, Sendable {
+        case sharing(Int)
+        case someFailed(Int)
+        case allShared
+    }
+
+    /// The sheet's title: sharing wins while anything is moving; failures
+    /// get their own line then (`failedCount`).
+    public var headline: Headline {
+        if activeCount > 0 { return .sharing(activeCount) }
+        if failedCount > 0 { return .someFailed(failedCount) }
+        return .allShared
+    }
     /// A remove or clear failed (storage); cleared by the next one that works.
     public private(set) var couldNotRemove = false
 
@@ -109,6 +130,16 @@ extension UploadProgressModel.Row {
         switch status {
         case .done, .failed: true
         default: false
+        }
+    }
+
+    /// This item's share of the way, 0...1.
+    public var fraction: Double {
+        switch status {
+        case .waiting: 0
+        case let .uploading(fraction): min(max(fraction, 0), 1)
+        case .finishing, .done: 1
+        case .failed: 0
         }
     }
 
