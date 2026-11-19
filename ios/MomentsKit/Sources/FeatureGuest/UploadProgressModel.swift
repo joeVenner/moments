@@ -23,6 +23,8 @@ public final class UploadProgressModel {
     public enum Status: Equatable, Sendable {
         /// Queued, or backing off before the next try (`retryAt` set).
         case waiting
+        /// A large video held off mobile data until Wi-Fi.
+        case waitingForWiFi
         /// Fraction of the file storage has, 0...1.
         case uploading(Double)
         /// Sent; the server is checking it.
@@ -69,18 +71,75 @@ public final class UploadProgressModel {
 
     @ObservationIgnored private let eventSlug: String
     @ObservationIgnored private let source: any UploadProgressSource
+    @ObservationIgnored private let network: (@Sendable () -> AsyncStream<Bool>)?
+    @ObservationIgnored private let largeVideosOnWiFiOnly: @Sendable () -> Bool
+    @ObservationIgnored private var queue: [QueuedUpload] = []
+    @ObservationIgnored private var isOnExpensiveNetwork = false
     @ObservationIgnored private let logger = Logger(subsystem: "moments", category: "upload-progress")
 
-    public init(eventSlug: String, source: any UploadProgressSource) {
+    /// `network` starts a watch of whether the phone is on mobile data, one
+    /// per `observe()` (nil: never known); with the guest's Wi-Fi choice it
+    /// marks large videos as waiting.
+    public init(
+        eventSlug: String, source: any UploadProgressSource, network: (@Sendable () -> AsyncStream<Bool>)? = nil,
+        largeVideosOnWiFiOnly: @escaping @Sendable () -> Bool = { CellularPolicy.largeVideosOnWiFiOnly() }
+    ) {
         self.eventSlug = eventSlug
         self.source = source
+        self.network = network
+        self.largeVideosOnWiFiOnly = largeVideosOnWiFiOnly
     }
 
-    /// Follows the queue until the calling task is cancelled (`.task`).
+    /// The app's model: the network watched with `NWPathMonitor`.
+    public static func live(eventSlug: String, source: any UploadProgressSource) -> UploadProgressModel {
+        UploadProgressModel(eventSlug: eventSlug, source: source, network: { NetworkPath.expensiveUpdates() })
+    }
+
+    /// Follows the queue (and the network) until the queue ends or the
+    /// calling task is cancelled (`.task`).
     public func observe() async {
-        for await queue in await source.updates() {
-            rows = queue.filter { $0.eventSlug == eventSlug }.map(Self.row)
+        // A fresh watch each time: the last one ended with its task.
+        let network = network?()
+        await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                await self.followQueue()
+                return true
+            }
+            if let network {
+                group.addTask {
+                    await self.followNetwork(network)
+                    return false
+                }
+            }
+            // The network never ends on its own: stop it with the queue.
+            while let isQueue = await group.next() {
+                if isQueue { group.cancelAll() }
+            }
         }
+    }
+
+    private func followQueue() async {
+        for await queue in await source.updates() {
+            self.queue = queue.filter { $0.eventSlug == eventSlug }
+            refreshRows()
+        }
+    }
+
+    private func followNetwork(_ network: AsyncStream<Bool>) async {
+        for await isExpensive in network {
+            isOnExpensiveNetwork = isExpensive
+            refreshRows()
+        }
+    }
+
+    /// Re-reads the guest's Wi-Fi choice (after they change it).
+    public func refresh() {
+        refreshRows()
+    }
+
+    private func refreshRows() {
+        let isHolding = isOnExpensiveNetwork && largeVideosOnWiFiOnly()
+        rows = queue.map { Self.row($0, isHoldingLargeVideos: isHolding) }
     }
 
     public func retry(_ id: UUID) async {
@@ -109,10 +168,23 @@ public final class UploadProgressModel {
         }
     }
 
-    nonisolated static func row(_ item: QueuedUpload) -> Row {
+    nonisolated static func row(_ item: QueuedUpload, isHoldingLargeVideos: Bool = false) -> Row {
+        let isVideo = item.file.contentType.hasPrefix("video/")
+        let isHeld = isHoldingLargeVideos && !CellularPolicy.allowsMobileData(
+            contentType: item.file.contentType, size: item.file.size, largeVideosOnWiFiOnly: true
+        )
+        // Only while parts are still to send: checking and finishing talk
+        // to the server, which mobile data allows.
+        let isSending = switch item.phase {
+        case .prepared, .uploading: true
+        default: false
+        }
+        if isHeld, isSending {
+            return Row(id: item.id, isVideo: isVideo, caption: item.caption, status: .waitingForWiFi)
+        }
         // Backing off after a failed try: show it as waiting, not stuck mid-upload.
         if item.retryAt != nil, !item.isFinished {
-            return Row(id: item.id, isVideo: item.file.contentType.hasPrefix("video/"), caption: item.caption, status: .waiting)
+            return Row(id: item.id, isVideo: isVideo, caption: item.caption, status: .waiting)
         }
         let status: Status = switch item.phase {
         case .prepared, .checking: item.session == nil || item.uploaded.isEmpty ? .waiting : .uploading(item.uploadedFraction)
@@ -121,7 +193,7 @@ public final class UploadProgressModel {
         case .done: .done
         case let .failed(failure): .failed(failure, canRetry: item.canRetryByGuest)
         }
-        return Row(id: item.id, isVideo: item.file.contentType.hasPrefix("video/"), caption: item.caption, status: status)
+        return Row(id: item.id, isVideo: isVideo, caption: item.caption, status: status)
     }
 }
 
@@ -136,7 +208,7 @@ extension UploadProgressModel.Row {
     /// This item's share of the way, 0...1.
     public var fraction: Double {
         switch status {
-        case .waiting: 0
+        case .waiting, .waitingForWiFi: 0
         case let .uploading(fraction): min(max(fraction, 0), 1)
         case .finishing, .done: 1
         case .failed: 0

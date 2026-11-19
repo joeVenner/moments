@@ -50,7 +50,7 @@ public struct UploadProgressView: View {
             }
             .background(MomentsColor.background)
             // Also with nothing queued, so it can be set before sharing.
-            .safeAreaInset(edge: .bottom) { LargeVideosSetting() }
+            .safeAreaInset(edge: .bottom) { LargeVideosSetting(onChange: model.refresh) }
             .navigationTitle("Your uploads")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -129,6 +129,8 @@ struct UploadQueueHeader: View {
 /// The guest's choice to keep large videos off mobile data.
 struct LargeVideosSetting: View {
     @AppStorage(CellularPolicy.largeVideosOnWiFiOnlyKey) private var isWiFiOnly = CellularPolicy.isWiFiOnlyByDefault
+    /// So the rows show the new choice at once.
+    let onChange: () -> Void
 
     var body: some View {
         Toggle(isOn: $isWiFiOnly) {
@@ -144,6 +146,7 @@ struct LargeVideosSetting: View {
             }
         }
         .tint(MomentsColor.accent)
+        .onChange(of: isWiFiOnly) { onChange() }
         .padding(Spacing.md)
         .background(MomentsColor.surface)
         .overlay(alignment: .top) { MomentsColor.border.frame(height: 1) }
@@ -205,6 +208,7 @@ struct UploadProgressRow: View {
     private var statusText: LocalizedStringResource {
         switch row.status {
         case .waiting: "Waiting"
+        case .waitingForWiFi: "Waiting for Wi-Fi"
         case let .uploading(fraction): "Uploading \(Int((fraction * 100).rounded()))%"
         case .finishing: "Finishing"
         case .done: "Shared"
