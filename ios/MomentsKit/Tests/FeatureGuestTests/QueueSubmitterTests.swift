@@ -29,6 +29,7 @@ struct QueueSubmitterTests {
         (.file(.sizeChanged), .invalid),
         (.notLoaded, .failed),
         (.alreadyLoaded, .failed),
+        (.leaving, .failed),
     ])
     func mapsEachRefusal(error: UploadQueue.EnqueueError, expected: SubmitResult) async throws {
         let submitter = QueueSubmitter { _ in throw error }

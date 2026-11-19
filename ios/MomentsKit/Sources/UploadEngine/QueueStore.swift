@@ -141,6 +141,20 @@ public struct QueueStore: Sendable {
         })
     }
 
+    /// Deletes the records of `eventSlug` not in `excluding` (the loaded
+    /// ones, which the queue removes itself): records deferred or over the
+    /// cap at launch. Returns them, for their staged files. A record that
+    /// can't be read now is left; it can't upload without the guest's token.
+    public func removeRecords(eventSlug: String, excluding loaded: Set<UUID>) throws -> [QueuedUpload] {
+        var removed: [QueuedUpload] = []
+        for id in try recordIDs().subtracting(loaded) {
+            guard case let .item(item) = read(recordURL(for: id)), item.eventSlug == eventSlug else { continue }
+            try remove(id: id)
+            removed.append(item)
+        }
+        return removed
+    }
+
     /// `<UPPERCASE-UUID>.json`, as `save` writes it.
     static func isCanonicalRecordName(_ name: String) -> Bool {
         guard name.hasSuffix(".json"), let id = UUID(uuidString: String(name.dropLast(5))) else { return false }
