@@ -95,15 +95,48 @@
           "password"
         ]
       },
-      "EventResponse": {
+      "AdminEventList": {
         "type": "object",
         "properties": {
-          "event": {
-            "$ref": "#/components/schemas/Event"
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminEvent"
+            },
+            "description": "Newest first; at most 500"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True when older events were left out by the 500 cap"
           }
         },
         "required": [
-          "event"
+          "events",
+          "truncated"
+        ]
+      },
+      "AdminEvent": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Event"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "moment_count": {
+                "type": "integer",
+                "description": "All moments, hidden ones included"
+              },
+              "participant_count": {
+                "type": "integer",
+                "description": "Guests currently in the event (those who left are not counted)"
+              }
+            },
+            "required": [
+              "moment_count",
+              "participant_count"
+            ]
+          }
         ]
       },
       "Event": {
@@ -208,6 +241,17 @@
           "archived_at",
           "access_mode",
           "uploads_open"
+        ]
+      },
+      "EventResponse": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/Event"
+          }
+        },
+        "required": [
+          "event"
         ]
       },
       "FeedPage": {
@@ -1043,6 +1087,62 @@
           },
           "401": {
             "description": "`host_auth_required`: no live session for this token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/events": {
+      "get": {
+        "operationId": "listAdminEvents",
+        "tags": [
+          "Host"
+        ],
+        "summary": "Every event, newest first, with moment and guest counts",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The host's events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminEventList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`host_auth_required`: sign in again",
             "content": {
               "application/json": {
                 "schema": {

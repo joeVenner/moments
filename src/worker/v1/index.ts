@@ -47,9 +47,11 @@ import {
   resolveHostSession,
 } from "../hostSessions";
 import { ADMIN_RETRY_AFTER_SECONDS, attemptAdminLogin } from "../adminLogin";
+import { listAdminEvents } from "../adminEvents";
 import {
   AccessRequestSchema,
   AccessResponseSchema,
+  AdminEventListSchema,
   ChangesQuerySchema,
   ErrorSchema,
   EventHeadersSchema,
@@ -455,6 +457,21 @@ const getSessionRoute = createRoute({
   },
 });
 
+const listAdminEventsRoute = createRoute({
+  method: "get",
+  path: "/admin/events",
+  operationId: "listAdminEvents",
+  tags: ["Host"],
+  summary: "Every event, newest first, with moment and guest counts",
+  security: HOST_SECURITY,
+  responses: {
+    200: json(AdminEventListSchema, "The host's events"),
+    401: json(ErrorSchema, "`host_auth_required`: sign in again"),
+    426: json(ErrorSchema, "This app build is too old; show the update screen"),
+    default: json(ErrorSchema, "Any other error"),
+  },
+});
+
 const signOutRoute = createRoute({
   method: "delete",
   path: "/admin/session",
@@ -599,6 +616,10 @@ v1.openapi(signInRoute, async (c) => {
 v1.openapi(getSessionRoute, (c) => {
   const session = c.get("hostSession");
   return c.json({ subject: session.subject, expires_at: session.expiresAt }, 200);
+});
+
+v1.openapi(listAdminEventsRoute, async (c) => {
+  return c.json(await listAdminEvents(c.env.DB, c.env.EVENT_ACCESS_SECRET), 200);
 });
 
 v1.openapi(signOutRoute, async (c) => {
