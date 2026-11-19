@@ -44,6 +44,12 @@ export const UPLOADS_CLOSED = {
 /** `YYYY-MM-DD HH:MM:SS` in UTC, the format D1 stores and the API returns. */
 export const sqlTimestamp = (date: Date) => date.toISOString().slice(0, 19).replace("T", " ");
 
+/** The inverse of sqlTimestamp: "YYYY-MM-DD HH:MM:SS" (UTC) as a Date; throws on anything else. */
+export function fromSqlTimestamp(value: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) throw new Error(`not a stored timestamp: ${value}`);
+  return new Date(`${value.replace(" ", "T")}Z`);
+}
+
 /** Whether an upload session opened before the close may still finish at `now`. */
 export function canFinishUploads(
   event: Pick<EventRow, "uploads_close_at" | "expires_at">,
