@@ -86,6 +86,8 @@ public struct FeedView: View {
             message("This event has ended", detail: "Its moments are no longer available.")
         case .accessLost:
             message("Access changed", detail: "The host changed this event's access. Join again to keep watching.")
+        case .guestRequired:
+            message("You're no longer in this event", detail: "Join again to keep watching and sharing.")
         case .loaded where model.moments.isEmpty:
             message("No moments yet", detail: "Photos and videos shared by guests will appear here.")
         case .loaded:

@@ -428,6 +428,38 @@ private final class Clock: @unchecked Sendable {
         #expect(model.phase == .accessLost)
     }
 
+    @Test func aRefusedGuestEndsTheFeedOnceAndForgetsTheToken() async {
+        let store = InMemoryEventCredentialStore([slug: StoredEventCredentials(
+            eventID: "e1", guestToken: "gt_dead", participantID: "p1", nickname: "Lea"
+        )])
+        let (model, service) = makeModel(store: store)
+        service.pageResults = [.success(FeedPage(moments: [moment(1)], nextBefore: nil, cursor: 10))]
+        await model.loadFirstPage()
+        service.reactionResults = [.failure(MomentsAPIError.guestRequired)]
+
+        await model.toggleReaction(onMomentID: "m1")?.value
+
+        #expect(model.phase == .guestRequired)
+        #expect(service.reactionCalls.count == 1) // never retried
+        #expect(model.toggleReaction(onMomentID: "m1") == nil)
+        let stored = store.credentials(for: slug)
+        #expect(stored?.guestToken == nil && stored?.participantID == nil)
+        #expect(stored?.nickname == "Lea")
+    }
+
+    @Test func aLateRefusalKeepsANewerJoin() async {
+        // The guest joined again meanwhile: another participant is saved.
+        let store = InMemoryEventCredentialStore([slug: StoredEventCredentials(
+            eventID: "e1", guestToken: "gt_new", participantID: "p_new", nickname: "Lea"
+        )])
+        let (model, service) = makeModel(store: store)
+        service.pageResults = [.success(FeedPage(moments: [moment(1)], nextBefore: nil, cursor: 10))]
+        await model.loadFirstPage()
+        #expect(model.endIfFatal(MomentsAPIError.guestRequired))
+        #expect(model.phase == .guestRequired)
+        #expect(store.credentials(for: slug)?.guestToken == "gt_new")
+    }
+
     @Test func ignoresUnknownMomentsAndUnloadedFeeds() async {
         let (model, service) = makeModel()
         #expect(model.toggleReaction(onMomentID: "m1") == nil)

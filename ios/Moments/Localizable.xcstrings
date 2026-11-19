@@ -512,6 +512,17 @@
         }
       }
     },
+    "Join again to keep watching and sharing.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rejoignez-le à nouveau pour continuer à regarder et partager."
+          }
+        }
+      }
+    },
     "Join the Feed": {
       "extractionState": "manual",
       "localizations": {
@@ -1462,6 +1473,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vous"
+          }
+        }
+      }
+    },
+    "You're no longer in this event": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous ne faites plus partie de cet événement"
           }
         }
       }

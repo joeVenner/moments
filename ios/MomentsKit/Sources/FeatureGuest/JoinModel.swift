@@ -170,7 +170,14 @@ public final class JoinModel: Identifiable {
         guard let nickname = bound?.nickname, bound?.guestToken != nil else {
             return phase = .needsNickname(event, nil)
         }
-        switch try await claim(nickname, avatarSeed: nil, event: event, stored: bound) {
+        let outcome: ClaimOutcome
+        do {
+            outcome = try await claim(nickname, avatarSeed: nil, event: event, stored: bound)
+        } catch MomentsAPIError.guestRequired {
+            // The server no longer knows this guest: a new one picks a name.
+            outcome = .rejected
+        }
+        switch outcome {
         case let .accepted(result): saveAndShowJoined(event, result)
         case .rejected, .invalid:
             try store.update(for: slug) { $0.guestToken = nil; $0.participantID = nil; $0.nickname = nil }

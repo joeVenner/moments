@@ -17,6 +17,9 @@ public final class FeedModel {
         case failed(Failure)
         /// The event's access changed (new PIN, made private): join again.
         case accessLost
+        /// The server no longer knows this device's guest (removed, or the
+        /// event's guests were reset): its token is forgotten; join again.
+        case guestRequired
     }
 
     public enum Failure: Equatable, Sendable {
@@ -246,7 +249,7 @@ public final class FeedModel {
     @discardableResult
     public func endIfFatal(_ error: any Error) -> Bool {
         switch error {
-        case MomentsAPIError.accessRequired, MomentsAPIError.eventNotFound:
+        case MomentsAPIError.accessRequired, MomentsAPIError.eventNotFound, MomentsAPIError.guestRequired:
             handle(error, isBackground: true)
             return true
         default:
@@ -319,6 +322,23 @@ public final class FeedModel {
         case MomentsAPIError.eventNotFound:
             phase = .failed(.eventGone)
             reactionSenders.cancelAll()
+        case MomentsAPIError.guestRequired:
+            // Ends the screen, so no heart is retried with the dead token;
+            // joining again then asks for a name and gets a new one.
+            phase = .guestRequired
+            reactionSenders.cancelAll()
+            do {
+                // Only this guest's: a late answer must not log out a newer join.
+                let refused = participant.id
+                try store.update(for: slug) { stored in
+                    guard stored.participantID == refused else { return }
+                    stored.guestToken = nil
+                    stored.participantID = nil
+                }
+            } catch {
+                // Kept: joining again re-claims with it and is refused.
+                logger.error("forgetting the guest token failed: \(String(describing: type(of: error)), privacy: .public)")
+            }
         default:
             if !(error is MomentsAPIError) {
                 logger.error("feed step failed: \(String(describing: error), privacy: .public)")
