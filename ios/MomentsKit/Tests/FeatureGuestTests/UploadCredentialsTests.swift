@@ -14,6 +14,7 @@ struct UploadCredentialsTests {
         func update(for slug: EventSlug, _ change: (inout StoredEventCredentials) -> Void) throws {}
         func removeCredentials(for slug: EventSlug) throws {}
         func removeAll() throws {}
+        func storedSlugs() throws -> [EventSlug] { throw Locked() }
     }
 
     private func result(_ lookup: UploadQueue.CredentialsLookup, _ slug: String) async -> String {
