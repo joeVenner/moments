@@ -25,6 +25,50 @@ public struct StagingArea: Sendable {
         self.root = root
     }
 
+    /// `Application Support/UploadStaging` in the app's own container (not
+    /// the App Group, like the queue's records), readable after first unlock
+    /// and excluded from backup: it holds photo and video bytes.
+    public static func appDefault(fileManager: FileManager = .default) throws -> StagingArea {
+        let support = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        var root = support.appending(path: "UploadStaging", directoryHint: .isDirectory)
+        let protection: [FileAttributeKey: Any] = [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: true, attributes: protection)
+        // createDirectory skips attributes for an existing folder.
+        try fileManager.setAttributes(protection, ofItemAtPath: root.path(percentEncoded: false))
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try root.setResourceValues(values)
+        return StagingArea(root: root)
+    }
+
+    /// Deletes item folders (`<UUID>/`) that no queue record owns: files
+    /// prepared by a run that ended before queueing them, and folders of
+    /// records `QueueStore.load()` set aside as unusable (they can never
+    /// upload). Only folders created before `cutoff` (the launch) go, so one
+    /// being prepared right now is safe. That test uses creation dates: a
+    /// clock set back during the run could make a new folder look older, and
+    /// its upload would then fail as missing. Pass every record id on disk
+    /// (`QueueStore.recordIDs()`), not only the loaded ones. A link in a
+    /// folder's place is removed itself, never its target; other names are
+    /// left alone. Returns how many were removed.
+    @discardableResult
+    public func sweepItemFolders(keeping owners: Set<UUID>, createdBefore cutoff: Date) throws -> Int {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: root.path(percentEncoded: false)) else { return 0 }
+        var removed = 0
+        for name in try fileManager.contentsOfDirectory(atPath: root.path(percentEncoded: false)) {
+            guard let id = UUID(uuidString: name), name == id.uuidString, !owners.contains(id) else { continue }
+            let path = root.appending(path: name, directoryHint: .notDirectory).path(percentEncoded: false)
+            // attributesOfItem doesn't follow a link: a link's own date counts.
+            guard let created = try? fileManager.attributesOfItem(atPath: path)[.creationDate] as? Date, created < cutoff else { continue }
+            do {
+                try fileManager.removeItem(atPath: path)
+                removed += 1
+            } catch CocoaError.fileNoSuchFile {}
+        }
+        return removed
+    }
+
     /// The folder an item's staged files live in: `<root>/<ITEM-UUID>/`.
     /// Binding files to their item means a record (tampered or buggy) can't
     /// name another item's file.

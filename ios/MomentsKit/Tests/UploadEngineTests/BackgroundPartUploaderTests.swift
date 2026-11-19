@@ -286,3 +286,50 @@ private final class Counter: @unchecked Sendable {
 private func failure(_ result: Result<Void, MomentsAPIError>) -> MomentsAPIError? {
     if case let .failure(error) = result { error } else { nil }
 }
+
+@MainActor
+@Suite struct BackgroundCompletionTests {
+    private final class Calls: @unchecked Sendable {
+        private let lock = NSLock()
+        private var names: [String] = []
+        func add(_ name: String) { lock.withLock { names.append(name) } }
+        var all: [String] { lock.withLock { names } }
+    }
+
+    /// Lets main-queue work posted so far run.
+    private func flushMain() async {
+        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+    }
+
+    @Test func releasesTheHandlerWhenEventsFinishAfterIt() async {
+        let tasks = PartTasks(), calls = Calls()
+        tasks.setBackgroundCompletion { calls.add("a") }
+        #expect(calls.all.isEmpty)
+        let completion = tasks.takeBackgroundCompletion()
+        completion?()
+        #expect(calls.all == ["a"])
+        #expect(tasks.takeBackgroundCompletion() == nil)
+    }
+
+    @Test func releasesAHandlerArrivingAfterTheEventsFinished() async {
+        let tasks = PartTasks(), calls = Calls()
+        #expect(tasks.takeBackgroundCompletion() == nil)
+        tasks.setBackgroundCompletion { calls.add("late") }
+        await flushMain()
+        #expect(calls.all == ["late"])
+        // Remembered once only: the next handler waits for its own events.
+        tasks.setBackgroundCompletion { calls.add("next") }
+        await flushMain()
+        #expect(calls.all == ["late"])
+    }
+
+    @Test func neverDropsAnEarlierHandler() async {
+        let tasks = PartTasks(), calls = Calls()
+        tasks.setBackgroundCompletion { calls.add("first") }
+        tasks.setBackgroundCompletion { calls.add("second") }
+        await flushMain()
+        #expect(calls.all == ["first"])
+        tasks.takeBackgroundCompletion()?()
+        #expect(calls.all == ["first", "second"])
+    }
+}

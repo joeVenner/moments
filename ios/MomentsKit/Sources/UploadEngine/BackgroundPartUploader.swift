@@ -304,6 +304,10 @@ final class PartTasks: @unchecked Sendable {
     private var entries: [PartSlot: Entry] = [:]
     private var finishedCount = 0
     private var backgroundCompletion: (@MainActor @Sendable () -> Void)?
+    /// The session finished delivering events before any handler arrived.
+    /// It can outlive that wake; a later handler is then released at once,
+    /// which is harmless because the app settles the queue before calling it.
+    private var eventsFinishedEarly = false
 
     /// The part's state within this upload session. A finished result is
     /// handed over once; anything from another session counts as nothing
@@ -406,14 +410,36 @@ final class PartTasks: @unchecked Sendable {
         }
     }
 
+    /// Stores the system's handler for the session's events. Every handler
+    /// runs exactly once: one already waiting is released first, and if the
+    /// session finished its events before the handler arrived (a relaunch
+    /// can deliver them early), the new one is released at once.
     func setBackgroundCompletion(_ completion: @escaping @MainActor @Sendable () -> Void) {
-        lock.withLock { backgroundCompletion = completion }
+        let release: [@MainActor @Sendable () -> Void] = lock.withLock {
+            var due: [@MainActor @Sendable () -> Void] = []
+            if let earlier = backgroundCompletion { due.append(earlier) }
+            if eventsFinishedEarly {
+                eventsFinishedEarly = false
+                backgroundCompletion = nil
+                due.append(completion)
+            } else {
+                backgroundCompletion = completion
+            }
+            return due
+        }
+        for handler in release { DispatchQueue.main.async { handler() } }
     }
 
+    /// The handler to release now the session delivered its events; nil
+    /// when none arrived yet, which is remembered for `setBackgroundCompletion`.
     func takeBackgroundCompletion() -> (@MainActor @Sendable () -> Void)? {
         lock.withLock {
-            defer { backgroundCompletion = nil }
-            return backgroundCompletion
+            guard let completion = backgroundCompletion else {
+                eventsFinishedEarly = true
+                return nil
+            }
+            backgroundCompletion = nil
+            return completion
         }
     }
 }

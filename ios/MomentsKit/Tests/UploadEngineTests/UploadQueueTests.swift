@@ -436,3 +436,81 @@ actor Gate {
         waiters.removeAll()
     }
 }
+
+@Suite struct UploadLaunchTests {
+    @Test func loadsThenSweepsOnlyFoldersNoRecordOwns() async throws {
+        let harness = try Harness()
+        // A queued item from an earlier run, and a folder prepared but never queued.
+        let earlier = harness.unloadedQueue()
+        try await earlier.load()
+        let queued = try harness.stage("a.jpg")
+        try await earlier.enqueue(queued)
+        let orphan = try harness.stage("b.jpg")
+
+        let queue = harness.unloadedQueue()
+        let report = await UploadLaunch.prepare(
+            queue: queue, store: harness.store, staging: harness.staging, launchedAt: Date().addingTimeInterval(60)
+        )
+
+        #expect(report.loaded?.items.map(\.id) == [queued.id])
+        #expect(report.swept == 1)
+        #expect(harness.stagedFileExists(queued))
+        #expect(!harness.stagedFileExists(orphan))
+        #expect(harness.server.recoveries == 2)
+    }
+
+    @Test func keepsTheFolderOfARecordOverTheCap() async throws {
+        let harness = try Harness(maxItems: 1)
+        let earlier = harness.unloadedQueue()
+        try await earlier.load()
+        let first = try harness.stage("a.jpg")
+        try await earlier.enqueue(first)
+        // A second record written directly (another launch, a larger cap).
+        let second = try harness.stage("b.jpg")
+        try harness.store.save(second)
+
+        let report = await UploadLaunch.prepare(
+            queue: harness.unloadedQueue(), store: harness.store, staging: harness.staging, launchedAt: Date().addingTimeInterval(60)
+        )
+
+        #expect(report.loaded?.overflow == 1)
+        #expect(report.swept == 0)
+        #expect(harness.stagedFileExists(second))
+    }
+
+    @Test func sweepsNothingWhenLoadIsRefused() async throws {
+        let harness = try Harness()
+        let orphan = try harness.stage("b.jpg")
+        let queue = harness.unloadedQueue()
+        try await queue.load()
+
+        // A second load is refused: nothing is known about the owners.
+        let report = await UploadLaunch.prepare(
+            queue: queue, store: harness.store, staging: harness.staging, launchedAt: Date().addingTimeInterval(60)
+        )
+
+        #expect(report == UploadLaunch.Report(loaded: nil, swept: nil))
+        #expect(harness.stagedFileExists(orphan))
+    }
+}
+
+@Suite struct UploadQueueSettleTests {
+    @Test func settleCarriesAnItemThroughToDone() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue()
+        let item = try harness.stage("a.jpg")
+        try await queue.enqueue(item)
+
+        await queue.settle(within: 5)
+
+        #expect(await queue.snapshot().first?.phase == .done(momentID: "m1"))
+    }
+
+    @Test func settleReturnsAtOnceWithNothingToDo() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue()
+        let started = Date()
+        await queue.settle(within: 5)
+        #expect(Date().timeIntervalSince(started) < 1)
+    }
+}
