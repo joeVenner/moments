@@ -13,6 +13,7 @@ import {
 } from "./uploadStore";
 import { requestPageUploadResume, requestUploadBackgroundSync } from "./uploadSync";
 import { getGuestToken, guestTokenHeaders, uploadTokenHeaders } from "./nickname";
+import { makeThumbnail, sendThumbnail } from "./thumbnail";
 
 /**
  * Resumable chunked uploader for large videos (the >25 MB path).
@@ -190,6 +191,9 @@ async function runResumableUpload(
 
   // Build or resume the persisted state.
   let state: PersistedUpload;
+  // The grid thumbnail runs beside the parts; complete waits for it (bounded
+  // by its own timeouts) so the server can keep it with the moment.
+  let thumbnailSent: Promise<unknown> = Promise.resolve();
   if (opts.resume) {
     state = opts.resume;
     // Rows saved before tokens were kept: fill it in from the page, so a later
@@ -229,6 +233,12 @@ async function runResumableUpload(
       lastError: null,
     };
     await createUpload(state);
+    // Only a fresh upload has the picked file in the page; a resumed one (or
+    // one finished by the service worker) goes without a thumbnail.
+    const target = { slug, uploadId: state.uploadId, key: state.key, headers: guestTokenHeaders(slug), signal };
+    thumbnailSent = makeThumbnail(file).then((thumbnail) =>
+      thumbnail && !signal?.aborted ? sendThumbnail(thumbnail, target) : false
+    );
   }
 
   // OPFS is the durable source of file bytes for reload/background recovery.
@@ -393,6 +403,7 @@ async function runResumableUpload(
       }
     });
     await Promise.all(workers);
+    await thumbnailSent;
 
     // All parts confirmed — finalize. ETags exactly as R2 returned them (quoted).
     const result = await jsonReq<CompleteResponse>(

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Web: uploads now send a small thumbnail too, made in the browser with no photo metadata, so the feed can load quickly. Older pages keep working without one.
 - iOS: if a moment's thumbnail is damaged or missing, the feed shows the larger photo (or a video's poster) instead of a broken tile. Network problems don't trigger full-size downloads.
 - iOS: each upload now sends its thumbnail, so the feed grid can show a small picture instead of the full file. It only ever goes to the app's own storage, and a thumbnail that can't be sent never holds the upload back.
 - iOS: the app makes a small thumbnail of each photo and video it prepares (upright, without any metadata, at most 200 KB), ready to be sent for the feed grid.

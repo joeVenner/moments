@@ -295,6 +295,7 @@ describe("web follow-up upload routes", () => {
   const tokenHeader = (t?: string): Record<string, string> => (t ? { "X-Guest-Token": t } : {});
   const routes: Array<[string, "multipart" | "stream", Run]> = [
     ["part-url", "multipart", (t, o) => call("/api/events/party/moments/multipart/part-url", jsonPost({ upload_id: "mp-1", key: KEY, part_number: 1 }, t), o)],
+    ["thumbnail-url", "multipart", (t, o) => call("/api/events/party/moments/multipart/thumbnail-url", jsonPost({ upload_id: "mp-1", key: KEY, size: 10 }, t), o)],
     ["status", "multipart", (t, o) => call(`/api/events/party/moments/multipart/status?upload_id=mp-1&key=${encodeURIComponent(KEY)}`, { headers: tokenHeader(t) }, o)],
     ["abort", "multipart", (t, o) => call("/api/events/party/moments/multipart/abort", jsonPost({ upload_id: "mp-1", key: KEY }, t), o)],
     ["stream abort", "stream", (t, o) => call("/api/events/party/moments/stream/abort", jsonPost({ stream_uid: "uid1" }, t), o)],
