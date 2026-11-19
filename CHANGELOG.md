@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS: if a moment's thumbnail is damaged or missing, the feed shows the larger photo (or a video's poster) instead of a broken tile. Network problems don't trigger full-size downloads.
 - iOS: each upload now sends its thumbnail, so the feed grid can show a small picture instead of the full file. It only ever goes to the app's own storage, and a thumbnail that can't be sent never holds the upload back.
 - iOS: the app makes a small thumbnail of each photo and video it prepares (upright, without any metadata, at most 200 KB), ready to be sent for the feed grid.
 - Server: uploads from the app can carry a small thumbnail for the feed grid. The server checks it, keeps its own copy, and the feed serves it in place of the full photo. A missing or bad thumbnail never holds up the upload. Deleting a moment, cancelling an upload or purging an event removes thumbnails too.
