@@ -15,6 +15,10 @@ describe("joinOutcome", () => {
     expect(joinOutcome(409, "nickname_taken")).toBe("nickname_taken");
   });
 
+  it("stops when the event is full", () => {
+    expect(joinOutcome(409, "guest_cap_reached")).toBe("event_full");
+  });
+
   it("treats anything else as unavailable", () => {
     expect(joinOutcome(409, "other")).toBe("unavailable");
     expect(joinOutcome(500, undefined)).toBe("unavailable");

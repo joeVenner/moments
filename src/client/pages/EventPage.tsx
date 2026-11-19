@@ -710,10 +710,11 @@ function EventPageForSlug() {
           event={event}
           initialProblem={gateProblem}
           onSubmit={async (name, avatarSeed) => {
-            // Join first: a rate limit or a taken nickname keeps the form open
-            // (the guest has no token yet). Other failures still let them in.
+            // Join first: a rate limit, a taken nickname or a full event keeps
+            // the form open (the guest has no token yet). Other failures still
+            // let them in.
             const outcome = await joinEvent(slug!, name, avatarSeed);
-            if (outcome === "rate_limited" || outcome === "nickname_taken") return outcome;
+            if (outcome === "rate_limited" || outcome === "nickname_taken" || outcome === "event_full") return outcome;
             saveNickname(slug!, name);
             setNicknameState(name);
             setHasGuestToken(getGuestToken(slug!) !== null);

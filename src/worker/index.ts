@@ -5,6 +5,7 @@ import { deleteAdminMoment } from "./adminModeration";
 import type { Env, EventRow, MomentRow, LeaderboardEntry, UploadRow } from "./types";
 import { insertEvent, normalizeDate } from "./eventWrites";
 import { OPERATOR_USER_ID } from "./hostSessions";
+import { upsertParticipant } from "./participants";
 import { lifecycleChangeFrom, type SettingsRefusal, updateEventAccess, updateEventLifecycle } from "./eventSettings";
 import { putMedia, pointsForContentType, isAllowedContentType, MAX_UPLOAD_BYTES, momentKey } from "./storage";
 import {
@@ -183,40 +184,6 @@ function rejectOversizedMultipart(c: Context<{ Bindings: Env }>): Response | nul
     return c.json({ error: "File too large (max 25MB)" }, 413);
   }
   return null;
-}
-
-async function upsertParticipant(
-  db: D1Database,
-  eventId: string,
-  nickname: string,
-  avatarSeed?: string | null
-): Promise<void> {
-  const existing = await db
-    .prepare("SELECT id, avatar_seed FROM participants WHERE event_id = ? AND nickname = ?")
-    .bind(eventId, nickname)
-    .first<{ id: string; avatar_seed: string | null }>();
-
-  if (existing) {
-    // Keep the avatar the guest first picked. Re-joining with the same nickname
-    // (e.g. from another device, or after clearing local storage) must NOT
-    // regenerate the face everyone else already sees — only backfill a seed if
-    // they originally joined without one (e.g. uploaded before going through
-    // the nickname gate). Never replace an already-chosen face.
-    if (avatarSeed && !existing.avatar_seed) {
-      await db
-        .prepare("UPDATE participants SET avatar_seed = ? WHERE id = ?")
-        .bind(avatarSeed, existing.id)
-        .run();
-    }
-    return;
-  }
-
-  await db
-    .prepare(
-      `INSERT INTO participants (id, event_id, nickname, avatar_seed) VALUES (?, ?, ?, ?)`
-    )
-    .bind(crypto.randomUUID(), eventId, nickname, avatarSeed ?? null)
-    .run();
 }
 
 // Native app API (src/worker/v1). Has its own private-event gate.
@@ -1572,6 +1539,9 @@ app.post("/api/events/:slug/participants", async (c) => {
   if (!result.ok && result.error === "rate_limited") {
     c.header("Retry-After", String(JOIN_RETRY_AFTER_SECONDS));
     return c.json(JOIN_RATE_LIMITED, 429);
+  }
+  if (!result.ok && result.error === "guest_cap_reached") {
+    return c.json({ error: "This event is full.", code: result.error }, 409);
   }
   if (!result.ok) {
     return c.json({ error: "This nickname is already taken in this event.", code: result.error }, 409);

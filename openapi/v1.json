@@ -68,7 +68,7 @@
           },
           "code": {
             "type": "string",
-            "description": "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, media_delete_failed, plan_required, no_events_left, test_event_dates_fixed, not_found, internal"
+            "description": "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, media_delete_failed, plan_required, no_events_left, test_event_dates_fixed, guest_cap_reached, not_found, internal"
           }
         },
         "required": [
@@ -2970,7 +2970,7 @@
             }
           },
           "409": {
-            "description": "`nickname_taken`: another device owns this nickname",
+            "description": "`nickname_taken`: another device owns this nickname; `guest_cap_reached`: the event has as many guests as its plan allows (guests already in it can always rejoin)",
             "content": {
               "application/json": {
                 "schema": {
