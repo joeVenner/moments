@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS app: "Large videos on Wi-Fi only" in the uploads sheet (on by default): videos of 100 MB or more wait for Wi-Fi instead of using mobile data.
 - iOS app: video tiles in the feed and Highlights show how long the video is next to the play badge.
 - iOS app: the Leaderboard ends with how many points a guest still needs for their next milestone, with a progress bar.
 - iOS app: the uploads sheet opens on "Sharing 6 moments to <event>" with overall progress, how many are shared, and a reminder that sharing carries on with the phone locked.
