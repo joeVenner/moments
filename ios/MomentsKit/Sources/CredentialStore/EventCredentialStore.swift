@@ -81,6 +81,8 @@ public protocol EventCredentialStore: Sendable {
     func removeCredentials(for slug: EventSlug) throws
     /// "Forget me on this device" for every event.
     func removeAll() throws
+    /// Every event with something stored, sorted by slug (no secrets read).
+    func storedSlugs() throws -> [EventSlug]
 }
 
 public extension EventCredentialStore {
@@ -135,6 +137,10 @@ public final class InMemoryEventCredentialStore: EventCredentialStore, @unchecke
 
     public func removeAll() {
         lock.withLock { entries.removeAll() }
+    }
+
+    public func storedSlugs() -> [EventSlug] {
+        lock.withLock { entries.keys.sorted { $0.value < $1.value } }
     }
 }
 

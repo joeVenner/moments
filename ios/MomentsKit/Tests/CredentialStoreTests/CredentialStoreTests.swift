@@ -72,7 +72,33 @@ let isKeychainAvailable: Bool = {
     return (try? probe.save(sampleCredentials, for: EventSlug("probe")!)) != nil
 }()
 
+/// Listing returns every stored slug, sorted, and forgets removed ones.
+func exerciseListing(_ store: some EventCredentialStore) throws {
+    try store.removeAll()
+    #expect(try store.storedSlugs().isEmpty)
+    try store.save(sampleCredentials, for: party)
+    try store.save(sampleCredentials, for: other)
+    #expect(try store.storedSlugs() == [other, party])
+    try store.removeCredentials(for: other)
+    #expect(try store.storedSlugs() == [party])
+}
+
 @Suite struct CredentialStoreTests {
+    @Test func inMemoryListing() throws {
+        try exerciseListing(InMemoryEventCredentialStore())
+    }
+
+    @Test(.enabled(if: isKeychainAvailable)) func keychainListing() throws {
+        let store = KeychainEventCredentialStore(service: "moments.tests.\(UUID().uuidString)")
+        defer { try? store.removeAll() }
+        try exerciseListing(store)
+        // Another service's items never show up.
+        let neighbour = KeychainEventCredentialStore(service: "moments.tests.\(UUID().uuidString)")
+        defer { try? neighbour.removeAll() }
+        try neighbour.save(sampleCredentials, for: other)
+        #expect(try store.storedSlugs() == [party])
+    }
+
     @Test func inMemoryStore() async throws {
         let store = InMemoryEventCredentialStore()
         try exerciseStore(store)

@@ -12,6 +12,9 @@ public struct GuestEventView: View {
     let rejoin: () -> Void
     /// The guest left the event (everything deleted, identity forgotten).
     let onLeft: () -> Void
+    /// Back to the app's home screen; nil hides the button (e.g. the App Clip).
+    /// Uploads keep going in the background queue.
+    let onHome: (() -> Void)?
     @State private var leave: LeaveModel?
     @State private var progress: UploadProgressModel?
     @State private var isShowingProgress = false
@@ -30,11 +33,15 @@ public struct GuestEventView: View {
     /// the sheet is already closing).
     @State private var sharedBatches = 0
 
-    public init(join: JoinModel, dependencies: GuestDependencies, rejoin: @escaping () -> Void, onLeft: @escaping () -> Void = {}) {
+    public init(
+        join: JoinModel, dependencies: GuestDependencies, rejoin: @escaping () -> Void,
+        onLeft: @escaping () -> Void = {}, onHome: (() -> Void)? = nil
+    ) {
         self.join = join
         self.dependencies = dependencies
         self.rejoin = rejoin
         self.onLeft = onLeft
+        self.onHome = onHome
     }
 
     public var body: some View {
@@ -55,7 +62,7 @@ public struct GuestEventView: View {
                     .tint(MomentsColor.accent)
                     .haptic(.uploadComplete, trigger: sharedBatches)
                     .safeAreaInset(edge: .top) {
-                        if leave != nil || progress != nil { topBar }
+                        if leave != nil || progress != nil || onHome != nil { topBar }
                     }
                     if feed.phase == .accessLost || feed.phase == .guestRequired {
                         Button("Join again", action: rejoin)
@@ -84,6 +91,9 @@ public struct GuestEventView: View {
                 }
             } else {
                 JoinView(model: join)
+                    .safeAreaInset(edge: .top, alignment: .leading) {
+                        if let onHome { homeButton(onHome).padding(.horizontal, Spacing.sm) }
+                    }
             }
         }
         // However the sheet closes, unshared picks and files are dropped;
@@ -164,11 +174,23 @@ public struct GuestEventView: View {
 
     private var topBar: some View {
         HStack(spacing: 0) {
+            if let onHome { homeButton(onHome) }
             Spacer()
             if let progress { uploadsButton(progress) }
             if let leave { eventMenu(leave) }
         }
         .padding(.horizontal, Spacing.sm)
+    }
+
+    private func homeButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "chevron.backward")
+                .font(.title3)
+                .foregroundStyle(MomentsColor.textMuted)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel(Text("Home"))
     }
 
     /// Opens "Your uploads"; a count while some are under way, and a mark

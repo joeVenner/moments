@@ -70,6 +70,23 @@ public final class KeychainEventCredentialStore: EventCredentialStore, @unchecke
         }
     }
 
+    public func storedSlugs() throws -> [EventSlug] {
+        try lock.withLock {
+            // Attributes only: the listing itself never reads the stored values.
+            var query = baseQuery()
+            query[kSecReturnAttributes as String] = true
+            query[kSecMatchLimit as String] = kSecMatchLimitAll
+            var result: CFTypeRef?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
+            if status == errSecItemNotFound { return [] }
+            try check(status)
+            let items = result as? [[String: Any]] ?? []
+            // An account that isn't a valid slug isn't ours to show.
+            let slugs = items.compactMap { ($0[kSecAttrAccount as String] as? String).flatMap(EventSlug.init) }
+            return Set(slugs).sorted { $0.value < $1.value }
+        }
+    }
+
     // MARK: - Unlocked helpers (callers hold `lock`)
 
     private func baseQuery(slug: EventSlug? = nil) -> [String: Any] {

@@ -100,6 +100,10 @@ final class FlakyStore: EventCredentialStore, @unchecked Sendable {
     }
     func removeCredentials(for slug: EventSlug) throws { inner.removeCredentials(for: slug) }
     func removeAll() throws { inner.removeAll() }
+    func storedSlugs() throws -> [EventSlug] {
+        if failReads { throw StoreFailed() }
+        return inner.storedSlugs()
+    }
 }
 
 

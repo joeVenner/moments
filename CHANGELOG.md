@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS home "Your events": the events joined on this phone, newest first, each opening with one tap (a private event whose grant expired asks for the PIN again); a back button returns home from an event.
 - iOS onboarding: three first-launch pages (what Moments is, scan to join, share and heart) with Skip; shown once, and skipped when the app opens on an event link.
 - iOS home screen: paste or type an event link to open it (replaces the placeholder that offered no way in).
 - Smart App Banner on event pages (`apple-itunes-app` meta with the App Clip card and the page URL as `app-argument`), injected by the worker only when `APP_STORE_ID` is set; the slideshow never shows it.
