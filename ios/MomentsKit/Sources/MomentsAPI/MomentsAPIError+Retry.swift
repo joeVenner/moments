@@ -12,7 +12,8 @@ public extension MomentsAPIError {
             status >= 500 || status == 408
         case .accessRequired, .invalidAccess, .tooManyAttempts, .accessUnavailable, .eventNotFound,
              .upgradeRequired, .nicknameTaken, .momentNotFound, .guestRequired, .invalidRequest,
-             .uploadsClosed, .uploadNotFound, .uploadNotOpen, .uploadConflict, .invalidUpload, .uploadsUnavailable:
+             .uploadsClosed, .uploadNotFound, .uploadNotOpen, .uploadConflict, .invalidUpload, .uploadsUnavailable,
+             .invalidCredentials, .hostAuthRequired, .signInUnavailable:
             false
         }
     }

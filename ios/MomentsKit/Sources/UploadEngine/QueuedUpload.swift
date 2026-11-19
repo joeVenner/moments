@@ -457,7 +457,9 @@ private extension QueuedUpload {
         case .upgradeRequired: phase = .failed(.appTooOld)
         case .uploadsUnavailable: phase = .failed(.unavailable)
         case .nicknameTaken, .momentNotFound, .server, .transport, .rateLimited, .tooManyUploads,
-             .storageUnavailable, .unexpectedResponse:
+             .storageUnavailable, .unexpectedResponse,
+             // Host-only errors; an upload never gets them.
+             .invalidCredentials, .hostAuthRequired, .signInUnavailable:
             giveUp()
         }
     }

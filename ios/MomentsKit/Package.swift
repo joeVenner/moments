@@ -20,6 +20,7 @@ let package = Package(
         .library(name: "AppRouting", targets: ["AppRouting"]),
         .library(name: "CredentialStore", targets: ["CredentialStore"]),
         .library(name: "FeatureGuest", targets: ["FeatureGuest"]),
+        .library(name: "FeatureHost", targets: ["FeatureHost"]),
         .library(name: "UploadEngine", targets: ["UploadEngine"]),
         .library(name: "MediaPipeline", targets: ["MediaPipeline"]),
     ],
@@ -63,6 +64,8 @@ let package = Package(
             name: "FeatureGuestTests",
             dependencies: ["FeatureGuest", "MomentsAPI", "MomentsDomain", "CredentialStore", "UploadEngine", "MediaPipeline"]
         ),
+        .target(name: "FeatureHost", dependencies: ["MomentsAPI", "MomentsDomain", "CredentialStore"]),
+        .testTarget(name: "FeatureHostTests", dependencies: ["FeatureHost", "MomentsAPI", "MomentsDomain", "CredentialStore"]),
         .target(name: "UploadEngine", dependencies: ["MomentsAPI", "MomentsDomain"]),
         .testTarget(name: "UploadEngineTests", dependencies: ["UploadEngine", "MomentsAPI", "MomentsDomain"]),
         .target(name: "MediaPipeline"),

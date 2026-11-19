@@ -15,12 +15,8 @@ import Security
 ///   decide the group once and pass it on every call.
 public final class KeychainEventCredentialStore: EventCredentialStore, @unchecked Sendable {
     // @unchecked: immutable configuration plus `lock`; SecItem calls are thread-safe.
-    public enum KeychainError: Error, Equatable {
-        case unexpectedStatus(OSStatus)
-        /// The device is locked and has not been unlocked since boot.
-        case unavailableWhileLocked
-        case tooManyItems
-    }
+    /// Kept for existing callers; shared with the host session store.
+    public typealias KeychainError = CredentialStore.KeychainError
 
     public static let defaultService = "moments.event-credentials"
 
@@ -119,27 +115,14 @@ public final class KeychainEventCredentialStore: EventCredentialStore, @unchecke
             kSecValueData as String: try StoredEventCredentials.encode(credentials),
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
-        let updateStatus = SecItemUpdate(baseQuery(slug: slug) as CFDictionary, attributes as CFDictionary)
-        guard updateStatus == errSecItemNotFound else { return try check(updateStatus) }
-        let addStatus = SecItemAdd(baseQuery(slug: slug).merging(attributes) { _, new in new } as CFDictionary, nil)
-        // Another process added it between our update and add: update again.
-        if addStatus == errSecDuplicateItem {
-            return try check(SecItemUpdate(baseQuery(slug: slug) as CFDictionary, attributes as CFDictionary))
-        }
-        try check(addStatus)
+        try KeychainSupport.upsert(baseQuery(slug: slug), attributes)
     }
 
     private func delete(_ query: [String: Any]) throws {
-        let status = SecItemDelete(query as CFDictionary)
-        guard status != errSecItemNotFound else { return }
-        try check(status)
+        try KeychainSupport.delete(query)
     }
 
     private func check(_ status: OSStatus) throws {
-        switch status {
-        case errSecSuccess: return
-        case errSecInteractionNotAllowed: throw KeychainError.unavailableWhileLocked
-        default: throw KeychainError.unexpectedStatus(status)
-        }
+        try KeychainSupport.check(status)
     }
 }

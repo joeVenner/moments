@@ -141,7 +141,7 @@ public struct MomentsClient: MomentsService {
         client = Client(
             serverURL: baseURL.appending(path: "api/v1"),
             transport: transport ?? URLSessionTransport(configuration: .init(session: Self.makeSession())),
-            middlewares: [ClientIdentityMiddleware(identity: identity), NonJSONErrorMiddleware()]
+            middlewares: [ClientIdentityMiddleware(identity: identity), HostAuthMiddleware(), NonJSONErrorMiddleware()]
         )
         self.mapper = mapper
     }
