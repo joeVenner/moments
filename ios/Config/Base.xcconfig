@@ -1,14 +1,14 @@
 // Shared build settings for the Moments app and its tests.
-// Personal values (signing team, bundle prefix) go in Local.xcconfig, which
-// is git-ignored; copy Local.xcconfig.example to start.
+// Local.xcconfig (git-ignored; copy Local.xcconfig.example) may override any
+// of these for a personal build, e.g. another team or bundle prefix.
 
-// Signing: set the team and prefix in Local.xcconfig, never in Xcode's
-// Signing & Capabilities pane, which writes them into the tracked pbxproj
-// (target settings would then silently override Local.xcconfig).
-// Placeholder until the real prefix is chosen. An empty team is fine for the
-// simulator; device builds fail until Local.xcconfig sets DEVELOPMENT_TEAM.
-MOMENTS_BUNDLE_ID_PREFIX = com.example
-DEVELOPMENT_TEAM =
+// Signing: the real identity (both are public, they appear in every signed
+// build and in /.well-known/apple-app-site-association). Override them in
+// Local.xcconfig, never in Xcode's Signing & Capabilities pane, which writes
+// into the tracked pbxproj (target settings would then silently win).
+// Device builds need membership of this team, or an override.
+MOMENTS_BUNDLE_ID_PREFIX = com.moments-hq
+DEVELOPMENT_TEAM = 7877JLKPRQ
 CODE_SIGN_STYLE = Automatic
 
 // Shared by the app, the App Clip and any extension (they must match).
