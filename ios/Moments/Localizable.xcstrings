@@ -148,6 +148,36 @@
         }
       }
     },
+    "Allow camera access in Settings to scan event QR codes, or paste the event's link instead.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorisez l'accès à l'appareil photo dans Réglages pour scanner les QR codes, ou collez plutôt le lien de l'événement."
+          }
+        }
+      }
+    },
+    "Camera": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appareil photo"
+          }
+        }
+      }
+    },
+    "Camera access is off": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'accès à l'appareil photo est désactivé"
+          }
+        }
+      }
+    },
     "Can't reach Moments": {
       "extractionState": "manual",
       "localizations": {
@@ -822,6 +852,16 @@
         }
       }
     },
+    "Open Settings": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir Réglages"
+          }
+        }
+      }
+    },
     "Open event": {
       "localizations": {
         "fr": {
@@ -941,6 +981,16 @@
         }
       }
     },
+    "Point your camera at the event's QR code.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pointez l'appareil photo vers le QR code de l'événement."
+          }
+        }
+      }
+    },
     "Preparing…": {
       "extractionState": "manual",
       "localizations": {
@@ -1036,6 +1086,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ne plus aimer"
+          }
+        }
+      }
+    },
+    "Scan QR code": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scanner le QR code"
           }
         }
       }
@@ -1217,6 +1277,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ce code ou cette invitation n'est pas valide."
+          }
+        }
+      }
+    },
+    "That QR code isn't a Moments event.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce QR code n'est pas un événement Moments."
           }
         }
       }

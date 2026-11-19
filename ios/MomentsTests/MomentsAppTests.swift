@@ -1,4 +1,5 @@
 import AppRouting
+import AVFoundation
 import Foundation
 import MomentsDomain
 import Testing
@@ -135,5 +136,51 @@ private let invite = String(repeating: "ab12", count: 16)
         // The same link right away is a new open, not a duplicate delivery.
         navigation.handle(link)
         #expect(navigation.destination == .event(EventSlug("party")!) && navigation.openCount == 3)
+    }
+
+    @Test func aRejectedCodeIsTriedOnceAndANewOneStillCounts() {
+        var filter = ScanFilter()
+        #expect(filter.shouldTry("https://evil.test/e/party"))
+        filter.rejected("https://evil.test/e/party")
+        #expect(!filter.shouldTry("https://evil.test/e/party"))
+        #expect(filter.shouldTry("https://moments-hq.com/e/party"))
+        #expect(!filter.shouldTry(""))
+        // Two refused codes in view are each reported once, not alternately.
+        filter.rejected("WIFI:S:guest;;")
+        #expect(!filter.shouldTry("https://evil.test/e/party") && !filter.shouldTry("WIFI:S:guest;;"))
+    }
+
+    @Test func aScannedEventLinkOpensTheEvent() {
+        let navigation = AppNavigation(router: AppRouter())
+        #expect(navigation.handle(text: "https://moments-hq.com/e/party?invite=\(invite)"))
+        #expect(navigation.destination == .event(EventSlug("party")!))
+        #expect(!navigation.handle(text: "WIFI:S:guest;T:WPA;P:secret;;"))
+    }
+
+    @Test func theSimulatorHasNoScanner() {
+        #if targetEnvironment(simulator)
+        #expect(CameraAccess.current == .unsupported)
+        #endif
+    }
+
+    @Test func afterOpeningAnEventTheScannerTriesNothingElse() {
+        var filter = ScanFilter()
+        filter.accepted()
+        #expect(!filter.shouldTry("https://moments-hq.com/e/party"))
+        #expect(!filter.shouldTry("https://moments-hq.com/e/other"))
+    }
+
+    @Test(arguments: [
+        (true, AVAuthorizationStatus.authorized, true, CameraAccess.granted),
+        (true, .authorized, false, .denied),
+        (true, .notDetermined, false, .notDetermined),
+        (true, .denied, false, .denied),
+        (true, .restricted, false, .denied),
+        (false, .authorized, true, .unsupported),
+    ])
+    func cameraAccessFollowsPermissionAndAvailability(
+        _ isSupported: Bool, _ status: AVAuthorizationStatus, _ isAvailable: Bool, _ expected: CameraAccess
+    ) {
+        #expect(CameraAccess.from(isSupported: isSupported, status: status, isAvailable: isAvailable) == expected)
     }
 }
