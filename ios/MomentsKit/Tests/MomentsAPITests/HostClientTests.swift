@@ -21,6 +21,18 @@ private func adminEvent(id: String, slug: String, accessMode: String = "public",
     """
 }
 
+private func detail(eventURL: String = "https://moments.test/e/party", inviteURL: String? = nil, accessMode: String = "public") -> String {
+    let invite = inviteURL.map { "\"\($0)\"" } ?? "null"
+    return """
+    {"event":\(adminEvent(id: "e1", slug: "party", accessMode: accessMode)),
+     "share":{"event_url":"\(eventURL)","invite_url":\(invite)},
+     "analytics":{"summary":{"total_moments":5,"hidden_moments":1,"videos":2,"photos":3,"storage_bytes":1048576,
+                             "participants":4,"reactions":7},
+                  "activity":[{"day":"2026-11-18","count":2},{"day":"2026-11-19","count":3}],
+                  "upload_states":[{"status":"open","count":1}]}}
+    """
+}
+
 @Suite struct HostClientTests {
     @Test func signsInWithTheJSONBodyAndNoBearer() async throws {
         let stub = StubTransport(status: 201, json: """
@@ -103,5 +115,56 @@ private func adminEvent(id: String, slug: String, accessMode: String = "public",
         // Even inside a host token scope, a guest operation goes out without it.
         _ = try await HostAuthMiddleware.$token.withValue(hostToken) { try await api.event(slug: "party") }
         #expect(try #require(stub.requests.first).request.headerFields[.authorization] == nil)
+    }
+
+    @Test func readsOneEventWithItsLinksAndAnalytics() async throws {
+        let stub = StubTransport(json: detail(inviteURL: "https://moments.test/e/party?invite=abc", accessMode: "private"))
+        let event = try await client(stub).adminEvent(token: hostToken, id: "e1")
+        #expect(event.summary.id == "e1" && event.summary.momentCount == 3)
+        #expect(event.share.eventURL.absoluteString == "https://moments.test/e/party")
+        #expect(event.share.inviteURL?.absoluteString == "https://moments.test/e/party?invite=abc")
+        #expect(event.analytics.totalMoments == 5 && event.analytics.hiddenMoments == 1 && event.analytics.reactions == 7)
+        #expect(event.analytics.activity == [.init(day: "2026-11-18", count: 2), .init(day: "2026-11-19", count: 3)])
+        let request = try #require(stub.requests.first)
+        #expect(request.request.path == "/admin/events/e1")
+        #expect(request.request.headerFields[.authorization] == "Bearer \(hostToken)")
+    }
+
+    @Test(arguments: [
+        "https://evil.test/e/party", "http://moments.test/e/party", "/e/party",
+        "https://customer-abc.cloudflarestream.com/e/party", "https://user@moments.test/e/party",
+        "https://moments.test:8443/e/party", "https://moments.test.evil.com/e/party", "javascript:alert(1)",
+        "/e/party?x=https://moments.test",
+    ])
+    func refusesShareLinksOffOurOrigin(_ link: String) async throws {
+        await #expect(throws: MomentsAPIError.unexpectedResponse) {
+            _ = try await client(StubTransport(json: detail(eventURL: link))).adminEvent(token: hostToken, id: "e1")
+        }
+        await #expect(throws: MomentsAPIError.unexpectedResponse) {
+            _ = try await client(StubTransport(json: detail(inviteURL: link))).adminEvent(token: hostToken, id: "e1")
+        }
+    }
+
+    @Test func aMissingEventIsEventNotFound() async throws {
+        let stub = StubTransport(status: 404, json: #"{"error":"x","code":"event_not_found"}"#)
+        await #expect(throws: MomentsAPIError.eventNotFound) { _ = try await client(stub).adminEvent(token: hostToken, id: "e1") }
+        await #expect(throws: MomentsAPIError.eventNotFound) {
+            _ = try await client(StubTransport(json: "{}")).adminEvent(token: hostToken, id: String(repeating: "x", count: 101))
+        }
+    }
+
+    @Test func encodesTheEventIDAsOnePathSegment() async throws {
+        let stub = StubTransport(json: detail())
+        _ = try await client(stub).adminEvent(token: hostToken, id: "a/../b")
+        #expect(try #require(stub.requests.first).request.path == "/admin/events/a%2F..%2Fb")
+    }
+
+    @Test func neverPrintsTheInviteLink() {
+        let links = EventShareLinks(eventURL: URL(string: "https://moments.test/e/p")!, inviteURL: URL(string: "https://moments.test/e/p?invite=secret123")!)
+        var dumped = ""
+        dump(links, to: &dumped)
+        for text in [String(describing: links), String(reflecting: links), "\(links)", dumped] {
+            #expect(!text.contains("secret123"), "\(text)")
+        }
     }
 }
