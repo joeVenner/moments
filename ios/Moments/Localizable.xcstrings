@@ -751,32 +751,12 @@
         }
       }
     },
-    "Edit": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Modifier"
-          }
-        }
-      }
-    },
     "Edit details": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Modifier les informations"
-          }
-        }
-      }
-    },
-    "Edit event": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Modifier l'événement"
           }
         }
       }
@@ -1066,6 +1046,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Masquer aux invités"
+          }
+        }
+      }
+    },
+    "Hide or delete what shouldn't stay": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquez ou supprimez ce qui ne doit pas rester"
           }
         }
       }
@@ -1766,12 +1756,32 @@
         }
       }
     },
+    "Private: guests need the PIN or invite link": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privé : les invités ont besoin du PIN ou du lien d'invitation"
+          }
+        }
+      }
+    },
     "Public": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Public"
+          }
+        }
+      }
+    },
+    "Public: anyone with the link can join": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Public : toute personne ayant le lien peut rejoindre"
           }
         }
       }
@@ -2654,6 +2664,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Titre"
+          }
+        }
+      }
+    },
+    "Title, names and description": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titre, noms et description"
           }
         }
       }

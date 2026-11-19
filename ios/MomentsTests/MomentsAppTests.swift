@@ -225,6 +225,23 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(HostEventsView.dateLine(event(open: false, archived: true)) != HostEventsView.dateLine(event(open: false, archived: false)))
     }
 
+    @Test func theEventPageRowsSayThePrivacyAndWhatHappensNext() {
+        func event(open: Bool = true, archived: Bool = false, purge: Date? = nil, mode: Event.AccessMode = .public) -> Event {
+            Event(id: "e", slug: "e", title: "Party", type: "Party", createdAt: Date(timeIntervalSince1970: 1_795_000_000),
+                  uploadsCloseAt: Date(timeIntervalSince1970: 1_796_000_000), purgeAfter: purge,
+                  archivedAt: archived ? Date() : nil, accessMode: mode, areUploadsOpen: open)
+        }
+        #expect(HostEventDetailView.privacyLine(event(mode: .private)) != HostEventDetailView.privacyLine(event(mode: .public)))
+        let open = event()
+        #expect(HostEventDetailView.datesLine(open) == HostEventsView.liveLine(open))
+        let purge = Date(timeIntervalSince1970: 1_797_000_000)
+        let closedWithPurge = HostEventDetailView.datesLine(event(open: false, purge: purge))
+        let closedWithoutPurge = HostEventDetailView.datesLine(event(open: false))
+        let archived = HostEventDetailView.datesLine(event(open: true, archived: true, purge: purge))
+        #expect(closedWithPurge.contains(purge.formatted(date: .abbreviated, time: .omitted)))
+        #expect(Set([closedWithPurge, closedWithoutPurge, archived, HostEventDetailView.datesLine(open)]).count == 4)
+    }
+
     @Test func theEventQRCodeScansAndHasAFourModuleQuietZoneInThemeColours() throws {
         let url = URL(string: "https://moments-hq.com/e/party")!
         let image = try #require(EventQRCode.image(for: url))
