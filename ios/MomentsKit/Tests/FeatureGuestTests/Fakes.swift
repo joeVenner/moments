@@ -15,6 +15,7 @@ final class FakeService: MomentsService, @unchecked Sendable {
     private(set) var accessCalls: [AccessCredential] = []
     private(set) var eventCalls: [EventCredentials] = []
     private(set) var joinCalls: [(nickname: String, credentials: EventCredentials)] = []
+    private(set) var joinAvatarSeeds: [String?] = []
     private(set) var pageCalls: [(before: Int?, credentials: EventCredentials)] = []
     private(set) var changesCalls: [Int] = []
     var reactionResults: [Result<ReactionState, Error>] = []
@@ -33,7 +34,11 @@ final class FakeService: MomentsService, @unchecked Sendable {
         try lock.withLock { eventCalls.append(credentials); return try eventResults.removeFirst().get() }
     }
     func join(slug: String, nickname: String, avatarSeed: String?, credentials: EventCredentials) async throws -> JoinResult {
-        try lock.withLock { joinCalls.append((nickname, credentials)); return try joinResults.removeFirst().get() }
+        try lock.withLock {
+            joinCalls.append((nickname, credentials))
+            joinAvatarSeeds.append(avatarSeed)
+            return try joinResults.removeFirst().get()
+        }
     }
     /// Runs before a highlights request answers (to hold it open).
     var beforeHighlights: (@Sendable () async -> Void)?

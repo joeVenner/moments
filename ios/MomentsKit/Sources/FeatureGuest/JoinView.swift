@@ -2,11 +2,15 @@ import DesignSystem
 import MomentsDomain
 import SwiftUI
 
-/// Join flow for one event: PIN when private, then a nickname.
+/// Join flow for one event: PIN when private, then the guest's face and
+/// name on an invitation-style screen.
 public struct JoinView: View {
     @Bindable var model: JoinModel
     @State private var pin = ""
     @State private var nickname = ""
+    /// The face shown here is the one the guest joins with.
+    @State private var avatarSeed = JoinModel.randomAvatarSeed()
+    @Environment(\.dynamicTypeSize) private var typeSize
     @FocusState private var focusedField: Field?
 
     private enum Field: Hashable { case pin, nickname }
@@ -33,7 +37,9 @@ public struct JoinView: View {
         }
     }
 
-    @ViewBuilder private var content: some View {
+    /// The current step without the scroll view (also rendered by
+    /// screenshot tests).
+    @ViewBuilder var content: some View {
         switch model.phase {
         case .loading:
             ProgressView()
@@ -42,7 +48,7 @@ public struct JoinView: View {
                 .accessibilityLabel(Text("Loading the event"))
 
         case let .needsAccess(problem):
-            heading(Text("Private event"), detail: "Enter the event PIN or open the private invitation link from the host.")
+            heading(Text("Private event"), detail: "Enter the event PIN. It's on the invitation; an invite link skips this step.")
             SecureField(text: $pin, prompt: Text("Event PIN").foregroundStyle(MomentsColor.textMuted)) { Text("Event PIN") }
                 .submitLabel(.go)
                 .focused($focusedField, equals: .pin)
@@ -54,7 +60,12 @@ public struct JoinView: View {
                 .disabled(isBlank(pin) || model.isWorking)
 
         case let .needsNickname(event, problem):
-            heading(Text(verbatim: event.title), detail: "Enter your name to join")
+            invitation(event)
+            faceCard
+            Text("Your name")
+                .font(MomentsFont.caption())
+                .foregroundStyle(MomentsColor.textMuted)
+                .accessibilityHidden(true)
             TextField(text: $nickname, prompt: Text("Your name").foregroundStyle(MomentsColor.textMuted)) { Text("Your name") }
                 .nicknameInput()
                 .submitLabel(.join)
@@ -68,7 +79,7 @@ public struct JoinView: View {
                 }
                 .momentsField()
             if let problem { problemText(nicknameMessage(problem)) }
-            Button("Join the Feed", action: submitNickname)
+            Button("Join the event", action: submitNickname)
                 .buttonStyle(.momentsPrimary)
                 .disabled(isBlank(nickname) || model.isWorking)
 
@@ -88,6 +99,62 @@ public struct JoinView: View {
                     .disabled(model.isWorking)
             }
         }
+    }
+
+    /// "You're invited", the event's name, and its type and date.
+    private func invitation(_ event: Event) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text("You're invited")
+                .font(MomentsFont.caption())
+                .foregroundStyle(MomentsColor.accent)
+            Text(verbatim: event.title)
+                .font(MomentsFont.display(.title))
+                .foregroundStyle(MomentsColor.text)
+                .accessibilityAddTraits(.isHeader)
+                .fixedSize(horizontal: false, vertical: true)
+            Self.eventLine(event)
+                .font(MomentsFont.body())
+                .foregroundStyle(MomentsColor.textMuted)
+        }
+        .padding(.bottom, Spacing.sm)
+    }
+
+    /// "Wedding · 14 Jun 2026": a known type in the guest's language, a
+    /// custom one as the host wrote it.
+    static func eventLine(_ event: Event) -> Text {
+        let type: Text = EventTypePreset.matching(event.type).map { Text(LocalizedStringKey($0.storedValue)) }
+            ?? Text(verbatim: event.type)
+        guard let startsAt = event.startsAt else { return type }
+        return type + Text(verbatim: " · ") + Text(startsAt, format: .dateTime.day().month().year())
+    }
+
+    private var faceCard: some View {
+        // Large text: the face goes above the words so they keep the width.
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.sm))
+            : AnyLayout(HStackLayout(spacing: Spacing.md))
+        return layout {
+            AvatarView(seed: avatarSeed, size: 64)
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text("This face goes next to everything you share.")
+                    .font(MomentsFont.caption())
+                    .foregroundStyle(MomentsColor.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    avatarSeed = JoinModel.randomAvatarSeed()
+                } label: {
+                    Label("New face", systemImage: "arrow.triangle.2.circlepath")
+                        .font(MomentsFont.body())
+                        .frame(minHeight: Radius.minimumTapTarget)
+                }
+                .foregroundStyle(MomentsColor.accent)
+                .disabled(model.isWorking)
+                .accessibilityHint(Text("Picks a different face"))
+            }
+        }
+        .padding(Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.card))
     }
 
     /// Titles are `Text` so user content (event names) is shown verbatim,
@@ -123,7 +190,7 @@ public struct JoinView: View {
 
     private func submitNickname() {
         guard !isBlank(nickname), !model.isWorking else { return }
-        Task { await model.join(nickname: nickname) }
+        Task { await model.join(nickname: nickname, avatarSeed: avatarSeed) }
     }
 
     /// Puts the keyboard on the field the step needs and reads problems aloud.

@@ -123,6 +123,15 @@ private func makeModel(invite: InviteToken? = nil, store: InMemoryEventCredentia
         #expect(service.joinCalls.first?.nickname == "Lea" && service.joinCalls.first?.credentials.guestToken == "gt")
     }
 
+    @Test func joinsWithTheFaceTheGuestWasShown() async {
+        let (model, service, _) = makeModel()
+        service.eventResults = [.success(publicEvent)]
+        service.joinResults = [.success(JoinResult(participant: guest, guestToken: "gt_new"))]
+        await model.start()
+        await model.join(nickname: "Lea", avatarSeed: "k3x9q2ab")
+        #expect(service.joinAvatarSeeds == ["k3x9q2ab"])
+    }
+
     @Test func busyNetworkAsksToTryTheNameAgainLater() async throws {
         let (model, service, store) = makeModel()
         service.eventResults = [.success(publicEvent)]
