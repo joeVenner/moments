@@ -2,7 +2,6 @@ import { z } from "@hono/zod-openapi";
 import { MAX_THUMBNAIL_BYTES } from "../thumbnails";
 import { MAX_PIN_LENGTH } from "../eventAccess";
 import { MAX_NICKNAME_LENGTH } from "../guestIdentity";
-import { REACTOR_ID_PATTERN } from "../reactions";
 import { CLIENT_UPLOAD_ID_PATTERN, MAX_CAPTION_LENGTH } from "../uploadSessions";
 import { CAPTION_FORBIDDEN } from "../captionText";
 
@@ -118,9 +117,6 @@ export const HighlightsSchema = z
 
 export const HighlightsQuerySchema = z.object({
   limit: limit.optional(),
-  reactor_id: z.string().max(100).optional().openapi({
-    description: "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's.",
-  }),
 });
 
 export const LeaderboardEntrySchema = z
@@ -146,17 +142,6 @@ export const MomentParamSchema = SlugParamSchema.extend({
   id: z.string().min(1).max(100).openapi({ param: { name: "id", in: "path" } }),
 });
 
-const reactorId = z
-  .string()
-  .regex(REACTOR_ID_PATTERN)
-  .openapi({
-    description:
-      "Deprecated: ignored when X-Guest-Token is sent (the server reacts as the token's guest). " +
-      "Required only for tokenless requests, which GUEST_TOKENS_ENFORCED refuses.",
-  });
-
-export const ReactionRequestSchema = z.object({ reactor_id: reactorId.optional() }).openapi("ReactionRequest");
-
 export const ReactionSchema = z
   .object({
     reacted: z.boolean(),
@@ -167,17 +152,11 @@ export const ReactionSchema = z
 export const FeedQuerySchema = z.object({
   before: cursor.optional(),
   limit: limit.optional(),
-  reactor_id: z.string().max(100).optional().openapi({
-    description: "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's.",
-  }),
 });
 
 export const ChangesQuerySchema = z.object({
   since: cursor,
   limit: limit.optional(),
-  reactor_id: z.string().max(100).optional().openapi({
-    description: "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's.",
-  }),
 });
 
 export const JoinRequestSchema = z
@@ -245,7 +224,7 @@ export const ViewerHeadersSchema = EventHeadersSchema.extend({
 });
 
 export const ReactionHeadersSchema = EventHeadersSchema.extend({
-  "x-guest-token": optionalHeader("This device's guest token; required once guest tokens are enforced"),
+  "x-guest-token": optionalHeader("This device's guest token (required: hearts belong to a joined guest)"),
 });
 
 export const JoinHeadersSchema = EventHeadersSchema.extend({

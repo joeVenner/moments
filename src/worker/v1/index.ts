@@ -67,7 +67,6 @@ import {
   UploadStatusSchema,
   ReactionHeadersSchema,
   ViewerHeadersSchema,
-  ReactionRequestSchema,
   ReactionSchema,
   JoinRequestSchema,
   JoinResponseSchema,
@@ -206,8 +205,8 @@ const joinEventRoute = createRoute({
 
 const reactionResponses = {
   200: json(ReactionSchema, "The guest's reaction state and the moment's total"),
-  400: json(ErrorSchema, "Invalid reactor id, or none sent without X-Guest-Token"),
-  403: json(ErrorSchema, "`guest_required`: join the event first: the X-Guest-Token is unknown (the guest left), or none was sent once guest tokens are enforced"),
+  400: json(ErrorSchema, "`invalid_request`: a malformed moment id"),
+  403: json(ErrorSchema, "`guest_required`: join the event first: no X-Guest-Token was sent, or it is unknown (the guest left)"),
   429: json(ErrorSchema, "`rate_limited`: too many reactions from this device; slow down"),
   ...commonErrors,
   404: json(ErrorSchema, "No live event with this slug, or `moment_not_found`"),
@@ -222,7 +221,6 @@ const addReactionRoute = createRoute({
   request: {
     params: MomentParamSchema,
     headers: ReactionHeadersSchema,
-    body: { content: { "application/json": { schema: ReactionRequestSchema } }, required: true },
   },
   responses: reactionResponses,
 });
@@ -236,8 +234,6 @@ const removeReactionRoute = createRoute({
   request: {
     params: MomentParamSchema,
     headers: ReactionHeadersSchema,
-    // A body, not a query: keeps the reactor id out of access logs.
-    body: { content: { "application/json": { schema: ReactionRequestSchema } }, required: true },
   },
   responses: reactionResponses,
 });
@@ -494,10 +490,10 @@ v1.openapi(getFeedRoute, async (c) => {
     eventId: c.get("event").id,
     before: parseCursor(query.before),
     limit: clampLimit(query.limit, FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT),
-    reactorId: await viewerReactorId(c.env, {
+    reactorId: await viewerReactorId(tokenOnly(c.env), {
       eventId: c.get("event").id,
       token: c.req.header(GUEST_TOKEN_HEADER),
-      clientReactorId: query.reactor_id,
+      clientReactorId: null,
     }),
   });
   c.header("Cache-Control", "no-store");
@@ -522,10 +518,10 @@ v1.openapi(getHighlightsRoute, async (c) => {
   const moments = await getHighlights(c.env.DB, {
     eventId: c.get("event").id,
     limit: clampLimit(query.limit, HIGHLIGHTS_DEFAULT_LIMIT, HIGHLIGHTS_MAX_LIMIT),
-    reactorId: await viewerReactorId(c.env, {
+    reactorId: await viewerReactorId(tokenOnly(c.env), {
       eventId: c.get("event").id,
       token: c.req.header(GUEST_TOKEN_HEADER),
-      clientReactorId: query.reactor_id,
+      clientReactorId: null,
     }),
   });
   c.header("Cache-Control", "no-store");
@@ -544,10 +540,10 @@ v1.openapi(getFeedChangesRoute, async (c) => {
     eventId: c.get("event").id,
     since: Number(query.since),
     limit: clampLimit(query.limit, CHANGES_MAX_LIMIT, CHANGES_MAX_LIMIT),
-    reactorId: await viewerReactorId(c.env, {
+    reactorId: await viewerReactorId(tokenOnly(c.env), {
       eventId: c.get("event").id,
       token: c.req.header(GUEST_TOKEN_HEADER),
-      clientReactorId: query.reactor_id,
+      clientReactorId: null,
     }),
   });
   c.header("Cache-Control", "no-store");
@@ -562,7 +558,8 @@ v1.openapi(joinEventRoute, async (c) => {
     nickname: body.nickname,
     avatarSeed: body.avatar_seed || null,
     presentedToken: c.req.header(GUEST_TOKEN_HEADER) ?? null,
-    enforceClaims: c.env.GUEST_TOKENS_ENFORCED === "true",
+    // Always: on this API a claimed name is only ever its own device's.
+    enforceClaims: true,
     isLimited: () => isJoinLimited(c.env.JOIN_LIMITER, eventId, c.req.header("CF-Connecting-IP")),
   });
   if (!result.ok && result.error === "rate_limited") {
@@ -575,27 +572,30 @@ v1.openapi(joinEventRoute, async (c) => {
   return c.json(result.guestToken ? { participant, guest_token: result.guestToken } : { participant }, 200);
 });
 
+/**
+ * This API is new and has no tokenless clients: its reads and hearts act as
+ * if GUEST_TOKENS_ENFORCED were set, whatever the legacy web routes allow.
+ */
+function tokenOnly<T extends { GUEST_TOKENS_ENFORCED?: string }>(env: T): T {
+  return { ...env, GUEST_TOKENS_ENFORCED: "true" };
+}
+
 type ReactionOutcome =
   | { ok: true; state: ReactionState }
   | { ok: false; status: 400 | 403 | 404 | 429; body: { error: string; code: string } };
 
 /**
- * Shared by add and remove: guest check (when enforced), rate limit, then
- * the write. The limiter keys on the guest session when there is one, else
- * the client IP, and runs before any moment query.
+ * Shared by add and remove: guest check (the token is required), rate
+ * limit, then the write. The limiter keys on the guest session and runs
+ * before any moment query.
  */
-async function applyReaction(
-  c: Context<V1Env>,
-  momentId: string,
-  reactorId: string | undefined,
-  reacted: boolean
-): Promise<ReactionOutcome> {
+async function applyReaction(c: Context<V1Env>, momentId: string, reacted: boolean): Promise<ReactionOutcome> {
   const event = c.get("event");
-  const gate = await gateReaction(c.env, {
+  const gate = await gateReaction(tokenOnly(c.env), {
     eventId: event.id,
     token: c.req.header(GUEST_TOKEN_HEADER),
     clientIp: c.req.header("CF-Connecting-IP"),
-    reactorId,
+    reactorId: null,
   });
   if (!gate.ok) return { ok: false, status: gate.status, body: gate.body };
   const state = await setReaction(c.env.DB, { eventId: event.id, momentId, reactorId: gate.reactorId, reacted });
@@ -604,12 +604,12 @@ async function applyReaction(
 }
 
 v1.openapi(addReactionRoute, async (c) => {
-  const outcome = await applyReaction(c, c.req.valid("param").id, c.req.valid("json").reactor_id, true);
+  const outcome = await applyReaction(c, c.req.valid("param").id, true);
   return outcome.ok ? c.json(outcome.state, 200) : c.json(outcome.body, outcome.status);
 });
 
 v1.openapi(removeReactionRoute, async (c) => {
-  const outcome = await applyReaction(c, c.req.valid("param").id, c.req.valid("json").reactor_id, false);
+  const outcome = await applyReaction(c, c.req.valid("param").id, false);
   return outcome.ok ? c.json(outcome.state, 200) : c.json(outcome.body, outcome.status);
 });
 

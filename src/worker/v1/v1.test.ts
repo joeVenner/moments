@@ -264,13 +264,13 @@ describe("feed", () => {
     expect(changes.upserts.map((m) => m.id)).toEqual(["m1", "m2"]);
   });
 
-  it("reports reacted as a boolean for the reactor", async () => {
+  it("never reports a tokenless device's heart, whatever reactor_id says", async () => {
     addMoment("m1");
     sqlite.raw
       .prepare("INSERT INTO moment_reactions (id, moment_id, event_id, reactor_id) VALUES ('r1', 'm1', 'event-1', 'device-0001')")
       .run();
     const page = FeedPageSchema.parse(await (await call("/events/party/feed?reactor_id=device-0001")).json());
-    expect(page.moments[0]).toMatchObject({ reacted: true, reaction_count: 1 });
+    expect(page.moments[0]).toMatchObject({ reacted: false, reaction_count: 1 });
   });
 
   it("reports the token's guest's heart, whatever reactor_id says", async () => {
@@ -308,7 +308,6 @@ describe("feed", () => {
     "/events/party/feed?limit=abc",
     "/events/party/feed/changes",
     "/events/party/feed/changes?since=1.5",
-    `/events/party/feed?reactor_id=${"x".repeat(101)}`,
   ])("%s is a 400 with a stable error shape", async (path) => {
     const res = await call(path);
     expect(res.status).toBe(400);
@@ -332,8 +331,7 @@ describe("POST /events/{slug}/participants", () => {
     expect(again.participant.id).toBe(joined.participant.id);
   });
 
-  it("returns 409 nickname_taken when enforcement is on", async () => {
-    extraEnv = { GUEST_TOKENS_ENFORCED: "true" };
+  it("returns 409 nickname_taken for another device's name, enforced or not", async () => {
     await join("party", { nickname: "Sara" });
     const res = await join("party", { nickname: "Sara" });
     expect(res.status).toBe(409);
@@ -402,12 +400,17 @@ describe("highlights and leaderboard", () => {
 
   it("ranks visible moments by hearts, newest first among ties, with this device's state", async () => {
     for (const id of ["m1", "m2", "m3", "m4"]) addMoment(id);
-    heart("m1", "aaaaaaaa1");
-    heart("m3", "aaaaaaaa1");
     heart("m3", "bbbbbbbb2");
     heart("m4", "bbbbbbbb2");
     sqlite.raw.prepare("UPDATE moments SET moderation_status = 'hidden' WHERE id = 'm4'").run();
-    const res = await call("/events/party/highlights?reactor_id=aaaaaaaa1&limit=3");
+    // Sara hearts m1 and m3 through the API; the other hearts are someone else's.
+    const joined = (await (await join("party", { nickname: "Sara" })).json()) as { guest_token: string };
+    const headers = { "X-Guest-Token": joined.guest_token };
+    for (const id of ["m1", "m3"]) await call(`/events/party/moments/${id}/reaction`, { method: "PUT", headers });
+    // A tokenless reactor_id never reports anyone's hearts.
+    const tokenless = HighlightsSchema.parse(await (await call("/events/party/highlights?reactor_id=bbbbbbbb2")).json());
+    expect(tokenless.moments.every((m) => !m.reacted)).toBe(true);
+    const res = await call("/events/party/highlights?limit=3", { headers });
     expect(res.status).toBe(200);
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     const body = exact(HighlightsSchema, await res.json());
@@ -489,77 +492,74 @@ describe("highlights and leaderboard", () => {
 });
 
 describe("reactions", () => {
-  const REACTOR = "3f2a9c1e5b7d4f60a8e2c4b6d8f0a1b2";
+  /** A joined guest's token for `slug` (a grant for private events). */
+  async function guest(nickname = "Sara", slug = "party", headers: Record<string, string> = {}): Promise<string> {
+    const res = await join(slug, { nickname }, headers);
+    return ((await res.json()) as { guest_token: string }).guest_token;
+  }
 
   function react(
     method: "PUT" | "DELETE",
     momentId: string,
-    reactorId = REACTOR,
+    token: string | null,
     headers: Record<string, string> = {},
     slug = "party"
   ) {
     return call(`/events/${slug}/moments/${momentId}/reaction`, {
       method,
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({ reactor_id: reactorId }),
+      headers: { ...(token ? { "X-Guest-Token": token } : {}), ...headers },
     });
   }
 
   beforeEach(() => addMoment("m1"));
 
-  it("adds and removes idempotently, counting every device", async () => {
-    const first = await react("PUT", "m1");
+  it("adds and removes idempotently, counting every guest", async () => {
+    const sara = await guest("Sara");
+    const first = await react("PUT", "m1", sara);
     expect(first.status).toBe(200);
     expect(exact(ReactionSchema, await first.json())).toEqual({ reacted: true, reaction_count: 1 });
-    expect(await (await react("PUT", "m1")).json()).toEqual({ reacted: true, reaction_count: 1 });
-    expect(await (await react("PUT", "m1", "a1b2c3d4-0000-4000-8000-000000000000")).json()).toEqual({
-      reacted: true,
-      reaction_count: 2,
-    });
-    expect(await (await react("DELETE", "m1")).json()).toEqual({ reacted: false, reaction_count: 1 });
-    expect(await (await react("DELETE", "m1")).json()).toEqual({ reacted: false, reaction_count: 1 });
+    expect(await (await react("PUT", "m1", sara)).json()).toEqual({ reacted: true, reaction_count: 1 });
+    expect(await (await react("PUT", "m1", await guest("Ali"))).json()).toEqual({ reacted: true, reaction_count: 2 });
+    expect(await (await react("DELETE", "m1", sara)).json()).toEqual({ reacted: false, reaction_count: 1 });
+    expect(await (await react("DELETE", "m1", sara)).json()).toEqual({ reacted: false, reaction_count: 1 });
   });
 
-  it("shows in the feed as this device's reaction", async () => {
-    await react("PUT", "m1");
-    const page = (await (await call(`/events/party/feed?reactor_id=${REACTOR}`)).json()) as {
+  it("shows in the feed as this guest's reaction", async () => {
+    const sara = await guest();
+    await react("PUT", "m1", sara);
+    const page = (await (await call("/events/party/feed", { headers: { "X-Guest-Token": sara } })).json()) as {
       moments: { reacted: boolean; reaction_count: number }[];
     };
     expect(page.moments[0]).toMatchObject({ reacted: true, reaction_count: 1 });
   });
 
-  it("rejects malformed reactor ids", async () => {
-    for (const bad of ["short77", "has space here", "x".repeat(101), "semi;colon00"]) {
-      const put = await react("PUT", "m1", bad);
-      expect(put.status).toBe(400);
-      expect(await put.json()).toMatchObject({ code: "invalid_request" });
-      expect((await react("DELETE", "m1", bad)).status).toBe(400);
-    }
-  });
-
-  it("accepts the shortest and longest reactor ids", async () => {
-    expect((await react("PUT", "m1", "abcdefgh")).status).toBe(200);
-    expect((await react("PUT", "m1", "A".repeat(100))).status).toBe(200);
-  });
-
-  it("needs a body", async () => {
-    for (const method of ["PUT", "DELETE"]) {
-      const res = await call("/events/party/moments/m1/reaction", {
+  it("needs a joined guest, whatever GUEST_TOKENS_ENFORCED says", async () => {
+    for (const method of ["PUT", "DELETE"] as const) {
+      // No token: a reactor_id in the body no longer helps.
+      const tokenless = await call("/events/party/moments/m1/reaction", {
         method,
         headers: { "Content-Type": "application/json" },
-        body: "{}",
+        body: JSON.stringify({ reactor_id: "3f2a9c1e5b7d4f60a8e2c4b6d8f0a1b2" }),
       });
-      expect(res.status).toBe(400);
+      expect(tokenless.status).toBe(403);
+      expect(await tokenless.json()).toMatchObject({ code: "guest_required" });
+      // An unknown token.
+      expect((await react(method, "m1", "gt_" + "a".repeat(43))).status).toBe(403);
     }
+    // A token from another event doesn't count here.
+    seedEvent("event-2", "other");
+    expect((await react("PUT", "m1", await guest("Sara", "other"))).status).toBe(403);
+    expect(sqlite.raw.prepare("SELECT COUNT(*) AS n FROM moment_reactions").get()).toEqual({ n: 0 });
   });
 
   it("stays at one heart under concurrent adds", async () => {
-    const results = await Promise.all(Array.from({ length: 5 }, () => react("PUT", "m1")));
+    const sara = await guest();
+    const results = await Promise.all(Array.from({ length: 5 }, () => react("PUT", "m1", sara)));
     expect(results.every((res) => res.status === 200)).toBe(true);
     expect(sqlite.raw.prepare("SELECT COUNT(*) AS n FROM moment_reactions").get()).toEqual({ n: 1 });
   });
 
-  it("works on a private event with its grant", async () => {
+  it("works on a private event with its grant, and needs the grant", async () => {
     seedEvent("event-p", "secret", "private");
     addMoment("m3", "event-p");
     const grant = await signAccessGrant(SECRET, {
@@ -567,65 +567,34 @@ describe("reactions", () => {
       accessVersion: 1,
       expiresAt: Math.floor(Date.now() / 1000) + 600,
     });
-    const res = await react("PUT", "m3", REACTOR, { "X-Event-Access": grant }, "secret");
+    const sara = await guest("Sara", "secret", { "X-Event-Access": grant });
+    const res = await react("PUT", "m3", sara, { "X-Event-Access": grant }, "secret");
     expect(await res.json()).toEqual({ reacted: true, reaction_count: 1 });
+    expect((await react("PUT", "m3", sara, {}, "secret")).status).toBe(401);
   });
 
-  it("is rate limited per device, before touching moments", async () => {
+  it("is rate limited per guest session, before touching moments", async () => {
+    const sara = await guest();
     const limit = vi.fn().mockResolvedValue({ success: false });
     extraEnv = { REACTION_LIMITER: { limit } };
-    const res = await react("PUT", "m1", REACTOR, { "CF-Connecting-IP": "203.0.113.9" });
+    const res = await react("PUT", "m1", sara);
     expect(res.status).toBe(429);
     expect(await res.json()).toMatchObject({ code: "rate_limited" });
-    expect(limit).toHaveBeenCalledWith({ key: "event-1:ip:203.0.113.9" });
+    expect(limit.mock.calls[0][0].key).toMatch(/^event-1:guest:/);
     expect(sqlite.raw.prepare("SELECT COUNT(*) AS n FROM moment_reactions").get()).toEqual({ n: 0 });
   });
 
-  it("keys the limit on the guest session when there is one", async () => {
-    const limit = vi.fn().mockResolvedValue({ success: true });
-    extraEnv = { REACTION_LIMITER: { limit } };
-    const joined = (await (await join("party", { nickname: "Sara" })).json()) as { guest_token: string };
-    await react("PUT", "m1", REACTOR, { "X-Guest-Token": joined.guest_token });
-    expect(limit.mock.calls[0][0].key).toMatch(/^event-1:guest:/);
-  });
-
   it("only reaches visible moments of this event", async () => {
+    const sara = await guest();
     sqlite.raw.prepare("UPDATE moments SET moderation_status = 'hidden' WHERE id = 'm1'").run();
     seedEvent("event-2", "other");
     addMoment("m2", "event-2");
     for (const id of ["m1", "m2", "missing"]) {
-      const res = await react("PUT", id);
+      const res = await react("PUT", id, sara);
       expect(res.status).toBe(404);
       expect(await res.json()).toMatchObject({ code: "moment_not_found" });
     }
     expect(sqlite.raw.prepare("SELECT COUNT(*) AS n FROM moment_reactions").get()).toEqual({ n: 0 });
-  });
-
-  it("needs the grant on private events", async () => {
-    seedEvent("event-p", "secret", "private");
-    addMoment("m3", "event-p");
-    const res = await call("/events/secret/moments/m3/reaction", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reactor_id: REACTOR }),
-    });
-    expect(res.status).toBe(401);
-  });
-
-  it("requires a joined device once guest tokens are enforced", async () => {
-    extraEnv = { GUEST_TOKENS_ENFORCED: "true" };
-    const blocked = await react("PUT", "m1");
-    expect(blocked.status).toBe(403);
-    expect(await blocked.json()).toMatchObject({ code: "guest_required" });
-    expect((await react("PUT", "m1", REACTOR, { "X-Guest-Token": "gt_" + "a".repeat(43) })).status).toBe(403);
-    const joined = (await (await join("party", { nickname: "Sara" })).json()) as { guest_token: string };
-    expect((await react("PUT", "m1", REACTOR, { "X-Guest-Token": joined.guest_token })).status).toBe(200);
-    expect((await react("DELETE", "m1", REACTOR, { "X-Guest-Token": joined.guest_token })).status).toBe(200);
-    expect((await react("DELETE", "m1")).status).toBe(403);
-    // A token from another event doesn't count here.
-    seedEvent("event-2", "other");
-    const elsewhere = (await (await join("other", { nickname: "Sara" })).json()) as { guest_token: string };
-    expect((await react("PUT", "m1", REACTOR, { "X-Guest-Token": elsewhere.guest_token })).status).toBe(403);
   });
 });
 

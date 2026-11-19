@@ -24,7 +24,7 @@ private func page(_ seqs: ClosedRange<Int>, nextBefore: Int? = nil, cursor: Int 
 @MainActor
 private func makeModel(store: InMemoryEventCredentialStore = .init()) -> (FeedModel, FakeService) {
     let service = FakeService()
-    return (FeedModel(event: event, participant: guest, slug: slug, reactorID: "r1", service: service, store: store), service)
+    return (FeedModel(event: event, participant: guest, slug: slug, service: service, store: store), service)
 }
 
 @Suite @MainActor struct FeedModelTests {
@@ -38,7 +38,7 @@ private func makeModel(store: InMemoryEventCredentialStore = .init()) -> (FeedMo
         #expect(model.phase == .loaded)
         #expect(model.moments.map(\.seq) == [3, 2, 1])
         let call = service.pageCalls.first
-        #expect(call?.before == nil && call?.reactorID == "r1")
+        #expect(call?.before == nil)
         #expect(call?.credentials == EventCredentials(accessGrant: "grant", guestToken: "gt"))
         #expect(model.mediaAccessGrant() == "grant")
     }
@@ -300,7 +300,6 @@ private final class Clock: @unchecked Sendable {
         #expect(model.moments.first?.reactionCount == 3)
         await task?.value
         #expect(service.reactionCalls.map(\.reacted) == [true])
-        #expect(service.reactionCalls.first?.reactorID == "r1")
         #expect(model.moments.first?.reactionCount == 7)
     }
 

@@ -31,7 +31,7 @@ private final class Clock: @unchecked Sendable {
     private func makeModel(clock: Clock = Clock()) -> (HighlightsModel, FakeService) {
         let service = FakeService()
         let model = HighlightsModel(
-            slug: slug, reactorID: "r1", service: service, store: InMemoryEventCredentialStore(), now: { clock.now }
+            slug: slug, service: service, store: InMemoryEventCredentialStore(), now: { clock.now }
         )
         return (model, service)
     }
@@ -46,7 +46,6 @@ private final class Clock: @unchecked Sendable {
         await model.loadIfStale()
         #expect(model.phase == .loaded)
         #expect(model.moments.map(\.id) == ["b", "a"])
-        #expect(service.highlightsCalls.first?.reactorID == "r1")
         await model.loadIfStale()
         #expect(service.highlightsCalls.count == 1)
         clock.advance(by: ReloadThrottle.freshFor)
@@ -171,7 +170,7 @@ private final class Clock: @unchecked Sendable {
     private func makeModel(clock: Clock = Clock()) -> (HighlightsModel, FakeService) {
         let service = FakeService()
         let model = HighlightsModel(
-            slug: slug, reactorID: "r1", service: service, store: InMemoryEventCredentialStore(), now: { clock.now }
+            slug: slug, service: service, store: InMemoryEventCredentialStore(), now: { clock.now }
         )
         return (model, service)
     }
@@ -237,7 +236,7 @@ private final class Clock: @unchecked Sendable {
     @Test func aHeartSettledInTheFeedShowsInHighlightsWithoutEchoing() async {
         let service = FakeService()
         let store = InMemoryEventCredentialStore()
-        let highlights = HighlightsModel(slug: slug, reactorID: "r1", service: service, store: store)
+        let highlights = HighlightsModel(slug: slug, service: service, store: store)
         service.highlightsResults = [.success([moment("a", seq: 1, reactions: 2)])]
         await highlights.loadIfStale()
         var echoes = 0
@@ -253,7 +252,7 @@ private final class Clock: @unchecked Sendable {
     @Test func aHeartInFlightHereIsNotOverwrittenFromElsewhere() async {
         let service = FakeService()
         let gate = Gate()
-        let highlights = HighlightsModel(slug: slug, reactorID: "r1", service: service, store: InMemoryEventCredentialStore())
+        let highlights = HighlightsModel(slug: slug, service: service, store: InMemoryEventCredentialStore())
         service.highlightsResults = [.success([moment("a", seq: 1, reactions: 2)])]
         service.reactionResults = [.success(ReactionState(reacted: true, reactionCount: 3))]
         service.beforeReaction = { await gate.wait() }

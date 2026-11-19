@@ -34,16 +34,14 @@ public final class HighlightsModel {
     @ObservationIgnored private let service: any MomentsService
     @ObservationIgnored private let store: any EventCredentialStore
     @ObservationIgnored private let slug: EventSlug
-    @ObservationIgnored private let reactorID: String
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let logger = Logger(subsystem: "moments", category: "highlights")
 
     public init(
-        slug: EventSlug, reactorID: String, service: any MomentsService, store: any EventCredentialStore,
+        slug: EventSlug, service: any MomentsService, store: any EventCredentialStore,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.slug = slug
-        self.reactorID = reactorID
         self.service = service
         self.store = store
         self.now = now
@@ -98,7 +96,7 @@ public final class HighlightsModel {
         if !state.hasLoaded { phase = .loading }
         do {
             let loaded = try await service.highlights(
-                slug: slug.value, limit: Self.limit, reactorID: reactorID,
+                slug: slug.value, limit: Self.limit,
                 credentials: eventCredentials(store: store, slug: slug)
             )
             state.replace(with: loaded)
@@ -142,7 +140,7 @@ extension HighlightsModel: ReactionHost {
 
     func sendReaction(_ reacted: Bool, momentID: String) async throws -> ReactionState {
         try await service.setReaction(
-            reacted, slug: slug.value, momentID: momentID, reactorID: reactorID,
+            reacted, slug: slug.value, momentID: momentID,
             credentials: eventCredentials(store: store, slug: slug)
         )
     }
