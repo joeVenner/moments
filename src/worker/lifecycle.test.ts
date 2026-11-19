@@ -15,6 +15,7 @@ describe("cleanupEvent", () => {
       size_bytes: 100,
       mime_type: "image/png",
       moderation_status: "approved",
+      thumb_key: "events/event/moments/photo.png.thumb.jpg",
     };
     const statements: unknown[] = [];
     const db = {
@@ -50,6 +51,7 @@ describe("cleanupEvent", () => {
     await cleanupEvent(env, { id: "event" });
 
     expect(bucket.delete).toHaveBeenCalledWith("events/event/moments/photo.png");
+    expect(bucket.delete).toHaveBeenCalledWith(["events/event/moments/photo.png.thumb.jpg"]);
     expect(bucket.delete).toHaveBeenCalledWith(["events/event/cover/cover.png"]);
     expect(db.batch).toHaveBeenCalledOnce();
     expect(statements).toHaveLength(9);

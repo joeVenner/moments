@@ -19,8 +19,19 @@ describe("deleteMomentMedia", () => {
 
   it("deletes Worker-served media from R2 using the original key", async () => {
     const env = environment();
-    await deleteMomentMedia(env, "/media/events/event-id/moments/file.png");
+    await deleteMomentMedia(env, { media_url: "/media/events/event-id/moments/file.png" });
     expect(env.BUCKET.delete).toHaveBeenCalledWith("events/event-id/moments/file.png");
+  });
+
+  it("deletes the moment's thumbnail and other derived images too", async () => {
+    const env = environment();
+    await deleteMomentMedia(env, {
+      media_url: "/media/events/event-id/moments/file.jpg",
+      thumb_key: "events/event-id/moments/file.jpg.thumb.jpg",
+      display_key: null,
+    });
+    expect(env.BUCKET.delete).toHaveBeenCalledWith(["events/event-id/moments/file.jpg.thumb.jpg"]);
+    expect(env.BUCKET.delete).toHaveBeenCalledWith("events/event-id/moments/file.jpg");
   });
 
   it("deletes a configured Stream asset by UID", async () => {
@@ -32,10 +43,7 @@ describe("deleteMomentMedia", () => {
       STREAM_CUSTOMER_CODE: "customer",
     });
 
-    await deleteMomentMedia(
-      env,
-      "https://customer-customer.cloudflarestream.com/video-uid/iframe"
-    );
+    await deleteMomentMedia(env, { media_url: "https://customer-customer.cloudflarestream.com/video-uid/iframe" });
 
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.cloudflare.com/client/v4/accounts/account/stream/video-uid",

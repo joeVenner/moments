@@ -24,7 +24,7 @@ export async function cleanupEvent(env: Env, event: Pick<EventRow, "id">, abort?
     "SELECT * FROM moments WHERE event_id = ?"
   ).bind(event.id).all<MomentRow>();
 
-  for (const moment of moments) await deleteMomentMedia(env, moment.media_url);
+  for (const moment of moments) await deleteMomentMedia(env, moment);
 
   let cursor: string | undefined;
   do {

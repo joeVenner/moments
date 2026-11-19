@@ -716,7 +716,7 @@ app.delete("/api/admin/moments/:id", async (c) => {
   if (!moment) return c.json({ error: "moment not found" }, 404);
 
   try {
-    await deleteMomentMedia(c.env, moment.media_url);
+    await deleteMomentMedia(c.env, moment);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "unable to delete media" }, 502);
   }
