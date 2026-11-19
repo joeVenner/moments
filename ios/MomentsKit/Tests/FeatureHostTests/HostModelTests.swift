@@ -39,6 +39,9 @@ final class FakeHostService: HostService, @unchecked Sendable {
     private var _actionGate: Gate?
     private var _listGate: Gate?
     private var _listCalls = 0
+    private var _saveResult: Result<AdminEventDetail, Error> = .failure(MomentsAPIError.eventNotFound)
+    private var _saveCalls: [String] = []
+    private var _saveGate: Gate?
     /// Runs before a sign-in or events request answers (to hold it open).
     let beforeAnswer: Gate?
     private let holdsSignIn: Bool
@@ -89,6 +92,16 @@ final class FakeHostService: HostService, @unchecked Sendable {
         set { lock.withLock { _listGate = newValue } }
     }
     var listCalls: Int { lock.withLock { _listCalls } }
+    var saveResult: Result<AdminEventDetail, Error> {
+        get { lock.withLock { _saveResult } }
+        set { lock.withLock { _saveResult = newValue } }
+    }
+    var saveGate: Gate? {
+        get { lock.withLock { _saveGate } }
+        set { lock.withLock { _saveGate = newValue } }
+    }
+    /// One line per create/edit/access/dates call, e.g. "access e1 private 123456".
+    var saveCalls: [String] { lock.withLock { _saveCalls } }
     var moderateCalls: [(id: String, status: AdminMoment.Status)] { lock.withLock { _moderateCalls } }
     var deleteCalls: [String] { lock.withLock { _deleteCalls } }
     var signInCalls: Int { lock.withLock { _signInCalls } }
@@ -126,6 +139,23 @@ final class FakeHostService: HostService, @unchecked Sendable {
         let (error, gate) = lock.withLock { _deleteCalls.append(momentID); return (_deleteError, _actionGate) }
         if let gate { await gate.wait() }
         if let error { throw error }
+    }
+    private func save(_ call: String) async throws -> AdminEventDetail {
+        let (result, gate) = lock.withLock { _saveCalls.append(call); return (_saveResult, _saveGate) }
+        if let gate { await gate.wait() }
+        return try result.get()
+    }
+    func createEvent(token: String, details: EventDetails, endsAt: Date?) async throws -> AdminEventDetail {
+        try await save("create \(details.title)|\(details.type)|\(details.mainCharacters ?? "-")|\(details.description ?? "-") ends:\(endsAt != nil)")
+    }
+    func updateEvent(token: String, id: String, details: EventDetails) async throws -> AdminEventDetail {
+        try await save("update \(id) \(details.title)|\(details.type)|\(details.mainCharacters ?? "-")|\(details.description ?? "-")")
+    }
+    func updateAccess(token: String, id: String, mode: Event.AccessMode, newPIN: String?) async throws -> AdminEventDetail {
+        try await save("access \(id) \(mode.rawValue) \(newPIN ?? "-")")
+    }
+    func updateDates(token: String, id: String, uploadsCloseAt: Date?, deleteAfter: Date?) async throws -> AdminEventDetail {
+        try await save("dates \(id) close:\(uploadsCloseAt != nil) delete:\(deleteAfter != nil)")
     }
     func adminEvents(token: String) async throws -> AdminEventList {
         let result = lock.withLock { _eventTokens.append(token); return _eventsResult }
@@ -780,5 +810,286 @@ func adminMoment(_ id: String, status: AdminMoment.Status = .approved) -> AdminM
         await hiding.value
         await deleting.value
         #expect(model.moments.map(\.id) == ["m1"] && model.moments[0].isHidden && model.pendingIDs.isEmpty)
+    }
+}
+
+
+private func plainEvent(_ id: String, mode: Event.AccessMode = .public, close: Date? = nil, purge: Date? = nil) -> Event {
+    Event(
+        id: id, slug: id, title: "Party", type: "Party", mainCharacters: "Sara", description: nil,
+        coverImageURL: nil, createdAt: start, startsAt: nil, expiresAt: nil, uploadsCloseAt: close,
+        purgeAfter: purge, archivedAt: nil, accessMode: mode, areUploadsOpen: true
+    )
+}
+
+@Suite struct EventFormTests {
+    @Test func aNewFormNeedsATitleAndType() {
+        #expect(EventForm().problems(now: start) == [.titleMissing, .typeMissing])
+    }
+
+    @Test func trimsTextAndTreatsBlankOptionalTextAsNone() {
+        var form = EventForm()
+        form.title = "  Sara & Omar  "
+        form.type = "Wedding\n"
+        form.mainCharacters = "   "
+        form.description = " Welcome "
+        #expect(form.problems(now: start).isEmpty)
+        #expect(form.details == EventDetails(title: "Sara & Omar", type: "Wedding", mainCharacters: nil, description: "Welcome"))
+    }
+
+    @Test func countsLengthsLikeTheServer() {
+        var form = EventForm()
+        // 60 emoji are 120 UTF-16 units: the most a title may have.
+        form.title = String(repeating: "🎉", count: 60)
+        form.type = String(repeating: "x", count: 61)
+        form.mainCharacters = String(repeating: "x", count: 201)
+        form.description = String(repeating: "x", count: 1001)
+        #expect(form.problems(now: start) == [.typeTooLong, .mainCharactersTooLong, .descriptionTooLong])
+        form.title += "a"
+        #expect(form.problems(now: start).contains(.titleTooLong))
+    }
+
+    @Test func anEndMustBeAheadAndAfterTheStart() {
+        var form = EventForm()
+        form.title = "Party"
+        form.type = "Party"
+        form.endsAt = start
+        #expect(form.problems(now: start) == [.endInPast])
+        form.endsAt = later
+        form.startsAt = later.addingTimeInterval(60)
+        #expect(form.problems(now: start) == [.endBeforeStart])
+    }
+
+    @Test func theEditFormStartsFromTheEvent() {
+        let form = EventForm(event: plainEvent("e1"))
+        #expect(form.title == "Party" && form.mainCharacters == "Sara" && form.description.isEmpty && form.endsAt == nil)
+    }
+}
+
+@Suite @MainActor struct HostEventFormModelTests {
+    @Test func createsTheEventOnce() async {
+        let service = FakeHostService()
+        service.saveResult = .success(detail("new"))
+        let model = HostEventFormModel(service: service, account: account(service, store: FlakyHostStore(live)))
+        model.form.title = " Party "
+        model.form.type = "Party"
+        await model.save(now: start)
+        #expect(model.phase == .saved(detail("new")))
+        #expect(service.saveCalls == ["create Party|Party|-|- ends:false"])
+    }
+
+    @Test func doesNothingWhileTheFormHasProblems() async {
+        let service = FakeHostService()
+        let model = HostEventFormModel(service: service, account: account(service, store: FlakyHostStore(live)))
+        await model.save(now: start)
+        #expect(model.phase == .editing && service.saveCalls.isEmpty)
+    }
+
+    @Test func editsTheEventByID() async {
+        let service = FakeHostService()
+        service.saveResult = .success(detail("e1"))
+        let model = HostEventFormModel(editing: plainEvent("e1"), service: service, account: account(service, store: FlakyHostStore(live)))
+        model.form.mainCharacters = ""
+        await model.save(now: start)
+        #expect(service.saveCalls == ["update e1 Party|Party|-|-"])
+        #expect(model.phase == .saved(detail("e1")))
+    }
+
+    @Test(arguments: [
+        (MomentsAPIError.rateLimited, HostSaveFailure.rateLimited),
+        (.invalidRequest, .refused),
+        (.eventNotFound, .gone),
+        (.transport(.notConnectedToInternet), .offline),
+        (.upgradeRequired, .appTooOld),
+        (.server(status: 500, code: nil), .failed),
+    ])
+    func showsWhySavingFailed(_ error: MomentsAPIError, _ expected: HostSaveFailure) async {
+        let service = FakeHostService()
+        service.saveResult = .failure(error)
+        let model = HostEventFormModel(editing: plainEvent("e1"), service: service, account: account(service, store: FlakyHostStore(live)))
+        await model.save(now: start)
+        #expect(model.phase == .failed(expected))
+        model.dismissFailure()
+        #expect(model.phase == .editing)
+    }
+
+    @Test func aSavedFormNeverCreatesAgain() async {
+        let service = FakeHostService()
+        service.saveResult = .success(detail("new"))
+        let model = HostEventFormModel(service: service, account: account(service, store: FlakyHostStore(live)))
+        model.form.title = "Party"
+        model.form.type = "Party"
+        await model.save(now: start)
+        await model.save(now: start)
+        #expect(service.saveCalls.count == 1)
+    }
+
+    @Test func aBlankTitleIncludesTheInvisibleSpaceJSTrims() {
+        var form = EventForm()
+        form.title = "\u{FEFF} "
+        form.type = "Party"
+        #expect(form.problems(now: start) == [.titleMissing])
+    }
+
+    @Test func anUnclearCreateFailureSaysTheEventMayExist() async {
+        let service = FakeHostService()
+        service.saveResult = .failure(MomentsAPIError.transport(.timedOut))
+        let model = HostEventFormModel(service: service, account: account(service, store: FlakyHostStore(live)))
+        model.form.title = "Party"
+        model.form.type = "Party"
+        await model.save(now: start)
+        #expect(model.phase == .failed(.offline) && model.mayHaveCreated)
+        let refused = HostEventFormModel(service: service, account: account(service, store: FlakyHostStore(live)))
+        refused.form = model.form
+        service.saveResult = .failure(MomentsAPIError.rateLimited)
+        await refused.save(now: start)
+        #expect(refused.phase == .failed(.rateLimited) && !refused.mayHaveCreated)
+    }
+
+    @Test func aDeadSessionSignsOut() async {
+        let service = FakeHostService()
+        service.saveResult = .failure(MomentsAPIError.hostAuthRequired)
+        let host = account(service, store: FlakyHostStore(live))
+        let model = HostEventFormModel(service: service, account: host)
+        model.form.title = "Party"
+        model.form.type = "Party"
+        await model.save(now: start)
+        #expect(model.phase == .signedOut && host.state == .signedOut)
+        #expect(service.saveCalls.count == 1)
+    }
+
+    @Test func aSecondTapWhileSavingIsIgnored() async {
+        let service = FakeHostService()
+        let gate = Gate()
+        service.saveGate = gate
+        service.saveResult = .success(detail("new"))
+        let model = HostEventFormModel(service: service, account: account(service, store: FlakyHostStore(live)))
+        model.form.title = "Party"
+        model.form.type = "Party"
+        let first = Task { await model.save(now: start) }
+        while service.saveCalls.isEmpty { await Task.yield() }
+        await model.save(now: start)
+        await gate.open()
+        await first.value
+        #expect(service.saveCalls.count == 1 && model.phase == .saved(detail("new")))
+    }
+}
+
+@Suite @MainActor struct HostEventAccessModelTests {
+    @Test func goingPrivateNeedsAPINAndSignsGuestsOut() async {
+        let service = FakeHostService()
+        service.saveResult = .success(detail("e1"))
+        let model = HostEventAccessModel(event: plainEvent("e1"), service: service, account: account(service, store: FlakyHostStore(live)))
+        #expect(!model.hasChanges && model.problems.isEmpty)
+        model.mode = .private
+        #expect(model.problems == [.pinRequired] && model.signsGuestsOut)
+        await model.save()
+        #expect(service.saveCalls.isEmpty)
+        model.newPIN = " 482913 "
+        await model.save()
+        #expect(service.saveCalls == ["access e1 private 482913"])
+        #expect(model.phase == .saved(detail("e1")) && model.newPIN.isEmpty)
+    }
+
+    @Test func aPrivateEventKeepsItsPINWhenNoneIsTyped() async {
+        let service = FakeHostService()
+        service.saveResult = .success(detail("e1"))
+        let model = HostEventAccessModel(event: plainEvent("e1", mode: .private), service: service, account: account(service, store: FlakyHostStore(live)))
+        #expect(model.problems.isEmpty && !model.signsGuestsOut && !model.hasChanges)
+        model.mode = .public
+        #expect(!model.signsGuestsOut)
+        await model.save()
+        #expect(service.saveCalls == ["access e1 public -"])
+    }
+
+    @Test func forgetsThePINWhenTheEventIsGoneButKeepsItForARetry() async {
+        let service = FakeHostService()
+        service.saveResult = .failure(MomentsAPIError.transport(.notConnectedToInternet))
+        let model = HostEventAccessModel(event: plainEvent("e1", mode: .private), service: service, account: account(service, store: FlakyHostStore(live)))
+        model.newPIN = "482913"
+        await model.save()
+        #expect(model.newPIN == "482913")
+        model.dismissFailure()
+        service.saveResult = .failure(MomentsAPIError.eventNotFound)
+        await model.save()
+        #expect(model.phase == .failed(.gone) && model.newPIN.isEmpty)
+    }
+
+    @Test func keepsADifferentPINTypedWhileSaving() async {
+        let service = FakeHostService()
+        let gate = Gate()
+        service.saveGate = gate
+        service.saveResult = .success(detail("e1"))
+        let model = HostEventAccessModel(event: plainEvent("e1", mode: .private), service: service, account: account(service, store: FlakyHostStore(live)))
+        model.newPIN = "111111"
+        let saving = Task { await model.save() }
+        while service.saveCalls.isEmpty { await Task.yield() }
+        model.newPIN = "222222"
+        await gate.open()
+        await saving.value
+        #expect(model.newPIN == "222222" && service.saveCalls == ["access e1 private 111111"])
+    }
+
+    @Test func checksThePINLength() {
+        let service = FakeHostService()
+        let model = HostEventAccessModel(event: plainEvent("e1", mode: .private), service: service, account: account(service))
+        model.newPIN = "12345"
+        #expect(model.problems == [.pinTooShort])
+        model.newPIN = String(repeating: "1", count: 21)
+        #expect(model.problems == [.pinTooLong])
+        model.newPIN = "123456"
+        #expect(model.problems.isEmpty && model.signsGuestsOut)
+    }
+
+    @Test func neverPrintsThePIN() {
+        let service = FakeHostService()
+        let model = HostEventAccessModel(event: plainEvent("e1"), service: service, account: account(service))
+        model.newPIN = "482913"
+        #expect(model.signsGuestsOut)
+        #expect(!String(describing: model.phase).contains("482913"))
+    }
+}
+
+@Suite @MainActor struct HostEventDatesModelTests {
+    @Test func startsFromTheEffectiveDates() {
+        let service = FakeHostService()
+        let event = Event(
+            id: "e1", slug: "e1", title: "Party", type: "Party", mainCharacters: nil, description: nil,
+            coverImageURL: nil, createdAt: start, startsAt: nil, expiresAt: later, uploadsCloseAt: nil,
+            purgeAfter: nil, archivedAt: nil, accessMode: .public, areUploadsOpen: true
+        )
+        let model = HostEventDatesModel(event: event, service: service, account: account(service))
+        #expect(model.uploadsCloseAt == later && model.deleteAfter == later)
+    }
+
+    @Test func refusesADeletionInThePastOrBeforeUploadsClose() async {
+        let service = FakeHostService()
+        let model = HostEventDatesModel(event: plainEvent("e1"), service: service, account: account(service, store: FlakyHostStore(live)))
+        model.deleteAfter = start
+        #expect(model.problems(now: start) == [.deleteInPast])
+        model.deleteAfter = later
+        model.uploadsCloseAt = later.addingTimeInterval(1)
+        #expect(model.problems(now: start) == [.closeAfterDelete])
+        await model.save(now: start)
+        #expect(service.saveCalls.isEmpty)
+    }
+
+    @Test func anUntouchedFormNeverSaves() async {
+        let service = FakeHostService()
+        service.saveResult = .success(detail("e1"))
+        let model = HostEventDatesModel(event: plainEvent("e1", close: later), service: service, account: account(service, store: FlakyHostStore(live)))
+        #expect(!model.hasChanges)
+        await model.save(now: start)
+        #expect(service.saveCalls.isEmpty && model.phase == .editing)
+    }
+
+    @Test func closesUploadsNowWithAPastDateAndSavesBoth() async {
+        let service = FakeHostService()
+        service.saveResult = .success(detail("e1"))
+        let model = HostEventDatesModel(event: plainEvent("e1"), service: service, account: account(service, store: FlakyHostStore(live)))
+        model.uploadsCloseAt = start.addingTimeInterval(-60)
+        #expect(model.problems(now: start).isEmpty)
+        await model.save(now: start)
+        #expect(service.saveCalls == ["dates e1 close:true delete:false"] && model.phase == .saved(detail("e1")))
     }
 }

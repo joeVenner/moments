@@ -153,3 +153,21 @@ public struct AdminMomentList: Sendable, Hashable {
         self.isTruncated = isTruncated
     }
 }
+
+/// What a host writes about an event: the create and edit forms' fields.
+/// Text is sent as given (trim it first); nil clears an optional field.
+public struct EventDetails: Sendable, Hashable {
+    public var title: String
+    public var type: String
+    public var mainCharacters: String?
+    public var description: String?
+    public var startsAt: Date?
+
+    public init(title: String, type: String, mainCharacters: String? = nil, description: String? = nil, startsAt: Date? = nil) {
+        self.title = title
+        self.type = type
+        self.mainCharacters = mainCharacters
+        self.description = description
+        self.startsAt = startsAt
+    }
+}

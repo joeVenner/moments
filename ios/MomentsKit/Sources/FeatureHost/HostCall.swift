@@ -35,16 +35,21 @@ extension HostAccount {
     ///
     /// When two passes still end on a changed session, the outcome is
     /// `.signedOut` and the screen clears; the next load starts fresh.
+    ///
+    /// A call that must not run twice (creating something) passes
+    /// `isRepeatable: false`: its answer is kept even when the session
+    /// changed meanwhile, since the server already acted on it.
     func run<Value: Sendable>(
         logCategory: String,
         notFound: MomentsAPIError? = nil,
+        isRepeatable: Bool = true,
         _ call: (String) async throws -> Value
     ) async -> HostCallOutcome<Value> {
-        for _ in 0..<2 {
+        for _ in 0..<(isRepeatable ? 2 : 1) {
             guard let token = currentToken() else { return .signedOut }
             do {
                 let value = try await call(token)
-                guard currentToken() == token else { continue }
+                guard !isRepeatable || currentToken() == token else { continue }
                 return .success(value)
             } catch is CancellationError {
                 return .cancelled

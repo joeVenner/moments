@@ -35,6 +35,14 @@ public enum ServerDate {
         date.formatted(formatStyle)
     }
 
+    /// Formats a date for a request body: ISO 8601 in UTC with an explicit
+    /// zone (`2026-12-05T17:00:00Z`), which the server requires.
+    public static func requestFormat(_ date: Date) -> String {
+        date.formatted(requestFormatStyle)
+    }
+
+    private static let requestFormatStyle = Date.ISO8601FormatStyle(timeZone: .gmt)
+
     private static let formatStyle = Date.ISO8601FormatStyle(timeZone: .gmt)
         .year().month().day()
         .dateSeparator(.dash)
