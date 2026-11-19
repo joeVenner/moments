@@ -372,6 +372,45 @@ export const AdminEventListSchema = z
   })
   .openapi("AdminEventList");
 
+export const AdminEventParamSchema = z.object({
+  id: z.string().min(1).max(100).openapi({ param: { name: "id", in: "path" }, description: "The event's id (from the events list)" }),
+});
+
+const nonNegativeCount = z.number().int().nonnegative();
+
+export const EventAnalyticsSchema = z
+  .object({
+    summary: z.object({
+      total_moments: nonNegativeCount,
+      hidden_moments: nonNegativeCount,
+      videos: nonNegativeCount,
+      photos: nonNegativeCount,
+      storage_bytes: nonNegativeCount.openapi({ description: "Bytes of all originals" }),
+      participants: nonNegativeCount,
+      reactions: nonNegativeCount,
+    }),
+    activity: z
+      .array(z.object({ day: z.string().openapi({ description: "UTC `YYYY-MM-DD`" }), count: nonNegativeCount }))
+      .openapi({ description: "Moments per UTC day since 13×24 h ago (so the oldest day may be partial), oldest first; days with none are absent" }),
+    upload_states: z
+      .array(z.object({ status: z.string().openapi({ description: "`open`, `completed` or `aborted` today; treat any other value as unknown" }), count: nonNegativeCount }))
+      .openapi({ description: "Upload attempts by state" }),
+  })
+  .openapi("EventAnalytics");
+
+export const AdminEventDetailSchema = z
+  .object({
+    event: AdminEventSchema,
+    share: z
+      .object({
+        event_url: z.string().url().openapi({ description: "The guest page; put this in the QR code" }),
+        invite_url: z.string().url().nullable().openapi({ description: "Private events only: opens the event without its PIN. Share with care." }),
+      })
+      .openapi("EventShareLinks"),
+    analytics: EventAnalyticsSchema,
+  })
+  .openapi("AdminEventDetail");
+
 export const HostSignInResponseSchema = HostSessionSchema.extend({
   token: z.string().openapi({ description: "Send as `Authorization: Bearer <token>`. Returned only here; keep it in the keychain." }),
   token_type: z.string().openapi({ description: "`Bearer`" }),
