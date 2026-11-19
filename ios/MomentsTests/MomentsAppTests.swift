@@ -167,6 +167,30 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(HostSignInView.message(for: .locked).contains("15"))
     }
 
+    @Test func newEventProblemsAreWordedInOrderAndMissingFieldsStaySilent() {
+        let messages = HostNewEventView.messages(for: [.titleMissing, .typeMissing, .endBeforeStart, .titleTooLong])
+        #expect(messages.count == 2)
+        #expect(messages.first?.contains("120") == true && messages.last?.contains("before") == true)
+    }
+
+    @Test func everyCreateFailureHasItsOwnMessageAndAnUnclearOneSaysToCheck() {
+        let failures: [HostSaveFailure] = [.offline, .appTooOld, .rateLimited, .refused, .failed]
+        let messages = failures.map { HostNewEventView.message(for: $0, mayHaveCreated: false) }
+        #expect(Set(messages).count == failures.count)
+        let unclear = HostNewEventView.message(for: .offline, mayHaveCreated: true)
+        #expect(unclear == HostNewEventView.message(for: .failed, mayHaveCreated: true) && !messages.contains(unclear))
+        // A refusal is never ambiguous: the server said no.
+        #expect(HostNewEventView.message(for: .rateLimited, mayHaveCreated: true) == messages[2])
+    }
+
+    @Test func defaultDatesStartOnTheHour() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "Europe/Paris"))
+        let date = try #require(calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 22, minute: 41)))
+        let next = HostNewEventView.nextHour(after: date, addingDays: 1, calendar: calendar)
+        #expect(calendar.dateComponents([.day, .hour, .minute], from: next) == DateComponents(day: 20, hour: 23, minute: 0))
+    }
+
     @Test func hostEventDatesSayWhenArchivedOrClosed() {
         func event(open: Bool, archived: Bool) -> Event {
             Event(id: "e", slug: "e", title: "Party", type: "Party", mainCharacters: nil, description: nil, coverImageURL: nil,

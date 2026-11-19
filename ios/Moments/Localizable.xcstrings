@@ -540,6 +540,36 @@
         }
       }
     },
+    "Create anyway": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Créer quand même"
+          }
+        }
+      }
+    },
+    "Create event": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Créer l'événement"
+          }
+        }
+      }
+    },
+    "Creating the event": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Création de l'événement"
+          }
+        }
+      }
+    },
     "Delete": {
       "localizations": {
         "fr": {
@@ -570,6 +600,26 @@
         }
       }
     },
+    "Description": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Description"
+          }
+        }
+      }
+    },
+    "Description (optional)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Description (facultatif)"
+          }
+        }
+      }
+    },
     "Details unavailable right now": {
       "localizations": {
         "fr": {
@@ -587,6 +637,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Terminé"
+          }
+        }
+      }
+    },
+    "End date": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Date de fin"
           }
         }
       }
@@ -651,6 +711,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Code de l'événement"
+          }
+        }
+      }
+    },
+    "Event date": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Date de l'événement"
           }
         }
       }
@@ -744,6 +814,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Invités"
+          }
+        }
+      }
+    },
+    "Guests can share until then. The event and its photos and videos are deleted afterwards.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les invités peuvent partager jusqu'à cette date. L'événement, ses photos et ses vidéos sont ensuite supprimés."
           }
         }
       }
@@ -1118,6 +1198,16 @@
         }
       }
     },
+    "New event": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouvel événement"
+          }
+        }
+      }
+    },
     "Next": {
       "localizations": {
         "fr": {
@@ -1128,12 +1218,12 @@
         }
       }
     },
-    "No events yet. Create one on the web for now.": {
+    "No events yet. Tap New event to create your first one.": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucun événement pour l'instant. Pour en créer un, passez par le web."
+            "value": "Aucun événement pour l'instant. Touchez Nouvel événement pour créer le premier."
           }
         }
       }
@@ -1502,6 +1592,26 @@
         }
       }
     },
+    "Sara & Omar": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sara et Omar"
+          }
+        }
+      }
+    },
+    "Sara & Omar's wedding": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le mariage de Sara et Omar"
+          }
+        }
+      }
+    },
     "Scan QR code": {
       "localizations": {
         "fr": {
@@ -1679,6 +1789,16 @@
         }
       }
     },
+    "Shown to guests under the title": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affichée aux invités sous le titre"
+          }
+        }
+      }
+    },
     "Shows the hide and delete options.": {
       "localizations": {
         "fr": {
@@ -1843,6 +1963,56 @@
         }
       }
     },
+    "The description can be at most %lld characters.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La description peut contenir au plus %lld caractères."
+          }
+        }
+      }
+    },
+    "The end date has passed. Pick a later one.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La date de fin est passée. Choisissez une date ultérieure."
+          }
+        }
+      }
+    },
+    "The end date is before the event date.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La date de fin est avant la date de l'événement."
+          }
+        }
+      }
+    },
+    "The event couldn't be created with these details. Check the dates and try again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'événement n'a pas pu être créé avec ces informations. Vérifiez les dates et réessayez."
+          }
+        }
+      }
+    },
+    "The event couldn't be created. Try again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'événement n'a pas pu être créé. Réessayez."
+          }
+        }
+      }
+    },
     "The event stopped taking uploads.": {
       "extractionState": "manual",
       "localizations": {
@@ -1924,6 +2094,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Le diaporama arrive bientôt."
+          }
+        }
+      }
+    },
+    "The title can be at most %lld characters.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le titre peut contenir au plus %lld caractères."
+          }
+        }
+      }
+    },
+    "The type can be at most %lld characters.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le type peut contenir au plus %lld caractères."
           }
         }
       }
@@ -2058,6 +2248,16 @@
         }
       }
     },
+    "Title": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titre"
+          }
+        }
+      }
+    },
     "Too long or too large (up to 10 minutes).": {
       "extractionState": "manual",
       "localizations": {
@@ -2134,6 +2334,16 @@
         }
       }
     },
+    "Type": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type"
+          }
+        }
+      }
+    },
     "Unlock": {
       "extractionState": "manual",
       "localizations": {
@@ -2163,6 +2373,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mettez Moments à jour depuis l'App Store pour rejoindre cet événement."
+          }
+        }
+      }
+    },
+    "Update Moments to create events.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettez à jour Moments pour créer des événements."
           }
         }
       }
@@ -2378,6 +2598,26 @@
         }
       }
     },
+    "We couldn't tell whether the event was created. Check your events before trying again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de savoir si l'événement a été créé. Vérifiez vos événements avant de réessayer."
+          }
+        }
+      }
+    },
+    "Wedding, birthday, party…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mariage, anniversaire, fête…"
+          }
+        }
+      }
+    },
     "Welcome, %@!": {
       "extractionState": "manual",
       "localizations": {
@@ -2395,6 +2635,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Que faire de ce souvenir ?"
+          }
+        }
+      }
+    },
+    "Who it's about": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qui est à l'honneur"
+          }
+        }
+      }
+    },
+    "Who it's about (optional)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qui est à l'honneur (facultatif)"
+          }
+        }
+      }
+    },
+    "Who it's about can be at most %lld characters.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "« Qui est à l'honneur » peut contenir au plus %lld caractères."
           }
         }
       }
@@ -2447,6 +2717,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vous êtes hors ligne. Tirez vers le bas pour réessayer."
+          }
+        }
+      }
+    },
+    "You're offline. Try again when you're connected.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous êtes hors ligne. Réessayez une fois connecté."
+          }
+        }
+      }
+    },
+    "You've created a lot of events just now. Wait a minute and try again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous venez de créer beaucoup d'événements. Attendez une minute et réessayez."
           }
         }
       }
