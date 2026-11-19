@@ -94,6 +94,36 @@ private func json(_ body: String?) throws -> [String: Any] {
         }
     }
 
+    @Test func fetchesAThumbnailURLAndNeverShowsIt() async throws {
+        let stub = StubTransport(json: """
+        {"expires_at":"2026-11-18 16:00:00","url":"https://acct.r2.cloudflarestorage.com/b/k.thumb-upload.jpg?X-Amz-Signature=secret"}
+        """)
+        let target = try await client(stub).thumbnailURL(slug: "party", uploadID: "u1", size: 1234, credentials: guest)
+        #expect(target.url.host() == "acct.r2.cloudflarestorage.com")
+        #expect(!String(describing: target).contains("secret") && !String(reflecting: target).contains("secret"))
+        let request = try #require(stub.requests.first)
+        #expect(request.request.path == "/events/party/uploads/u1/thumbnail-url")
+        #expect(request.request.headerFields[HTTPField.Name("X-Guest-Token")!] == "guest-1")
+        #expect(try json(request.body)["size"] as? Int == 1234)
+    }
+
+    @Test(arguments: ["http://r2.test/a", "https://user:pw@r2.test/a", "file:///etc/passwd", "https:///no-host"])
+    func refusesUnsafeThumbnailURLs(url: String) async throws {
+        let stub = StubTransport(json: #"{"expires_at":"2026-11-18 16:00:00","url":"\#(url)"}"#)
+        await #expect(throws: MomentsAPIError.unexpectedResponse) {
+            _ = try await client(stub).thumbnailURL(slug: "party", uploadID: "u1", size: 10, credentials: guest)
+        }
+    }
+
+    @Test(arguments: [0, ThumbnailURL.maxSize + 1])
+    func neverAsksForAThumbnailOfAnImpossibleSize(size: Int) async throws {
+        let stub = StubTransport(json: "{}")
+        await #expect(throws: MomentsAPIError.invalidRequest) {
+            _ = try await client(stub).thumbnailURL(slug: "party", uploadID: "u1", size: size, credentials: guest)
+        }
+        #expect(stub.requests.isEmpty)
+    }
+
     @Test func omitsThePartListWhenAskingForAll() async throws {
         let stub = StubTransport(json: #"{"expires_at":"2026-11-18 16:00:00","parts":[{"part_number":1,"url":"HTTPS://r2.test/a"}]}"#)
         #expect(try await client(stub).partURLs(slug: "p", uploadID: "u1", parts: nil, credentials: guest).urls.count == 1)

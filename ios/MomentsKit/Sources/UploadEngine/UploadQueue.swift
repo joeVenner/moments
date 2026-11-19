@@ -87,10 +87,15 @@ public actor UploadQueue {
     public private(set) var saveFailures = 0
     /// Staged files of finished items that couldn't be deleted.
     public private(set) var cleanupFailures = 0
+    /// Thumbnails that couldn't be sent (their moments show the file instead).
+    public private(set) var thumbnailFailures = 0
+    /// Nil: thumbnails aren't sent (the moments show their files).
+    private let thumbnailSender: (any ThumbnailSender)?
 
     public init(
         store: QueueStore, staging: StagingArea, service: any UploadService, partUploader: any PartUploader,
         credentials: @escaping CredentialsLookup,
+        thumbnailSender: (any ThumbnailSender)?,
         now: @escaping @Sendable () -> Date = { Date() },
         jitter: @escaping @Sendable (TimeInterval) -> TimeInterval = UploadQueue.defaultJitter
     ) {
@@ -98,6 +103,7 @@ public actor UploadQueue {
         self.staging = staging
         self.service = service
         self.partUploader = partUploader
+        self.thumbnailSender = thumbnailSender
         lookUpCredentials = credentials
         self.now = now
         self.jitter = jitter
@@ -316,7 +322,7 @@ public actor UploadQueue {
         let action = item.nextAction(now: current)
         switch action {
         case .none, .wait: return false
-        case .startSession, .readSession, .complete, .uploadParts: break
+        case .startSession, .readSession, .complete, .uploadParts, .sendThumbnail: break
         }
         inFlight.insert(id)
         defer { inFlight.remove(id) }
@@ -353,6 +359,9 @@ public actor UploadQueue {
                 return .fileLost(clientUploadID: clientID)
             }
         }
+        if case let .sendThumbnail(session, thumbnail) = action {
+            return await sendThumbnail(thumbnail, of: item, session: session, credentials: credentials)
+        }
         do {
             switch action {
             case let .startSession(upload):
@@ -370,7 +379,7 @@ public actor UploadQueue {
                 // would be asked for again at once.
                 guard !sent.isDisjoint(with: parts) else { return .requestFailed(.transport(nil), clientUploadID: clientID) }
                 return .partsUploaded(sent, sessionID: session.id)
-            case .wait, .none:
+            case .wait, .none, .sendThumbnail:
                 return nil
             }
         } catch {
@@ -378,6 +387,38 @@ public actor UploadQueue {
             if Task.isCancelled || error is CancellationError { return nil }
             if let error = error as? MomentsAPIError { return .requestFailed(error, clientUploadID: clientID) }
             return .requestFailed(.transport(nil), clientUploadID: clientID)
+        }
+    }
+
+    /// Sends the item's thumbnail once for this session. Whatever goes
+    /// wrong, the upload carries on without it (only a shutdown leaves it
+    /// to be tried again).
+    private func sendThumbnail(
+        _ thumbnail: QueuedUpload.StagedFile, of item: QueuedUpload, session: QueuedUpload.SessionRef,
+        credentials: EventCredentials
+    ) async -> QueuedUpload.Event? {
+        let handled = QueuedUpload.Event.thumbnailHandled(sessionID: session.id)
+        guard let thumbnailSender else { return handled }
+        // Any problem, an unreadable file included, means no thumbnail: it
+        // must never hold the parts back.
+        do {
+            let handle = try staging.open(thumbnail, owner: item.id)
+            defer { try? handle.close() }
+            // Never more than recorded (≤ 200 KiB), so a swapped file can't balloon.
+            let data = (try? handle.read(upToCount: Int(thumbnail.size) + 1)) ?? Data()
+            guard data.count == Int(thumbnail.size) else {
+                thumbnailFailures += 1
+                return handled
+            }
+            let target = try await service.thumbnailURL(
+                slug: item.eventSlug, uploadID: session.id, size: data.count, credentials: credentials
+            )
+            try await thumbnailSender.send(data, to: target.url)
+            return handled
+        } catch {
+            if Task.isCancelled || error is CancellationError { return nil }
+            thumbnailFailures += 1
+            return handled
         }
     }
 
@@ -430,10 +471,12 @@ public actor UploadQueue {
     }
 
     private func removeStagedFile(of item: QueuedUpload) {
-        do throws(StagingArea.Problem) {
-            try staging.remove(item.file, owner: item.id)
-        } catch {
-            cleanupFailures += 1
+        for file in [item.file] + [item.thumbnail].compactMap(\.self) {
+            do throws(StagingArea.Problem) {
+                try staging.remove(file, owner: item.id)
+            } catch {
+                cleanupFailures += 1
+            }
         }
     }
 

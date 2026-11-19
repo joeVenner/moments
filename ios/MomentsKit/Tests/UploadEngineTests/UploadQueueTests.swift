@@ -52,6 +52,18 @@ final class FakeUploadServer: UploadService, PartUploader, @unchecked Sendable {
         fatalError("not used by the queue")
     }
 
+    /// Sizes asked for, per call.
+    private(set) var thumbnailSizes: [Int] = []
+    /// The thumbnail URL call fails (whatever else is scripted).
+    var thumbnailURLFails = false
+
+    func thumbnailURL(slug: String, uploadID: String, size: Int, credentials: EventCredentials) async throws -> ThumbnailURL {
+        try record("thumbnail-url")
+        if lock.withLock({ thumbnailURLFails }) { throw MomentsAPIError.uploadsUnavailable }
+        lock.withLock { thumbnailSizes.append(size) }
+        return ThumbnailURL(expiresAt: Date(timeIntervalSince1970: 2_000_000), url: URL(string: "https://r2.test/\(uploadID).thumb-upload.jpg")!)
+    }
+
     func completeUpload(slug: String, uploadID: String, credentials: EventCredentials) async throws -> CompleteOutcome {
         try record("complete")
         return lock.withLock {
@@ -93,6 +105,24 @@ final class FakeUploadServer: UploadService, PartUploader, @unchecked Sendable {
     }
 }
 
+/// Records the thumbnails it is asked to send; can be made to fail.
+final class FakeThumbnailSender: ThumbnailSender, @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var sent: [(data: Data, url: URL)] = []
+    private var failing = false
+    var fails: Bool {
+        get { lock.withLock { failing } }
+        set { lock.withLock { failing = newValue } }
+    }
+
+    func send(_ data: Data, to url: URL) async throws {
+        try lock.withLock {
+            if failing { throw URLSessionThumbnailSender.Problem.refused(status: 403) }
+            sent.append((data, url))
+        }
+    }
+}
+
 /// A clock tests move by hand.
 final class TestClock: @unchecked Sendable {
     private let lock = NSLock()
@@ -104,6 +134,7 @@ final class TestClock: @unchecked Sendable {
 private struct Harness {
     let folder: TempFolder
     let server = FakeUploadServer()
+    let thumbnails = FakeThumbnailSender()
     let clock = TestClock()
     let store: QueueStore
     let staging: StagingArea
@@ -126,21 +157,31 @@ private struct Harness {
         let clock = clock
         return UploadQueue(
             store: store, staging: staging, service: server, partUploader: server,
-            credentials: { _ in credentials },
+            credentials: { _ in credentials }, thumbnailSender: thumbnails,
             now: { clock.now }, jitter: { _ in 0 }
         )
     }
 
     /// A staged file of `size` bytes and its queue item.
-    func stage(_ name: String = "a.jpg", size: Int = 10) throws -> QueuedUpload {
+    func stage(_ name: String = "a.jpg", size: Int = 10, thumbnail: Data? = nil) throws -> QueuedUpload {
         let id = UUID()
         try FileManager.default.createDirectory(at: staging.folder(for: id), withIntermediateDirectories: true)
         try Data(count: size).write(to: staging.folder(for: id).appending(path: name))
+        var thumb: QueuedUpload.StagedFile?
+        if let thumbnail {
+            try thumbnail.write(to: staging.folder(for: id).appending(path: "thumb.jpg"))
+            thumb = .init(relativePath: StagingArea.relativePath(for: id, name: "thumb.jpg"), size: Int64(thumbnail.count), contentType: "image/jpeg")
+        }
         return QueuedUpload(
             id: id, eventSlug: "party",
             file: .init(relativePath: StagingArea.relativePath(for: id, name: name), size: Int64(size), contentType: "image/jpeg")!,
-            caption: nil, createdAt: clock.now
+            thumbnail: thumb, caption: nil, createdAt: clock.now
         )
+    }
+
+    func thumbnailExists(_ item: QueuedUpload) -> Bool {
+        guard let thumbnail = item.thumbnail else { return false }
+        return FileManager.default.fileExists(atPath: staging.root.appending(path: thumbnail.relativePath).path())
     }
 
     func stagedFileExists(_ item: QueuedUpload) -> Bool {
@@ -624,5 +665,152 @@ actor Gate {
         #expect(ContinuousClock.now - started < .seconds(5))
         await gate.open()
         _ = await sending.value
+    }
+}
+
+// MARK: - Thumbnails
+
+private let thumbnailBytes = Data([0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3, 0xFF, 0xD9])
+
+@Suite struct UploadQueueThumbnailTests {
+    @Test func sendsTheThumbnailOnceBeforeThePartsAndCleansItUp() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue()
+        let item = try harness.stage(thumbnail: thumbnailBytes)
+        try await queue.enqueue(item)
+        await drain(queue)
+        #expect(harness.server.calls == ["start", "thumbnail-url", "parts", "complete"])
+        #expect(harness.server.thumbnailSizes == [thumbnailBytes.count])
+        #expect(harness.thumbnails.sent.map(\.data) == [thumbnailBytes])
+        #expect(await queue.snapshot().first?.phase == .done(momentID: "m1"))
+        #expect(!harness.stagedFileExists(item) && !harness.thumbnailExists(item))
+    }
+
+    enum ThumbnailFailure: CaseIterable { case urlRefused, putRefused, fileUnreadable }
+
+    @Test(arguments: ThumbnailFailure.allCases)
+    func aFailedThumbnailNeverHoldsTheUploadBack(failure: ThumbnailFailure) async throws {
+        do {
+            let harness = try Harness()
+            let queue = try await harness.queue()
+            let item = try harness.stage(thumbnail: thumbnailBytes)
+            switch failure {
+            case .urlRefused: harness.server.thumbnailURLFails = true
+            case .putRefused: harness.thumbnails.fails = true
+            case .fileUnreadable:
+                // Replaced by a folder: can't be opened as the recorded file.
+                let path = harness.staging.root.appending(path: try #require(item.thumbnail).relativePath)
+                try FileManager.default.removeItem(at: path)
+                try FileManager.default.createDirectory(at: path, withIntermediateDirectories: false)
+            }
+            try await queue.enqueue(item)
+            await drain(queue)
+            #expect(await queue.snapshot().first?.phase == .done(momentID: "m1"))
+            #expect(await queue.thumbnailFailures == 1)
+            // Tried once, never again.
+            #expect(harness.server.calls.filter { $0 == "thumbnail-url" }.count == (failure == .fileUnreadable ? 0 : 1))
+        }
+    }
+
+    @Test func skipsAThumbnailThatChangedSize() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue()
+        let item = try harness.stage(thumbnail: thumbnailBytes)
+        try Data([0xFF, 0xD8]).write(to: harness.staging.root.appending(path: try #require(item.thumbnail).relativePath))
+        try await queue.enqueue(item)
+        await drain(queue)
+        #expect(harness.server.calls == ["start", "parts", "complete"])
+        #expect(harness.thumbnails.sent.isEmpty)
+        #expect(await queue.thumbnailFailures == 1)
+    }
+
+    @Test func leavingRemovesTheThumbnailToo() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue()
+        let item = try harness.stage(thumbnail: thumbnailBytes)
+        try await queue.enqueue(item)
+        #expect(await queue.beginLeaving(eventSlug: "party") == 1)
+        #expect(!harness.stagedFileExists(item) && !harness.thumbnailExists(item))
+    }
+
+    @Test func aRecordSavedBeforeThumbnailsStillLoads() throws {
+        let harness = try Harness()
+        let item = try harness.stage()
+        var json = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(item)) as? [String: Any])
+        json["thumbnail"] = nil
+        json["thumbnailSentFor"] = nil
+        let decoded = try JSONDecoder().decode(QueuedUpload.self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(decoded.thumbnail == nil && decoded.id == item.id)
+        // A thumbnail that isn't a JPEG is dropped, not the record.
+        let thumbed = try harness.stage(thumbnail: thumbnailBytes)
+        var tampered = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(thumbed)) as? [String: Any])
+        var thumb = try #require(tampered["thumbnail"] as? [String: Any])
+        thumb["contentType"] = "text/html"
+        tampered["thumbnail"] = thumb
+        let kept = try JSONDecoder().decode(QueuedUpload.self, from: JSONSerialization.data(withJSONObject: tampered))
+        #expect(kept.thumbnail == nil && kept.id == thumbed.id)
+    }
+}
+
+// MARK: - Thumbnail decisions
+
+@Suite struct QueuedUploadThumbnailTests {
+    private static func item(thumbnail: Bool = true) -> QueuedUpload {
+        let id = UUID()
+        return QueuedUpload(
+            id: id, eventSlug: "party",
+            file: .init(relativePath: StagingArea.relativePath(for: id, name: "a.jpg"), size: 10, contentType: "image/jpeg")!,
+            thumbnail: thumbnail ? .init(relativePath: StagingArea.relativePath(for: id, name: "thumb.jpg"), size: 9, contentType: "image/jpeg") : nil,
+            caption: nil, createdAt: Date(timeIntervalSince1970: 0)
+        )
+    }
+
+    private static func session(_ id: String, for item: QueuedUpload, status: UploadSession.Status = .open) -> UploadSession {
+        UploadSession(
+            id: id, clientUploadID: item.clientUploadID, status: status, contentType: "image/jpeg", size: 10,
+            partSize: 8 * 1024 * 1024, partCount: 1, createdAt: Date(timeIntervalSince1970: 0)
+        )
+    }
+
+    @Test func sendsOncePerSessionAndAgainAfterARestart() throws {
+        let now = Date(timeIntervalSince1970: 10)
+        var item = Self.item()
+        item.apply(.sessionStarted(Self.session("u-a", for: item)), now: now)
+        guard case .sendThumbnail = item.nextAction(now: now) else { Issue.record("expected the thumbnail first"); return }
+        // An answer for another session changes nothing.
+        let before = item
+        item.apply(.thumbnailHandled(sessionID: "u-other"), now: now)
+        #expect(item == before)
+        item.apply(.thumbnailHandled(sessionID: "u-a"), now: now)
+        guard case .uploadParts = item.nextAction(now: now) else { Issue.record("expected the parts"); return }
+        // The session was cancelled: a fresh one sends the thumbnail again.
+        item.reconcileOnLaunch()
+        item.apply(.progressRead(UploadProgress(session: Self.session("u-a", for: item, status: .aborted), uploadedParts: [])), now: now)
+        guard case let .startSession(upload) = item.nextAction(now: now) else { Issue.record("expected a restart"); return }
+        var restarted = Self.session("u-b", for: item)
+        restarted = UploadSession(
+            id: "u-b", clientUploadID: upload.clientUploadID, status: .open, contentType: "image/jpeg", size: 10,
+            partSize: restarted.partSize, partCount: 1, createdAt: restarted.createdAt
+        )
+        item.apply(.sessionStarted(restarted), now: now)
+        guard case let .sendThumbnail(session, _) = item.nextAction(now: now) else { Issue.record("expected the thumbnail again"); return }
+        #expect(session.id == "u-b")
+    }
+
+    @Test func aRelaunchDoesntSendItAgain() {
+        let now = Date(timeIntervalSince1970: 10)
+        var item = Self.item()
+        item.apply(.sessionStarted(Self.session("u-a", for: item)), now: now)
+        item.apply(.thumbnailHandled(sessionID: "u-a"), now: now)
+        item.reconcileOnLaunch()
+        item.apply(.progressRead(UploadProgress(session: Self.session("u-a", for: item), uploadedParts: [1])), now: now)
+        guard case .complete = item.nextAction(now: now) else { Issue.record("expected complete"); return }
+    }
+
+    @Test func withoutAThumbnailNothingChanges() {
+        let now = Date(timeIntervalSince1970: 10)
+        var item = Self.item(thumbnail: false)
+        item.apply(.sessionStarted(Self.session("u-a", for: item)), now: now)
+        guard case .uploadParts = item.nextAction(now: now) else { Issue.record("expected the parts"); return }
     }
 }

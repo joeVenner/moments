@@ -68,6 +68,10 @@ final class PartURLService: UploadService, @unchecked Sendable {
     var hosts: [Int: String] = [:]
     private(set) var requested: [[Int]?] = []
 
+    func thumbnailURL(slug: String, uploadID: String, size: Int, credentials: EventCredentials) async throws -> ThumbnailURL {
+        fatalError("not used by the part uploader")
+    }
+
     func partURLs(slug: String, uploadID: String, parts: [Int]?, credentials: EventCredentials) async throws -> PartURLBatch {
         requested.append(parts)
         var urls: [Int: URL] = [:]
@@ -307,5 +311,49 @@ private struct Setup {
         #expect(throws: PartFile.Problem.writeFailed) { try PartFile.write(from: handle, range: 0 ..< 1, to: part) }
         #expect(throws: PartFile.Problem.shortRead) { try PartFile.write(from: handle, range: 8 ..< 12, to: folder.url.appending(path: "q")) }
         #expect(!FileManager.default.fileExists(atPath: folder.url.appending(path: "q").path()))
+    }
+}
+
+// MARK: - Thumbnail sender (same stub, so in the same serialized suite)
+
+extension URLSessionPartUploaderTests {
+    private func thumbnailSender() -> URLSessionThumbnailSender {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StorageStub.self]
+        return URLSessionThumbnailSender(hosts: .r2Account(accountID)!, configuration: configuration)
+    }
+
+    @Test func sendsTheThumbnailAsAJPEGToOurStorage() async throws {
+        StorageStub.reset()
+        let url = URL(string: "https://\(accountID).r2.cloudflarestorage.com/b/k.thumb-upload.jpg?X-Amz-Signature=s")!
+        try await thumbnailSender().send(Data([1, 2, 3]), to: url)
+        let sent = try #require(StorageStub.lock.withLock { StorageStub.sent.first })
+        #expect(sent.method == "PUT" && sent.url == url && sent.body == Data([1, 2, 3]))
+        #expect(sent.headers["Content-Type"] == "image/jpeg")
+        // Nothing of the guest's: no token, no grant, no cookie.
+        #expect(sent.headers.keys.allSatisfy { !["X-Guest-Token", "X-Event-Access", "Cookie", "Authorization"].contains($0) })
+    }
+
+    @Test(arguments: [
+        "https://attacker.example/k.jpg",
+        "https://r2.cloudflarestorage.com/k.jpg",
+        "https://other0123456789abcdef0123456789ab.r2.cloudflarestorage.com/k.jpg",
+        "https://127.0.0.1/k.jpg",
+        "http://\(accountID).r2.cloudflarestorage.com/k.jpg",
+    ])
+    func neverSendsAThumbnailAnywhereElse(url: String) async throws {
+        StorageStub.reset()
+        await #expect(throws: URLSessionThumbnailSender.Problem.untrustedTarget) {
+            try await thumbnailSender().send(Data([1]), to: URL(string: url)!)
+        }
+        #expect(StorageStub.lock.withLock { StorageStub.sent.isEmpty })
+    }
+
+    @Test func reportsARefusal() async throws {
+        StorageStub.reset()
+        StorageStub.lock.withLock { StorageStub.respond = { _ in (403, [:]) } }
+        await #expect(throws: URLSessionThumbnailSender.Problem.refused(status: 403)) {
+            try await thumbnailSender().send(Data([1]), to: URL(string: "https://\(accountID).r2.cloudflarestorage.com/k.jpg")!)
+        }
     }
 }

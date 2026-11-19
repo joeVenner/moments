@@ -210,7 +210,16 @@ public final class UploadModel {
                 cleanUp(id)
                 continue
             }
-            let upload = QueuedUpload(id: id, eventSlug: eventSlug, file: file, caption: caption.isEmpty ? nil : caption, createdAt: now())
+            // Optional: a thumbnail that can't be recorded is just left out.
+            let thumbnail = media.thumbnail.flatMap {
+                QueuedUpload.StagedFile(
+                    relativePath: StagingArea.relativePath(for: id, name: $0.name), size: $0.byteCount, contentType: "image/jpeg"
+                )
+            }
+            let upload = QueuedUpload(
+                id: id, eventSlug: eventSlug, file: file, thumbnail: thumbnail, caption: caption.isEmpty ? nil : caption,
+                createdAt: now()
+            )
             switch await submitter.submit(upload) {
             case .accepted, .duplicate:
                 setState(.shared, of: id)

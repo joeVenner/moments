@@ -121,7 +121,8 @@ struct AppEnvironment {
         let uploader = BackgroundPartUploader(identifier: uploadSessionIdentifier, service: client, staging: staging, hosts: hosts)
         let queue = UploadQueue(
             store: store, staging: staging, service: client, partUploader: uploader,
-            credentials: uploadCredentialsLookup(store: credentials)
+            credentials: uploadCredentialsLookup(store: credentials),
+            thumbnailSender: URLSessionThumbnailSender(hosts: hosts)
         )
         let launchedAt = Date()
         // Sharing waits for this, so it runs at the guest's priority.
