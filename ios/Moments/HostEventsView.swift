@@ -1,26 +1,34 @@
 import DesignSystem
 import FeatureHost
+import MomentsAPI
 import MomentsDomain
 import SwiftUI
 
 /// The signed-in host's events, newest first. Pull to refresh; sign out in
-/// the top bar. Opening an event comes with the event detail screen.
+/// the top bar; tap an event for its QR code, links and stats.
 struct HostEventsView: View {
     let account: HostAccount
     let model: HostEventsModel
+    let service: any HostService
     let onClose: () -> Void
 
     @Environment(\.scenePhase) private var scenePhase
     @State private var isConfirmingSignOut = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-            ScrollView { list }
-                .refreshable { await model.load() }
+        NavigationStack {
+            VStack(spacing: 0) {
+                topBar
+                ScrollView { list }
+                    .refreshable { await model.load() }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(MomentsColor.background.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: AdminEvent.self) { item in
+                HostEventDetailView(summary: item, service: service, account: account)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(MomentsColor.background.ignoresSafeArea())
         .task { await model.load() }
         .onChange(of: scenePhase) {
             guard scenePhase == .active else { return }
@@ -94,7 +102,10 @@ struct HostEventsView: View {
             }
         } else {
             if case let .failed(failure) = model.phase { notice(Self.message(for: failure)) }
-            ForEach(model.events) { HostEventRow(item: $0) }
+            ForEach(model.events) { item in
+                NavigationLink(value: item) { HostEventRow(item: item) }
+                    .buttonStyle(.plain)
+            }
             if model.isTruncated {
                 notice(String(localized: "Showing the newest 500 events."))
             }

@@ -1,5 +1,7 @@
 import AppRouting
 import AVFoundation
+import CoreImage
+import DesignSystem
 import FeatureHost
 import Foundation
 import MomentsDomain
@@ -175,6 +177,73 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(!plain.contains("·"))
         #expect(HostEventsView.dateLine(event(open: false, archived: false)).hasPrefix(plain + " · "))
         #expect(HostEventsView.dateLine(event(open: false, archived: true)) != HostEventsView.dateLine(event(open: false, archived: false)))
+    }
+
+    @Test func theEventQRCodeScansAndHasAFourModuleQuietZoneInThemeColours() throws {
+        let url = URL(string: "https://moments-hq.com/e/party")!
+        let image = try #require(EventQRCode.image(for: url))
+        let scale = Int(EventQRCode.pixelsPerModule)
+        #expect(image.width == image.height && image.width % scale == 0)
+        // Symbols are 17 + 4·version modules wide; plus 4 quiet modules a side.
+        let symbolModules = image.width / scale - 8
+        #expect(symbolModules >= 21 && (symbolModules - 17) % 4 == 0)
+
+        let decoded = CIDetector(ofType: CIDetectorTypeQRCode, context: nil, options: nil)?
+            .features(in: CIImage(cgImage: image))
+            .compactMap { ($0 as? CIQRCodeFeature)?.messageString }
+        #expect(decoded == [url.absoluteString])
+
+        // Every pixel of the 4-module border is the tile colour (Palette.text).
+        let pixel = try #require(rgb(of: image, x: 4 * scale - 1, y: 4 * scale - 1))
+        #expect(pixel == [Palette.text.red, Palette.text.green, Palette.text.blue])
+        // Just inside it starts the finder pattern, in the module colour.
+        let module = try #require(rgb(of: image, x: 4 * scale, y: 4 * scale))
+        #expect(module == [Palette.background.red, Palette.background.green, Palette.background.blue])
+    }
+
+    private func rgb(of image: CGImage, x: Int, y: Int) -> [UInt8]? {
+        var bytes = [UInt8](repeating: 0, count: 4)
+        guard let context = CGContext(
+            data: &bytes, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        context.draw(image, in: CGRect(x: -x, y: y - image.height + 1, width: image.width, height: image.height))
+        return Array(bytes.prefix(3))
+    }
+
+    @Test func theTwoWeeksFollowTheUTCDay() throws {
+        let formatter = ISO8601DateFormatter()
+        let lastMinute = try #require(formatter.date(from: "2026-11-19T23:59:00Z"))
+        let midnight = try #require(formatter.date(from: "2026-11-20T00:00:00Z"))
+        #expect(HostEventStats.lastTwoWeeks([], today: lastMinute).last?.day == "2026-11-19")
+        #expect(HostEventStats.lastTwoWeeks([], today: midnight).last?.day == "2026-11-20")
+        #expect(HostEventStats.lastTwoWeeks([], today: midnight).first?.day == "2026-11-07")
+    }
+
+    @Test func statsTilesFormatCountsAndStorage() {
+        let analytics = EventAnalytics(
+            totalMoments: 1234, hiddenMoments: 2, photos: 1200, videos: 34, storageBytes: 5_000_000,
+            participants: 63, reactions: 0, activity: []
+        )
+        let tiles = HostEventStats.tiles(analytics, locale: Locale(identifier: "en_US"))
+        #expect(tiles.count == 7)
+        #expect(tiles.first?.value == "1,234")
+        #expect(tiles.last?.value == "5 MB")
+    }
+
+    @Test func activityFillsTheTwoWeeksWithZeros() throws {
+        let today = try #require(ISO8601DateFormatter().date(from: "2026-11-19T15:00:00Z"))
+        let days = HostEventStats.lastTwoWeeks([.init(day: "2026-11-19", count: 3), .init(day: "2026-11-06", count: 1), .init(day: "2026-10-01", count: 9)], today: today)
+        #expect(days.count == 14)
+        #expect(days.first == .init(day: "2026-11-06", count: 1))
+        #expect(days.last == .init(day: "2026-11-19", count: 3))
+        #expect(days.map(\.count).reduce(0, +) == 4)
+    }
+
+    @Test func everyDetailProblemHasAMessage() {
+        #expect(HostEventDetailView.message(for: .loaded) == nil)
+        let phases: [HostEventDetailModel.Phase] = [.gone, .failed(.offline), .failed(.appTooOld), .failed(.failed)]
+        #expect(Set(phases.compactMap(HostEventDetailView.message(for:))).count == phases.count)
     }
 
     @Test func theSimulatorHasNoScanner() {
