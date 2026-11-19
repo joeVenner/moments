@@ -97,6 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Abandoned multipart uploads are now cancelled in R2, so their parts stop costing storage. A daily job sweeps sessions still open after 7 days, or 30 minutes after an event's uploads close (up to 40 per run). Deleting an event (the daily purge or "archive now") now cancels its unfinished uploads before removing their records, which used to leave billed parts behind.
 
 ### Security
+- Admin logins (the web dashboard's Basic auth and the app's sign-in) share a lockout counted before the password is checked: 10 failures from one client or 100 in all within 15 minutes refuse every login, right or wrong. Before, a limited client could still tell a right guess from a wrong one. Passwords are now compared in constant time. Migration `0022_admin_login_failures`.
 - Media links tell browsers never to sniff or run the files they serve.
 
 - App uploads are shared fairly within an event. A guest gets 5 uploads in progress until one finishes, then 50. Guests who haven't shared anything yet can hold at most 1,500 of an event's 2,000 slots, so a burst of new guests from one network can't lock out people who are already sharing. An app upload left unfinished for 48 hours frees its slot and is cancelled. Needs migration 0018.
