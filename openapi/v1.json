@@ -888,7 +888,7 @@
           "Host"
         ],
         "summary": "Sign in as a host and get a bearer token",
-        "description": "Uses the admin username and password for now. Every attempt counts against a per-IP limit (10 a minute), right or wrong.",
+        "description": "Uses the admin username and password for now. Every attempt counts against a per-IP limit (10 a minute), right or wrong, and failed logins share a 15-minute lockout with the web dashboard.",
         "requestBody": {
           "required": true,
           "content": {
@@ -941,7 +941,7 @@
             }
           },
           "429": {
-            "description": "`rate_limited`: too many sign-in attempts from this network",
+            "description": "`rate_limited`: too many sign-in attempts from this network, or too many failed admin logins overall; wait for Retry-After",
             "headers": {
               "Retry-After": {
                 "schema": {

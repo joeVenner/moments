@@ -80,6 +80,20 @@ describe("POST /api/v1/admin/session", () => {
     expect(sqlite.raw.prepare("SELECT COUNT(*) AS n FROM host_sessions").get()).toEqual({ n: 0 });
   });
 
+  it("shares the lockout with the web dashboard's login", async () => {
+    const insert = sqlite.raw.prepare("INSERT INTO admin_login_failures (id, ip_hash) VALUES (?, ?)");
+    for (let index = 0; index < 100; index++) insert.run(`f${index}`, `client-${index}`);
+    const response = await signIn({ username: "admin", password: "secret-password" });
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("900");
+    expect(sqlite.raw.prepare("SELECT COUNT(*) AS n FROM host_sessions").get()).toEqual({ n: 0 });
+  });
+
+  it("counts a wrong password from the app against the shared lockout", async () => {
+    await signIn({ username: "admin", password: "wrong" });
+    expect(sqlite.raw.prepare("SELECT COUNT(*) AS n FROM admin_login_failures").get()).toEqual({ n: 1 });
+  });
+
   it.each([
     [{}],
     [{ username: "admin" }],

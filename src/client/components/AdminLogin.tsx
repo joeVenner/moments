@@ -15,9 +15,9 @@ export function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
     setError(null);
     setLoading(true);
     try {
-      const ok = await verifyAdminCredentials(username, password);
-      if (!ok) {
-        setError(t("incorrectCredentials"));
+      const outcome = await verifyAdminCredentials(username, password);
+      if (outcome !== "ok") {
+        setError(t(outcome === "locked" ? "adminLoginLocked" : "incorrectCredentials"));
         return;
       }
       setAdminAuth(username, password);
