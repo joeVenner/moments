@@ -47,6 +47,13 @@ public enum MomentsAPIError: Error, Sendable, Equatable {
     case unexpectedResponse
     /// Network failure (offline, timeout, TLS): safe to retry.
     case transport(URLError.Code?)
+    /// Host sign-in: wrong username or password.
+    case invalidCredentials
+    /// Host screens: no live session (expired, signed out, or the admin
+    /// password changed). Forget the token and sign in again.
+    case hostAuthRequired
+    /// Host sign-in isn't configured on the server.
+    case signInUnavailable
     /// Any other status, with the server's stable `code` when it sent one.
     case server(status: Int, code: String?)
 }
