@@ -49,6 +49,8 @@ public struct UploadProgressView: View {
                 }
             }
             .background(MomentsColor.background)
+            // Also with nothing queued, so it can be set before sharing.
+            .safeAreaInset(edge: .bottom) { LargeVideosSetting() }
             .navigationTitle("Your uploads")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -121,6 +123,30 @@ struct UploadQueueHeader: View {
         case let .someFailed(count): "^[\(count) moment](inflect: true) couldn't be shared"
         case .allShared: "All shared"
         }
+    }
+}
+
+/// The guest's choice to keep large videos off mobile data.
+struct LargeVideosSetting: View {
+    @AppStorage(CellularPolicy.largeVideosOnWiFiOnlyKey) private var isWiFiOnly = CellularPolicy.isWiFiOnlyByDefault
+
+    var body: some View {
+        Toggle(isOn: $isWiFiOnly) {
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text("Large videos on Wi-Fi only")
+                    .font(MomentsFont.body())
+                    .foregroundStyle(MomentsColor.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Saves your mobile data. Applies to what hasn't started sending.")
+                    .font(MomentsFont.caption())
+                    .foregroundStyle(MomentsColor.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .tint(MomentsColor.accent)
+        .padding(Spacing.md)
+        .background(MomentsColor.surface)
+        .overlay(alignment: .top) { MomentsColor.border.frame(height: 1) }
     }
 }
 

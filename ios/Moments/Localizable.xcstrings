@@ -1274,6 +1274,16 @@
         }
       }
     },
+    "Large videos on Wi-Fi only": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grandes vidéos en Wi-Fi uniquement"
+          }
+        }
+      }
+    },
     "Leaderboard": {
       "extractionState": "manual",
       "localizations": {
@@ -2005,6 +2015,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enregistrer et déconnecter les invités"
+          }
+        }
+      }
+    },
+    "Saves your mobile data. Applies to what hasn't started sending.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Économise vos données mobiles. S'applique à ce qui n'a pas commencé à partir."
           }
         }
       }
