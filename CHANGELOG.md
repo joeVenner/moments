@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `/.well-known/apple-app-site-association`: event links (`/e/*`, except the slideshow) open in the iOS app, and the App Clip is declared, for team 7877JLKPRQ.
 - iOS: the leaderboard shows each guest's avatar face, drawn on the phone exactly as on the web (guests without one keep their initial).
 - iOS: guests' avatar faces (eyes, mouth, color) are chosen on the phone from their avatar seed, exactly as on the web; a test against fixtures made from the web code keeps the two in sync.
 - Web: the feed and highlights show each moment's small thumbnail instead of the full file, falling back to the original if it fails, so the feed loads much faster. Video tiles show their first frame.

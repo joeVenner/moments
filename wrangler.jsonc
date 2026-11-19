@@ -28,7 +28,7 @@
     "directory": "./dist/client",
     "not_found_handling": "single-page-application",
     "binding": "ASSETS",
-    "run_worker_first": ["/", "/api/*", "/media/*", "/admin", "/admin/*", "/e/*"]
+    "run_worker_first": ["/", "/api/*", "/media/*", "/admin", "/admin/*", "/e/*", "/.well-known/apple-app-site-association"]
   },
   "d1_databases": [
     {
