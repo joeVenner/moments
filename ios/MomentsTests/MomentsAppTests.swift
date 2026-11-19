@@ -168,7 +168,7 @@ private let invite = String(repeating: "ab12", count: 16)
     }
 
     @Test func newEventProblemsAreWordedInOrderAndMissingFieldsStaySilent() {
-        let messages = HostNewEventView.messages(for: [.titleMissing, .typeMissing, .endBeforeStart, .titleTooLong])
+        let messages = HostEventFormText.messages(for: [.titleMissing, .typeMissing, .endBeforeStart, .titleTooLong])
         #expect(messages.count == 2)
         #expect(messages.first?.contains("120") == true && messages.last?.contains("before") == true)
     }
@@ -183,11 +183,26 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(HostNewEventView.message(for: .rateLimited, mayHaveCreated: true) == messages[2])
     }
 
+    @Test func everyEditFailureHasItsOwnMessage() {
+        let failures: [HostSaveFailure] = [.offline, .appTooOld, .rateLimited, .refused, .gone, .failed]
+        #expect(Set(failures.map(HostEventFormText.editMessage(for:))).count == failures.count)
+    }
+
+    @Test func dateProblemsAreWordedInOrder() {
+        let messages = HostEventFormText.messages(for: Set<HostEventDatesModel.Problem>([.closeAfterDelete, .deleteInPast]))
+        #expect(messages.count == 2 && messages[0].contains("passed") && messages[1].contains("before"))
+    }
+
+    @Test func editSheetsCloseOnlyWhenSavedOrSignedOut() {
+        #expect(HostSavePhase.signedOut.isDone)
+        #expect(!HostSavePhase.editing.isDone && !HostSavePhase.saving.isDone && !HostSavePhase.failed(.gone).isDone)
+    }
+
     @Test func defaultDatesStartOnTheHour() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try #require(TimeZone(identifier: "Europe/Paris"))
         let date = try #require(calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 22, minute: 41)))
-        let next = HostNewEventView.nextHour(after: date, addingDays: 1, calendar: calendar)
+        let next = HostEventFormText.nextHour(after: date, addingDays: 1, calendar: calendar)
         #expect(calendar.dateComponents([.day, .hour, .minute], from: next) == DateComponents(day: 20, hour: 23, minute: 0))
     }
 
