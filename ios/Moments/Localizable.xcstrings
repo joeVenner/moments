@@ -237,6 +237,16 @@
         }
       }
     },
+    "Account": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compte"
+          }
+        }
+      }
+    },
     "Add a caption (optional)": {
       "extractionState": "manual",
       "localizations": {
@@ -296,6 +306,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Toute personne ayant ce lien peut ouvrir l'événement sans son code. Ne le partagez qu'avec vos invités."
+          }
+        }
+      }
+    },
+    "Archived": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivé"
           }
         }
       }
@@ -656,6 +676,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Supprimer ce souvenir ?"
+          }
+        }
+      }
+    },
+    "Deleted on %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimé le %@"
           }
         }
       }
@@ -1262,6 +1292,16 @@
         }
       }
     },
+    "Live now": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En direct"
+          }
+        }
+      }
+    },
     "Loading highlights": {
       "extractionState": "manual",
       "localizations": {
@@ -1398,12 +1438,12 @@
         }
       }
     },
-    "No events yet. Tap New event to create your first one.": {
+    "No events yet. Tap + to create your first one.": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucun événement pour l'instant. Touchez Nouvel événement pour créer le premier."
+            "value": "Aucun événement pour l'instant. Touchez + pour créer le premier."
           }
         }
       }
@@ -1514,6 +1554,16 @@
         }
       }
     },
+    "Open for uploads": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvert aux partages"
+          }
+        }
+      }
+    },
     "Open the event link again, then try again.": {
       "extractionState": "manual",
       "localizations": {
@@ -1552,6 +1602,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mot de passe"
+          }
+        }
+      }
+    },
+    "Past": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passés"
           }
         }
       }
@@ -2140,6 +2200,16 @@
         }
       }
     },
+    "Starts %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commence le %@"
+          }
+        }
+      }
+    },
     "Stats": {
       "localizations": {
         "fr": {
@@ -2706,6 +2776,16 @@
         }
       }
     },
+    "Upcoming": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À venir"
+          }
+        }
+      }
+    },
     "Update Moments from the App Store to join this event.": {
       "extractionState": "manual",
       "localizations": {
@@ -2848,6 +2928,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fin des partages"
+          }
+        }
+      }
+    },
+    "Uploads close %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partages jusqu'au %@"
+          }
+        }
+      }
+    },
+    "Uploads closed": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partages fermés"
           }
         }
       }

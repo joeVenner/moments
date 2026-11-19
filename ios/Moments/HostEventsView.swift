@@ -4,13 +4,11 @@ import MomentsAPI
 import MomentsDomain
 import SwiftUI
 
-/// The signed-in host's events, newest first. Pull to refresh; sign out in
-/// the top bar; tap an event for its QR code, links and stats.
+/// The Hosting tab once signed in: the host's events grouped into Live now,
+/// Upcoming and Past. Pull to refresh; sign out from the account menu; tap
+/// an event for its QR code, links and stats.
 struct HostEventsView: View {
     let host: HomeView.Host
-    /// Leaves the screen; nil inside the Hosting tab, which swaps it out
-    /// itself once signed out.
-    let onClose: (() -> Void)?
 
     private var account: HostAccount { host.account }
     private var model: HostEventsModel { host.events }
@@ -22,11 +20,8 @@ struct HostEventsView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            VStack(spacing: 0) {
-                topBar
-                ScrollView { list }
-                    .refreshable { await model.load() }
-            }
+            ScrollView { list }
+                .refreshable { await model.load() }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(MomentsColor.background.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
@@ -42,12 +37,10 @@ struct HostEventsView: View {
             guard scenePhase == .active else { return }
             Task { await model.load() }
         }
-        // Expired or signed out (also before this appeared): forget the
-        // list and go back home.
+        // Expired or signed out: forget the list (the Hosting tab then shows
+        // its sign-in card in place of this screen).
         .onChange(of: account.state, initial: true) {
-            guard account.state == .signedOut else { return }
-            model.reset()
-            onClose?()
+            if account.state == .signedOut { model.reset() }
         }
         .onChange(of: model.phase) {
             if case let .failed(failure) = model.phase {
@@ -70,43 +63,43 @@ struct HostEventsView: View {
     /// The title and events without the scroll view (also rendered by
     /// screenshot tests).
     var list: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("Hosted events")
-                .font(MomentsFont.display(.title2))
-                .foregroundStyle(MomentsColor.text)
-                .accessibilityAddTraits(.isHeader)
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+            header
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Spacing.lg)
+        .padding(.horizontal, Spacing.lg)
+        .padding(.top, Spacing.xl)
+        .padding(.bottom, Spacing.lg)
     }
 
-    var topBar: some View {
-        HStack {
-            if let onClose {
-                Button(action: onClose) {
-                    Label("Home", systemImage: "chevron.backward")
-                        .frame(minWidth: Radius.minimumTapTarget, minHeight: Radius.minimumTapTarget, alignment: .leading)
-                        .contentShape(Rectangle())
-                }
+    private var header: some View {
+        HStack(alignment: .center, spacing: Spacing.sm) {
+            Text("Hosting")
+                .font(MomentsFont.display())
+                .foregroundStyle(MomentsColor.text)
+                .accessibilityAddTraits(.isHeader)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            // Icons only, so the row fits at the largest text sizes.
+            Menu {
+                Button("Sign out", role: .destructive) { isConfirmingSignOut = true }
+            } label: {
+                Image(systemName: "person.crop.circle")
+                    .font(.system(size: 24))
+                    .foregroundStyle(MomentsColor.textMuted)
+                    .frame(width: Radius.minimumTapTarget, height: Radius.minimumTapTarget)
+                    .contentShape(Rectangle())
             }
-            Spacer()
-            // Icon only, so the bar fits at the largest text sizes.
+            .accessibilityLabel(Text("Account"))
             Button { isCreatingEvent = true } label: {
                 Image(systemName: "plus")
-                    .frame(minWidth: Radius.minimumTapTarget, minHeight: Radius.minimumTapTarget)
-                    .contentShape(Rectangle())
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(MomentsColor.onAccent)
+                    .frame(width: Radius.minimumTapTarget, height: Radius.minimumTapTarget)
+                    .background(MomentsColor.accent, in: Circle())
             }
             .accessibilityLabel(Text("New event"))
-            Button { isConfirmingSignOut = true } label: {
-                Text("Sign out")
-                    .frame(minWidth: Radius.minimumTapTarget, minHeight: Radius.minimumTapTarget, alignment: .trailing)
-                    .contentShape(Rectangle())
-            }
         }
-        .font(MomentsFont.body())
-        .foregroundStyle(MomentsColor.text)
-        .padding(.horizontal, Spacing.lg)
     }
 
     @ViewBuilder private var content: some View {
@@ -118,15 +111,20 @@ struct HostEventsView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, Spacing.xl)
             case .loaded:
-                notice(String(localized: "No events yet. Tap New event to create your first one."))
+                notice(String(localized: "No events yet. Tap + to create your first one."))
             case let .failed(failure):
                 notice(Self.message(for: failure))
             }
         } else {
             if case let .failed(failure) = model.phase { notice(Self.message(for: failure)) }
-            ForEach(model.events) { item in
-                NavigationLink(value: item) { HostEventRow(item: item) }
-                    .buttonStyle(.plain)
+            // Re-sorts each minute, so an event moves to Live now when it starts.
+            TimelineView(.everyMinute) { context in
+                let groups = HostEventGroups(events: model.events, now: context.date)
+                VStack(alignment: .leading, spacing: Spacing.lg) {
+                    section("Live now", groups.live) { HostLiveEventCard(item: $0) }
+                    section("Upcoming", groups.upcoming) { HostEventRow(item: $0, detail: Self.upcomingLine($0.event)) }
+                    section("Past", groups.past) { HostEventRow(item: $0, detail: Self.pastLine($0.event)) }
+                }
             }
             if model.isTruncated {
                 notice(String(localized: "Showing the newest 500 events."))
@@ -138,6 +136,24 @@ struct HostEventsView: View {
     private func showCreated(_ detail: AdminEventDetail) {
         isCreatingEvent = false
         path.append(detail.summary)
+    }
+
+    @ViewBuilder
+    private func section<Row: View>(
+        _ title: LocalizedStringKey, _ items: [AdminEvent], @ViewBuilder row: @escaping (AdminEvent) -> Row
+    ) -> some View {
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Text(title)
+                    .font(MomentsFont.heading())
+                    .foregroundStyle(MomentsColor.text)
+                    .accessibilityAddTraits(.isHeader)
+                ForEach(items) { item in
+                    NavigationLink(value: item) { row(item) }
+                        .buttonStyle(.plain)
+                }
+            }
+        }
     }
 
     private func notice(_ text: String) -> some View {
@@ -154,6 +170,26 @@ struct HostEventsView: View {
         return date
     }
 
+    /// Under a live event's title: when uploads stop, if they ever do.
+    static func liveLine(_ event: Event) -> String {
+        guard let closesAt = event.effectiveUploadsCloseAt else { return String(localized: "Open for uploads") }
+        let when = closesAt.formatted(date: .abbreviated, time: .shortened)
+        return String(localized: "Uploads close \(when)")
+    }
+
+    static func upcomingLine(_ event: Event) -> String {
+        let when = (event.startsAt ?? event.createdAt).formatted(date: .abbreviated, time: .shortened)
+        return String(localized: "Starts \(when)")
+    }
+
+    /// Under a past event's title: what happens to it next.
+    static func pastLine(_ event: Event) -> String {
+        if event.archivedAt != nil { return String(localized: "Archived") }
+        guard let purgeAt = event.effectivePurgeAfter else { return String(localized: "Uploads closed") }
+        let when = purgeAt.formatted(date: .abbreviated, time: .omitted)
+        return String(localized: "Deleted on \(when)")
+    }
+
     static func message(for failure: HostEventsModel.Failure) -> String {
         switch failure {
         case .offline: String(localized: "You're offline. Pull down to try again.")
@@ -163,35 +199,109 @@ struct HostEventsView: View {
     }
 }
 
-/// One event in the host's list.
-struct HostEventRow: View {
+/// A live event: its title, Private chip and when uploads stop, over its
+/// moment and guest counts.
+struct HostLiveEventCard: View {
     let item: AdminEvent
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            // Large text: the badge goes under the title so neither wraps mid-word.
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            // Large text: the chip goes under the title so neither wraps mid-word.
             let layout = typeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.xs))
-                : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Spacing.sm))
+                : AnyLayout(HStackLayout(alignment: .top, spacing: Spacing.sm))
             layout {
+                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                    Text(item.event.title)
+                        .font(MomentsFont.heading())
+                        .foregroundStyle(MomentsColor.text)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(HostEventsView.liveLine(item.event))
+                        .font(MomentsFont.caption())
+                        .foregroundStyle(MomentsColor.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if item.event.accessMode == .private { HostPrivateChip() }
+            }
+            // Large text: tiles stack so their labels never truncate.
+            let tiles = typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: Spacing.xs))
+                : AnyLayout(HStackLayout(spacing: Spacing.xs))
+            tiles {
+                HostStatTile(value: item.momentCount, label: "Moments")
+                HostStatTile(value: item.participantCount, label: "Guests")
+            }
+        }
+        .padding(Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.sheet))
+        .overlay(RoundedRectangle(cornerRadius: Radius.sheet).stroke(MomentsColor.accent.opacity(0.6)))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A count over its label, e.g. 128 / Moments.
+struct HostStatTile: View {
+    let value: Int
+    let label: LocalizedStringKey
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            Text(value, format: .number)
+                .font(MomentsFont.number(.title2))
+                .foregroundStyle(MomentsColor.text)
+            Text(label)
+                .font(MomentsFont.caption())
+                .foregroundStyle(MomentsColor.textMuted)
+        }
+        .padding(Spacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(MomentsColor.background, in: RoundedRectangle(cornerRadius: Radius.card))
+        // Read as "128 Moments", not the number and label apart.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(value, format: .number) + Text(verbatim: " ") + Text(label))
+    }
+}
+
+struct HostPrivateChip: View {
+    var body: some View {
+        Label("Private", systemImage: "lock.fill")
+            .font(MomentsFont.caption())
+            .foregroundStyle(MomentsColor.textMuted)
+            .padding(.horizontal, Spacing.xs)
+            .padding(.vertical, Spacing.xxs)
+            .overlay(Capsule().stroke(MomentsColor.border))
+    }
+}
+
+/// An upcoming or past event: title, one line of status, counts, chevron.
+struct HostEventRow: View {
+    let item: AdminEvent
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
                 Text(item.event.title)
                     .font(MomentsFont.body().bold())
                     .foregroundStyle(MomentsColor.text)
                     .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if item.event.accessMode == .private {
-                    Label("Private", systemImage: "lock.fill")
-                        .font(MomentsFont.caption())
-                        .foregroundStyle(MomentsColor.textMuted)
-                }
+                    .fixedSize(horizontal: false, vertical: true)
+                if item.event.accessMode == .private { HostPrivateChip() }
+                Text(detail)
+                    .font(MomentsFont.caption())
+                    .foregroundStyle(MomentsColor.textMuted)
+                Text("Moments: \(item.momentCount) · Guests: \(item.participantCount)")
+                    .font(MomentsFont.caption())
+                    .foregroundStyle(MomentsColor.textMuted)
             }
-            Text(HostEventsView.dateLine(item.event))
-                .font(MomentsFont.caption())
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Image(systemName: "chevron.forward")
                 .foregroundStyle(MomentsColor.textMuted)
-            Text("Moments: \(item.momentCount) · Guests: \(item.participantCount)")
-                .font(MomentsFont.caption())
-                .foregroundStyle(MomentsColor.textMuted)
+                .accessibilityHidden(true)
         }
         .padding(Spacing.md)
         .frame(maxWidth: .infinity, minHeight: Radius.minimumTapTarget, alignment: .leading)

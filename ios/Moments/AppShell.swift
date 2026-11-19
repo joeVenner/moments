@@ -183,7 +183,7 @@ struct HostingTab: View {
         Group {
             if case .signedIn = host.account.state {
                 // Signing out swaps this for the welcome below.
-                HostEventsView(host: host, onClose: nil)
+                HostEventsView(host: host)
             } else {
                 HostingWelcome { isShowingSignIn = true }
             }
