@@ -1,3 +1,4 @@
+import { GUEST_REQUIRED_EVENT, GuestRequiredError } from "./lib/guestRequired";
 import { resumableUploadMoment, UploadAlreadyRunningError } from "./lib/multipartUpload";
 import { ACTIVE_UPLOAD_STATUSES, getUploadFile, listUploads } from "./lib/uploadStore";
 import { UPLOAD_SYNC_TAG } from "./lib/uploadSync";
@@ -30,6 +31,13 @@ async function notifyClients(slug: string): Promise<void> {
   for (const client of clients) client.postMessage({ type: "moment-upload-completed", slug });
 }
 
+async function notifyGuestRequired(error: GuestRequiredError): Promise<void> {
+  const clients = await serviceWorker.clients.matchAll({ type: "window", includeUncontrolled: true });
+  for (const client of clients) {
+    client.postMessage({ type: GUEST_REQUIRED_EVENT, slug: error.slug, sentToken: error.sentToken });
+  }
+}
+
 async function resumeQueue(): Promise<void> {
   const uploads = (await listUploads())
     .filter((upload) => upload.backend !== "stream" && ACTIVE_UPLOAD_STATUSES.has(upload.status))
@@ -49,6 +57,11 @@ async function resumeQueue(): Promise<void> {
       });
       await notifyClients(upload.slug);
     } catch (error) {
+      if (error instanceof GuestRequiredError) {
+        // Final (the row is marked failed): tell open pages, which send the guest to join again.
+        await notifyGuestRequired(error);
+        continue;
+      }
       if (!(error instanceof UploadAlreadyRunningError)) retryNeeded = true;
     }
   }
