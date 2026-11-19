@@ -22,7 +22,7 @@ export const ErrorSchema = z
     error: z.string(),
     code: z.string().openapi({
       description:
-        "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, not_found, internal",
+        "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, media_delete_failed, not_found, internal",
     }),
   })
   .openapi("Error");
@@ -410,6 +410,41 @@ export const AdminEventDetailSchema = z
     analytics: EventAnalyticsSchema,
   })
   .openapi("AdminEventDetail");
+
+const ModerationStatusSchema = z.enum(["approved", "hidden"]);
+
+export const AdminMomentSchema = z
+  .object({
+    id: z.string(),
+    event_id: z.string(),
+    uploader_name: z.string(),
+    caption: z.string().nullable(),
+    created_at: timestamp,
+    mime_type: z.string().nullable(),
+    size_bytes: z.number().int().nullable(),
+    moderation_status: ModerationStatusSchema.openapi({ description: "`hidden` moments are invisible to guests" }),
+    reaction_count: nonNegativeCount,
+    media: MediaSchema,
+  })
+  .openapi("AdminMoment", {
+    description:
+      "Its `/media/...` URLs carry an `mv` admin view signature (not `at`) valid 1-2 hours, so hidden moments load too; reload the list for fresh ones.",
+  });
+
+export const AdminMomentListSchema = z
+  .object({
+    moments: z.array(AdminMomentSchema).openapi({ description: "Newest first, hidden ones included; at most 500" }),
+    truncated: z.boolean().openapi({ description: "True when older moments were left out by the 500 cap" }),
+  })
+  .openapi("AdminMomentList");
+
+export const AdminMomentParamSchema = z.object({
+  id: z.string().min(1).max(100).openapi({ param: { name: "id", in: "path" } }),
+});
+
+export const ModerationBodySchema = z
+  .object({ status: ModerationStatusSchema.openapi({ description: "`hidden` hides it from guests; `approved` shows it again" }) })
+  .openapi("ModerationRequest");
 
 export const HostSignInResponseSchema = HostSessionSchema.extend({
   token: z.string().openapi({ description: "Send as `Authorization: Bearer <token>`. Returned only here; keep it in the keychain." }),

@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import { getEventAnalytics } from "./adminAnalytics";
+import { deleteAdminMoment } from "./adminModeration";
 import type { Env, EventRow, MomentRow, LeaderboardEntry, UploadRow } from "./types";
 import { slugify, randomSuffix } from "./slugify";
 import { putMedia, pointsForContentType, isAllowedContentType, MAX_UPLOAD_BYTES, momentKey } from "./storage";
@@ -45,7 +46,6 @@ import {
   streamUploadMetadata,
   syncStreamSigning,
 } from "./streamSigning";
-import { deleteMomentMedia } from "./moderation";
 import {
   THUMBNAIL_CONTENT_TYPE,
   THUMBNAIL_URL_TTL_SECONDS,
@@ -722,17 +722,15 @@ app.patch("/api/admin/moments/:id", async (c) => {
 });
 
 app.delete("/api/admin/moments/:id", async (c) => {
-  const moment = await c.env.DB.prepare("SELECT * FROM moments WHERE id = ?")
-    .bind(c.req.param("id")).first<MomentRow>();
-  if (!moment) return c.json({ error: "moment not found" }, 404);
-
   try {
-    await deleteMomentMedia(c.env, moment);
+    if ((await deleteAdminMoment(c.env, c.req.param("id"))) === "not_found") {
+      return c.json({ error: "moment not found" }, 404);
+    }
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "unable to delete media" }, 502);
+    // The cause stays in the logs: storage errors can name internal endpoints.
+    console.error(JSON.stringify({ msg: "admin_moment_delete_failed", reason: error instanceof Error ? error.name : "unknown" }));
+    return c.json({ error: "unable to delete media" }, 502);
   }
-
-  await c.env.DB.prepare("DELETE FROM moments WHERE id = ?").bind(moment.id).run();
   return c.json({ deleted: true });
 });
 
