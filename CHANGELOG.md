@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS host app: "Privacy" in an event's Edit menu switches it between public and private and sets a new PIN. One confirmation comes first when saving signs guests out.
 - iOS host app: an "Edit" menu on an event's page opens "Details" (title, type, who it's about, description, event date) and "Dates" (when uploads close, when the event is deleted). The event's link and QR code never change.
 - iOS host app: "New event" button on your events list. It opens a form for the title, type, who it's about, description, and optional event and end dates, and shows problems as you type. A new event opens straight away.
 - iOS: groundwork for creating and editing events in the host app. The API client can create an event, edit its details, change its privacy and PIN, and set its dates. Form models check the same limits as the server. The screens come next.

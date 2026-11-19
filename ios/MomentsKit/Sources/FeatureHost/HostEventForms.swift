@@ -205,9 +205,15 @@ public final class HostEventAccessModel {
     }
 
     private var trimmedPIN: String { newPIN.trimmingCharacters(in: EventForm.trimmedCharacters) }
+    /// The PIN that saving would send: none for a public event, whatever
+    /// the field holds.
+    private var sentPIN: String { mode == .private ? trimmedPIN : "" }
+
+    /// An already-private event keeps its PIN when none is typed.
+    public var keepsCurrentPIN: Bool { currentMode == .private }
 
     public var problems: Set<Problem> {
-        let pin = trimmedPIN
+        let pin = sentPIN
         var problems = Set<Problem>()
         if !pin.isEmpty, pin.utf16.count < EventFieldLimits.pinLength.lowerBound { problems.insert(.pinTooShort) }
         if pin.utf16.count > EventFieldLimits.pinLength.upperBound { problems.insert(.pinTooLong) }
@@ -219,14 +225,14 @@ public final class HostEventAccessModel {
     /// Whether saving signs every guest out (and replaces the invite link
     /// when the PIN changes), so the screen can say so first.
     public var signsGuestsOut: Bool {
-        !trimmedPIN.isEmpty || (mode == .private && currentMode != .private)
+        !sentPIN.isEmpty || (mode == .private && currentMode != .private)
     }
 
-    public var hasChanges: Bool { mode != currentMode || !trimmedPIN.isEmpty }
+    public var hasChanges: Bool { mode != currentMode || !sentPIN.isEmpty }
 
     public func save() async {
         guard phase.canSave, hasChanges, problems.isEmpty else { return }
-        let (id, mode, pin) = (eventID, mode, trimmedPIN.isEmpty ? nil : trimmedPIN)
+        let (id, mode, pin) = (eventID, mode, sentPIN.isEmpty ? nil : sentPIN)
         phase = .saving
         phase = await saveHostEvent(account, logCategory: "host-event-access") { [service] token in
             try await service.updateAccess(token: token, id: id, mode: mode, newPIN: pin)
@@ -241,8 +247,10 @@ public final class HostEventAccessModel {
         if isDone, trimmedPIN == (pin ?? "") { newPIN = "" }
     }
 
+    /// Back to editing after a failure, except a deleted event: nothing
+    /// typed can fix that, so its message stays.
     public func dismissFailure() {
-        if case .failed = phase { phase = .editing }
+        if case let .failed(failure) = phase, failure != .gone { phase = .editing }
     }
 }
 

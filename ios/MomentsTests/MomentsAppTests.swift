@@ -193,6 +193,13 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(messages.count == 2 && messages[0].contains("passed") && messages[1].contains("before"))
     }
 
+    @Test func pinProblemsNeverRepeatAndNeverShowThePIN() {
+        let messages = HostEditPrivacyView.messages(for: [.pinRequired, .pinTooShort, .pinTooLong])
+        #expect(messages.count == 2)
+        #expect(messages[1].contains("6") && messages[1].contains("20"))
+        #expect(HostEditPrivacyView.messages(for: []).isEmpty)
+    }
+
     @Test func editSheetsCloseOnlyWhenSavedOrSignedOut() {
         #expect(HostSavePhase.signedOut.isDone)
         #expect(!HostSavePhase.editing.isDone && !HostSavePhase.saving.isDone && !HostSavePhase.failed(.gone).isDone)

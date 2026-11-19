@@ -59,6 +59,7 @@ struct HostEventDetailView: View {
         .sheet(item: $editing) { edit in
             switch edit {
             case .details: HostEditDetailsView(event: event, host: host, onDone: finishEditing)
+            case .privacy: HostEditPrivacyView(event: event, host: host, onDone: finishEditing)
             case .dates: HostEditDatesView(event: event, host: host, onDone: finishEditing)
             }
         }
@@ -84,6 +85,7 @@ struct HostEventDetailView: View {
             if model.detail != nil {
                 Menu {
                     Button { editing = .details } label: { Label("Details", systemImage: "pencil") }
+                    Button { editing = .privacy } label: { Label("Privacy", systemImage: "lock") }
                     Button { editing = .dates } label: { Label("Dates", systemImage: "calendar") }
                 } label: {
                     Text("Edit")
