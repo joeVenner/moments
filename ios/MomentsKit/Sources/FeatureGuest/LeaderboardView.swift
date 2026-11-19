@@ -99,7 +99,7 @@ public struct LeaderboardView: View {
                 .font(MomentsFont.number(.body))
                 .foregroundStyle(MomentsColor.textMuted)
                 .frame(minWidth: rankWidth, alignment: .leading)
-            InitialsAvatar(nickname: entry.nickname, size: rowAvatarSize)
+            GuestAvatar(nickname: entry.nickname, seed: entry.avatarSeed, size: rowAvatarSize)
             Text(verbatim: entry.nickname)
                 .font(MomentsFont.body().weight(isMe ? .semibold : .regular))
                 .foregroundStyle(MomentsColor.text)
@@ -133,7 +133,7 @@ private struct PodiumPlace: View {
 
     var body: some View {
         VStack(spacing: Spacing.xs) {
-            InitialsAvatar(nickname: entry.nickname, size: Self.avatarSizes[position] * scale)
+            GuestAvatar(nickname: entry.nickname, seed: entry.avatarSeed, size: Self.avatarSizes[position] * scale)
                 .overlay { if isMe { Circle().stroke(MomentsColor.accent, lineWidth: 2) } }
             Text(verbatim: entry.nickname)
                 .font(MomentsFont.caption().weight(.semibold))
@@ -180,8 +180,23 @@ private struct YouBadge: View {
     }
 }
 
-/// A guest's initials until the avatar endpoint exists (the web draws
-/// DiceBear faces from `avatar_seed`).
+/// A guest's face from their avatar seed (drawn on device, as on the web),
+/// or their initial when they have no seed.
+struct GuestAvatar: View {
+    let nickname: String
+    let seed: String?
+    let size: CGFloat
+
+    var body: some View {
+        if let seed, !seed.isEmpty {
+            AvatarView(seed: seed, size: size)
+        } else {
+            InitialsAvatar(nickname: nickname, size: size)
+        }
+    }
+}
+
+/// A guest's initial, for guests without an avatar seed.
 struct InitialsAvatar: View {
     let nickname: String
     let size: CGFloat
