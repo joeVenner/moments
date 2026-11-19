@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- App API: hosts can create an event (`POST /api/v1/admin/events`) and change its title, type, people, description or date (`PATCH /api/v1/admin/events/{id}`). New events start public and open for uploads; the slug comes from the title and never changes, so shared links and QR codes keep working.
 - iOS: moderate an event from the app. "Moderate moments" on a hosted event opens a grid of all its moments, hidden ones dimmed with a badge. Tap one to hide it from guests, show it again, or delete it (marked destructive, with a "can't be undone" warning); VoiceOver users get the same actions. English and French.
 - iOS groundwork for moderating an event from the app: listing its moments (hidden ones included), hiding or showing one, and deleting one. A hide shows at once and is undone if the server refuses; a delete waits for the server, and a moment whose files couldn't be removed is kept with a message. No screen yet.
 - iOS: hosted event detail. Tap an event in "Hosted events" to see its QR code, share its link, and for private events copy the invite link after a warning that it skips the PIN. The copied link stays on this phone and leaves the clipboard after 10 minutes. The screen also shows stats (moments, hidden, photos, videos, guests, hearts, storage) and uploads over the last 14 days. English and French.
