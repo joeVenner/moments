@@ -10,6 +10,7 @@ import { sqlTimestamp } from "./events";
 
 export const HOST_SESSION_TTL_DAYS = 30;
 export type HostSubject = "operator";
+export type HostRole = "host" | "operator";
 /** The operator's user row (seeded by migration 0023). */
 export const OPERATOR_USER_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -25,6 +26,8 @@ export interface HostSession {
   subject: HostSubject;
   /** Whose session it is (`users.id`). */
   userId: string;
+  /** That user's role: the operator sees every event. */
+  role: HostRole;
   expiresAt: string;
 }
 
@@ -83,6 +86,7 @@ export async function createHostSession(
     id: crypto.randomUUID(),
     subject: "operator",
     userId: OPERATOR_USER_ID,
+    role: "operator",
     expiresAt: sqlTimestamp(new Date(now.getTime() + HOST_SESSION_TTL_DAYS * 86_400_000)),
   };
   await db.batch([
@@ -114,14 +118,14 @@ export async function resolveHostSession(
   // Remove the fallback before any other host can sign in (it fails open).
   const row = await db
     .prepare(
-      `SELECT s.id, s.subject, COALESCE(s.user_id, ?1) AS user_id, s.credential_tag, s.expires_at
+      `SELECT s.id, s.subject, COALESCE(s.user_id, ?1) AS user_id, u.role, s.credential_tag, s.expires_at
        FROM host_sessions s JOIN users u ON u.id = COALESCE(s.user_id, ?1)
        WHERE s.token_hash = ?2 AND s.expires_at > ?3 AND u.status = 'active'`
     )
     .bind(OPERATOR_USER_ID, await hashToken(token), sqlTimestamp(now))
-    .first<{ id: string; subject: HostSubject; user_id: string; credential_tag: string; expires_at: string }>();
+    .first<{ id: string; subject: HostSubject; user_id: string; role: HostRole; credential_tag: string; expires_at: string }>();
   if (!row || !timingSafeEqual(row.credential_tag, tag)) return null;
-  return { id: row.id, subject: row.subject, userId: row.user_id, expiresAt: row.expires_at };
+  return { id: row.id, subject: row.subject, userId: row.user_id, role: row.role, expiresAt: row.expires_at };
 }
 
 export async function deleteHostSession(db: D1Database, sessionId: string): Promise<void> {

@@ -4,6 +4,7 @@ import { getEventAnalytics } from "./adminAnalytics";
 import { deleteAdminMoment } from "./adminModeration";
 import type { Env, EventRow, MomentRow, LeaderboardEntry, UploadRow } from "./types";
 import { insertEvent, normalizeDate } from "./eventWrites";
+import { OPERATOR_USER_ID } from "./hostSessions";
 import { lifecycleChangeFrom, type SettingsRefusal, updateEventAccess, updateEventLifecycle } from "./eventSettings";
 import { putMedia, pointsForContentType, isAllowedContentType, MAX_UPLOAD_BYTES, momentKey } from "./storage";
 import {
@@ -278,7 +279,8 @@ app.post("/api/events", async (c) => {
 
   await insertEvent(
     c.env.DB,
-    { title, type, mainCharacters, description, coverImageUrl, startsAt: null, expiresAt },
+    // The web admin is the operator.
+    { title, type, mainCharacters, description, coverImageUrl, startsAt: null, expiresAt, ownerUserId: OPERATOR_USER_ID },
     id
   );
 

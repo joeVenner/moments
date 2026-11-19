@@ -33,19 +33,21 @@ async function toAdminEventSummary(
 export const ADMIN_EVENTS_LIMIT = 500;
 
 /**
- * Every event, newest first, with its moment and guest counts. Secrets
- * (PIN hash, invite token, access version) never leave this function; a
- * private event's cover carries a signed grant like the guest API's.
+ * The host's events (every event when `ownerUserId` is null: the operator),
+ * newest first, with their moment and guest counts. Secrets (PIN hash,
+ * invite token, access version) never leave this function; a private
+ * event's cover carries a signed grant like the guest API's.
  */
 export async function listAdminEvents(
   db: D1Database,
   secret: string | undefined,
+  ownerUserId: string | null,
   nowSeconds: number = Math.floor(Date.now() / 1000)
 ): Promise<{ events: AdminEventSummary[]; truncated: boolean }> {
   const { results } = await db
-    .prepare(`${ADMIN_EVENT_SELECT} ORDER BY e.created_at DESC, e.id LIMIT ?`)
+    .prepare(`${ADMIN_EVENT_SELECT} WHERE (?1 IS NULL OR e.owner_user_id = ?1) ORDER BY e.created_at DESC, e.id LIMIT ?2`)
     // One extra row tells whether the cap cut the list short.
-    .bind(ADMIN_EVENTS_LIMIT + 1)
+    .bind(ownerUserId, ADMIN_EVENTS_LIMIT + 1)
     .all<AdminEventRow>();
   const events = await Promise.all(
     results.slice(0, ADMIN_EVENTS_LIMIT).map((row) => toAdminEventSummary(row, secret, nowSeconds))

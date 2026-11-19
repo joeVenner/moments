@@ -87,6 +87,7 @@ beforeEach(async () => {
       access_pin_salt: PIN_SALT,
       invite_token: INVITE_TOKEN,
       access_version: 1,
+      owner_user_id: null,
     },
     clientFailures: 0,
     eventFailures: 0,

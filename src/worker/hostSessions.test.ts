@@ -72,7 +72,7 @@ describe("host sessions", () => {
     sqlite.raw.prepare("INSERT INTO users (id, role) VALUES (?, 'host')").run(hostId);
     const { token, session } = await createHostSession(sqlite.db, ENV, now);
     sqlite.raw.prepare("UPDATE host_sessions SET user_id = ?").run(hostId);
-    expect(await resolveHostSession(sqlite.db, ENV, token, now)).toEqual({ ...session, userId: hostId });
+    expect(await resolveHostSession(sqlite.db, ENV, token, now)).toEqual({ ...session, userId: hostId, role: "host" });
   });
 
   it("treats a session opened by older code (no user) as the operator's", async () => {

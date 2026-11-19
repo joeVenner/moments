@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Events now belong to a host (migration 0024; existing events belong to the operator). In the app, a host sees and manages only their own events and moments; another host's event answers as if it didn't exist. The operator (admin password, web admin) still sees everything. Guests never see who hosts an event.
 - Host accounts: a `users` table (migration 0023) with the operator as its first user. App sign-in sessions now belong to a user, and a deleted account's sessions stop working. Nothing changes for hosts yet; this prepares Sign in with Apple and subscriptions.
 - iOS app: a large video held off mobile data now says "Waiting for Wi-Fi" in the uploads sheet instead of "Uploading 0%".
 - iOS app: a Share button in the full-screen viewer sends the photo itself (never its link) to Messages, WhatsApp, AirDrop and the rest.
