@@ -1,3 +1,4 @@
+import AVFoundation
 import DesignSystem
 import FeatureGuest
 import SwiftUI
@@ -11,6 +12,9 @@ struct HomeView: View {
     /// Shown above the link field, e.g. after a slideshow link.
     let notice: String?
 
+    @State private var scanSheet: ScanSheet?
+    @State private var cameraAccess = CameraAccess.unsupported
+    @State private var isRequestingCamera = false
     @State private var link = ""
     @State private var isRejected = false
     @FocusState private var isLinkFocused: Bool
@@ -34,6 +38,13 @@ struct HomeView: View {
                     .font(MomentsFont.body())
                     .foregroundStyle(MomentsColor.textMuted)
                     .multilineTextAlignment(.center)
+                if cameraAccess != .unsupported {
+                    Button(action: startScanning) {
+                        Label("Scan QR code", systemImage: "qrcode.viewfinder")
+                    }
+                    .buttonStyle(.momentsPrimary)
+                    .disabled(isRequestingCamera)
+                }
                 TextField(text: $link, prompt: Text("Event link").foregroundStyle(MomentsColor.textMuted)) { Text("Event link") }
                     .linkInput()
                     .submitLabel(.go)
@@ -47,9 +58,12 @@ struct HomeView: View {
                         .foregroundStyle(MomentsColor.accent)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Button("Open event", action: open)
-                    .buttonStyle(.momentsPrimary)
-                    .disabled(link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                // One orange button: Scan when there is one, otherwise this.
+                if cameraAccess == .unsupported {
+                    openButton.buttonStyle(.momentsPrimary)
+                } else {
+                    openButton.buttonStyle(.momentsSecondary)
+                }
             }
             .padding(Spacing.lg)
             .padding(.top, Spacing.xl * 3)
@@ -60,7 +74,51 @@ struct HomeView: View {
         .background(MomentsColor.background)
         // Reloads each time home shows, e.g. after joining or leaving an event.
         .task { await myEvents.load() }
+        .onAppear { cameraAccess = CameraAccess.current }
+        .fullScreenCover(item: $scanSheet) { sheet in
+            switch sheet {
+            case .scanner:
+                QRScannerSheet { text in
+                    guard navigation.handle(text: text) else { return false }
+                    scanSheet = nil
+                    return true
+                } onCancel: {
+                    scanSheet = nil
+                } onUnavailable: {
+                    scanSheet = .denied
+                }
+            case .denied:
+                CameraDeniedSheet { scanSheet = nil } onGranted: { scanSheet = .scanner }
+            }
+        }
         .refreshable { await myEvents.load() }
+    }
+
+    private enum ScanSheet: String, Identifiable {
+        case scanner, denied
+        var id: String { rawValue }
+    }
+
+    private func startScanning() {
+        cameraAccess = CameraAccess.current
+        switch cameraAccess {
+        case .unsupported: return
+        case .granted: scanSheet = .scanner
+        case .denied: scanSheet = .denied
+        case .notDetermined:
+            isRequestingCamera = true
+            Task {
+                let isGranted = await AVCaptureDevice.requestAccess(for: .video)
+                isRequestingCamera = false
+                cameraAccess = CameraAccess.current
+                scanSheet = isGranted ? .scanner : .denied
+            }
+        }
+    }
+
+    private var openButton: some View {
+        Button("Open event", action: open)
+            .disabled(link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     private func open() {
@@ -83,3 +141,4 @@ private extension View {
         #endif
     }
 }
+

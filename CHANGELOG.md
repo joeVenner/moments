@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS QR scanner: "Scan QR code" on the home screen opens the camera (VisionKit) and joins the event from its code; codes that are not Moments links are refused, and a camera-off screen links to Settings.
 - iOS home "Your events": the events joined on this phone, newest first, each opening with one tap (a private event whose grant expired asks for the PIN again); a back button returns home from an event.
 - iOS onboarding: three first-launch pages (what Moments is, scan to join, share and heart) with Skip; shown once, and skipped when the app opens on an event link.
 - iOS home screen: paste or type an event link to open it (replaces the placeholder that offered no way in).
