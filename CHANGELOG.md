@@ -66,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Admin privacy controls warn that saving a new PIN signs every guest out and replaces the invitation link.
 
 ### Changed
+- `/api/v1` is token-only: hearts always need the guest token, reads report only that guest's hearts, `reactor_id` is gone, and joins always protect claimed names. The iOS app no longer keeps a reactor secret.
 - Native feed responses report `reacted` as a boolean. The web moment list is unchanged.
 - The web moment list and highlights return an explicit set of columns, so internal storage columns are never exposed to guests.
 - Nicknames longer than 60 characters are rejected when joining.

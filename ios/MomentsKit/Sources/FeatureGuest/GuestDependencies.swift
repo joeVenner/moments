@@ -52,9 +52,6 @@ public struct GuestDependencies: Sendable {
     public let service: any MomentsService
     public let store: any EventCredentialStore
     public let mediaFetcher: MediaFetcher
-    /// Marks this device's reactions in one event (like the web's reactor
-    /// id), derived per event so events can't be linked to one device.
-    public let reactorID: @Sendable (_ eventID: String) -> String
     /// Nil until uploads are wired in the app: the share button is hidden.
     public let uploads: UploadDependencies?
     /// "Leave this event"; nil hides it.
@@ -62,7 +59,7 @@ public struct GuestDependencies: Sendable {
 
     public init(
         service: any MomentsService, store: any EventCredentialStore, mediaFetcher: MediaFetcher,
-        reactorID: @escaping @Sendable (_ eventID: String) -> String, uploads: UploadDependencies? = nil,
+        uploads: UploadDependencies? = nil,
         leaver: (any LeaveService)? = nil
     ) {
         self.uploads = uploads
@@ -70,6 +67,5 @@ public struct GuestDependencies: Sendable {
         self.service = service
         self.store = store
         self.mediaFetcher = mediaFetcher
-        self.reactorID = reactorID
     }
 }

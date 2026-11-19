@@ -12,20 +12,6 @@ private let invite = String(repeating: "ab12", count: 16)
         _ = RootView(navigation: AppNavigation(router: AppRouter()), environment: .inMemory()).body
     }
 
-    @Test func reactorIDsAreStablePerInstallAndDifferPerEvent() throws {
-        let suite = "moments.tests.\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let secret = AppEnvironment.reactorSecret(defaults)
-        #expect(secret.count == 32)
-        #expect(AppEnvironment.reactorSecret(defaults) == secret)
-        let ids = AppEnvironment.reactorIDs(secret: secret)
-        #expect(ids("e1") == ids("e1"))
-        #expect(ids("e1") != ids("e2"))
-        #expect(ids("e1").wholeMatch(of: /[0-9a-f]{32}/) != nil)
-        #expect(AppEnvironment.reactorIDs(secret: Data(count: 32))("e1") != ids("e1"))
-    }
-
     @Test func linksMomentsDomain() {
         #expect(Points.forContentType("video/mp4") == 3)
     }

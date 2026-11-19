@@ -65,19 +65,17 @@ public final class FeedModel {
     @ObservationIgnored private let service: any MomentsService
     @ObservationIgnored private let store: any EventCredentialStore
     @ObservationIgnored private let slug: EventSlug
-    @ObservationIgnored private let reactorID: String
     /// One sync (first page, refresh, poll) at a time, per FeedState's contract.
     @ObservationIgnored private var isSyncing = false
     @ObservationIgnored private let logger = Logger(subsystem: "moments", category: "feed")
 
     public init(
-        event: Event, participant: Participant, slug: EventSlug, reactorID: String,
+        event: Event, participant: Participant, slug: EventSlug,
         service: any MomentsService, store: any EventCredentialStore
     ) {
         self.event = event
         self.participant = participant
         self.slug = slug
-        self.reactorID = reactorID
         self.service = service
         self.store = store
         grantCache = GrantCache(store: store, slug: slug)
@@ -140,7 +138,7 @@ public final class FeedModel {
             for _ in 0..<Self.maxBatchesPerPoll {
                 guard let cursor = feed.cursor else { return try await replaceWithFirstPage(revealAll: false) }
                 let changes = try await service.feedChanges(
-                    slug: slug.value, since: cursor, limit: nil, reactorID: reactorID, credentials: credentials()
+                    slug: slug.value, since: cursor, limit: nil, credentials: credentials()
                 )
                 let outcome = feed.applyChanges(
                     upserts: changes.upserts, removed: changes.removed, cursor: changes.cursor, hasMore: changes.hasMore
@@ -209,7 +207,7 @@ public final class FeedModel {
         defer { isLoadingOlder = false }
         do {
             let page = try await service.feedPage(
-                slug: slug.value, before: before, limit: Self.pageSize, reactorID: reactorID, credentials: credentials()
+                slug: slug.value, before: before, limit: Self.pageSize, credentials: credentials()
             )
             // A refresh replaced the window meanwhile: this page would leave a gap.
             guard requestedIn == generation else { return }
@@ -261,7 +259,7 @@ public final class FeedModel {
 
     private func replaceWithFirstPage(revealAll: Bool) async throws {
         let page = try await service.feedPage(
-            slug: slug.value, before: nil, limit: Self.pageSize, reactorID: reactorID, credentials: credentials()
+            slug: slug.value, before: nil, limit: Self.pageSize, credentials: credentials()
         )
         generation += 1
         feed.replace(withFirstPage: page.moments, nextBefore: page.nextBefore, cursor: page.cursor)
@@ -398,7 +396,7 @@ extension FeedModel: ReactionHost {
     var acceptsReactions: Bool { phase == .loaded }
 
     func sendReaction(_ reacted: Bool, momentID: String) async throws -> ReactionState {
-        try await service.setReaction(reacted, slug: slug.value, momentID: momentID, reactorID: reactorID, credentials: credentials())
+        try await service.setReaction(reacted, slug: slug.value, momentID: momentID, credentials: credentials())
     }
 
     func reactionListDidChange() {

@@ -109,7 +109,7 @@ public struct GuestEventView: View {
         .onChange(of: join.phase, initial: true) { _, phase in
             guard case let .joined(event, participant) = phase, feed == nil else { return }
             let feedModel = FeedModel(
-                event: event, participant: participant, slug: join.slug, reactorID: dependencies.reactorID(event.id),
+                event: event, participant: participant, slug: join.slug,
                 service: dependencies.service, store: dependencies.store
             )
             thumbnails = ThumbnailLoader(fetcher: dependencies.mediaFetcher, accessGrant: feedModel.mediaAccessGrant)
@@ -120,7 +120,7 @@ public struct GuestEventView: View {
                 maxBytes: MediaFetcher.maxBytes, maxConcurrentLoads: 2
             )
             let highlightsModel = HighlightsModel(
-                slug: join.slug, reactorID: dependencies.reactorID(event.id),
+                slug: join.slug,
                 service: dependencies.service, store: dependencies.store
             )
             let leaderboardModel = LeaderboardModel(

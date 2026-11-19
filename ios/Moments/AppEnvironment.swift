@@ -1,5 +1,4 @@
 import CredentialStore
-import CryptoKit
 import FeatureGuest
 import Foundation
 import MomentsAPI
@@ -50,47 +49,24 @@ struct AppEnvironment {
         let uploads = isHostingTests ? nil : startUploads(client: client, credentials: credentials)
         // No queue to hand session events to: release the system at once.
         if uploads == nil { BackgroundUploadEvents.connect { systemCompletion in systemCompletion() } }
-        return make(client: client, credentials: credentials, defaults: .standard, uploads: uploads)
+        return make(client: client, credentials: credentials, uploads: uploads)
     }
 
     /// For tests and previews: no keychain, no network calls until used.
     static func inMemory() -> AppEnvironment {
-        // A throwaway defaults domain, so tests leave nothing behind.
-        let suite = "moments.tests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite) ?? .standard
-        defaults.removePersistentDomain(forName: suite)
         // No uploads: a background session can't be created twice per process.
-        return make(client: makeClient(), credentials: InMemoryEventCredentialStore(), defaults: defaults, uploads: nil)
+        make(client: makeClient(), credentials: InMemoryEventCredentialStore(), uploads: nil)
     }
 
     private static func make(
-        client: MomentsClient, credentials: any EventCredentialStore, defaults: UserDefaults, uploads: UploadDependencies?
+        client: MomentsClient, credentials: any EventCredentialStore, uploads: UploadDependencies?
     ) -> AppEnvironment {
+        // Hearts belong to the joined guest (the X-Guest-Token), so the
+        // device needs no reactor id of its own.
         let guest = GuestDependencies(
-            service: client, store: credentials, mediaFetcher: makeMediaFetcher(),
-            reactorID: reactorIDs(secret: reactorSecret(defaults)), uploads: uploads, leaver: client
+            service: client, store: credentials, mediaFetcher: makeMediaFetcher(), uploads: uploads, leaver: client
         )
         return AppEnvironment(service: client, credentials: credentials, guest: guest)
-    }
-
-    /// Random per install; never sent. Reactor ids are derived from it.
-    static func reactorSecret(_ defaults: UserDefaults) -> Data {
-        let key = "moments.reactor-secret"
-        if let existing = defaults.data(forKey: key), existing.count == 32 { return existing }
-        let secret = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }
-        defaults.set(secret, forKey: key)
-        return secret
-    }
-
-    /// The web's reactor id marks which reactions a device made. Here it is
-    /// derived per event (HMAC of the event id), so the server can't link
-    /// one device across events. Stable for the install.
-    static func reactorIDs(secret: Data) -> @Sendable (String) -> String {
-        let key = SymmetricKey(data: secret)
-        return { eventID in
-            let mac = HMAC<SHA256>.authenticationCode(for: Data(eventID.utf8), using: key)
-            return mac.prefix(16).map { String(format: "%02x", $0) }.joined()
-        }
     }
 
     // MARK: Uploads

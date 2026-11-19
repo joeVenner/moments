@@ -102,16 +102,17 @@ public protocol MomentsService: Sendable {
     /// Nil when the event is public (no grant needed).
     func access(slug: String, credential: AccessCredential) async throws -> AccessGrant?
     func event(slug: String, credentials: EventCredentials) async throws -> Event
-    func feedPage(slug: String, before: Int?, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> FeedPage
-    func feedChanges(slug: String, since: Int, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> FeedChanges
+    func feedPage(slug: String, before: Int?, limit: Int?, credentials: EventCredentials) async throws -> FeedPage
+    func feedChanges(slug: String, since: Int, limit: Int?, credentials: EventCredentials) async throws -> FeedChanges
     func join(slug: String, nickname: String, avatarSeed: String?, credentials: EventCredentials) async throws -> JoinResult
-    /// Adds (`reacted == true`) or removes this device's heart. Idempotent,
+    /// Adds (`reacted == true`) or removes the joined guest's heart (the
+    /// guest token is required). Idempotent,
     /// so a retry can't flip it.
     func setReaction(
-        _ reacted: Bool, slug: String, momentID: String, reactorID: String, credentials: EventCredentials
+        _ reacted: Bool, slug: String, momentID: String, credentials: EventCredentials
     ) async throws -> ReactionState
     /// Most-hearted visible moments, best first.
-    func highlights(slug: String, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> [Moment]
+    func highlights(slug: String, limit: Int?, credentials: EventCredentials) async throws -> [Moment]
     /// Guests ranked by points, best first.
     func leaderboard(slug: String, credentials: EventCredentials) async throws -> [LeaderboardEntry]
 }
@@ -231,13 +232,12 @@ public struct MomentsClient: MomentsService {
     }
 
     public func feedPage(
-        slug: String, before: Int? = nil, limit: Int? = nil, reactorID: String? = nil,
-        credentials: EventCredentials = .init()
+        slug: String, before: Int? = nil, limit: Int? = nil, credentials: EventCredentials = .init()
     ) async throws -> FeedPage {
         try await perform {
             let output = try await client.getFeed(
                 path: .init(slug: slug),
-                query: .init(before: before, limit: limit, reactorId: reactorID),
+                query: .init(before: before, limit: limit),
                 headers: .init(xEventAccess: credentials.accessGrant, xGuestToken: credentials.guestToken)
             )
             switch output {
@@ -252,12 +252,12 @@ public struct MomentsClient: MomentsService {
     }
 
     public func highlights(
-        slug: String, limit: Int? = nil, reactorID: String? = nil, credentials: EventCredentials = .init()
+        slug: String, limit: Int? = nil, credentials: EventCredentials = .init()
     ) async throws -> [Moment] {
         try await perform {
             let output = try await client.getHighlights(
                 path: .init(slug: slug),
-                query: .init(limit: limit, reactorId: reactorID),
+                query: .init(limit: limit),
                 headers: .init(xEventAccess: credentials.accessGrant, xGuestToken: credentials.guestToken)
             )
             switch output {
@@ -290,13 +290,12 @@ public struct MomentsClient: MomentsService {
     }
 
     public func feedChanges(
-        slug: String, since: Int, limit: Int? = nil, reactorID: String? = nil,
-        credentials: EventCredentials = .init()
+        slug: String, since: Int, limit: Int? = nil, credentials: EventCredentials = .init()
     ) async throws -> FeedChanges {
         try await perform {
             let output = try await client.getFeedChanges(
                 path: .init(slug: slug),
-                query: .init(since: since, limit: limit, reactorId: reactorID),
+                query: .init(since: since, limit: limit),
                 headers: .init(xEventAccess: credentials.accessGrant, xGuestToken: credentials.guestToken)
             )
             switch output {
@@ -335,15 +334,13 @@ public struct MomentsClient: MomentsService {
     }
 
     public func setReaction(
-        _ reacted: Bool, slug: String, momentID: String, reactorID: String, credentials: EventCredentials = .init()
+        _ reacted: Bool, slug: String, momentID: String, credentials: EventCredentials = .init()
     ) async throws -> ReactionState {
         try await perform {
-            let body = Components.Schemas.ReactionRequest(reactorId: reactorID)
             if reacted {
                 let output = try await client.addReaction(
                     path: .init(slug: slug, id: momentID),
-                    headers: .init(xEventAccess: credentials.accessGrant, xGuestToken: credentials.guestToken),
-                    body: .json(body)
+                    headers: .init(xEventAccess: credentials.accessGrant, xGuestToken: credentials.guestToken)
                 )
                 switch output {
                 case let .ok(response): return Self.reactionState(try response.body.json)
@@ -358,8 +355,7 @@ public struct MomentsClient: MomentsService {
             } else {
                 let output = try await client.removeReaction(
                     path: .init(slug: slug, id: momentID),
-                    headers: .init(xEventAccess: credentials.accessGrant, xGuestToken: credentials.guestToken),
-                    body: .json(body)
+                    headers: .init(xEventAccess: credentials.accessGrant, xGuestToken: credentials.guestToken)
                 )
                 switch output {
                 case let .ok(response): return Self.reactionState(try response.body.json)

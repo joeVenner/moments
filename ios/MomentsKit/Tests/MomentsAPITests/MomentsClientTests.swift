@@ -55,11 +55,10 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
     }
 
     @Test(arguments: [(true, HTTPRequest.Method.put), (false, .delete)])
-    func setsReactionsWithTheReactorInTheBody(_ reacted: Bool, _ method: HTTPRequest.Method) async throws {
+    func setsReactionsAsTheTokensGuestWithNoBody(_ reacted: Bool, _ method: HTTPRequest.Method) async throws {
         let stub = StubTransport(json: #"{"reacted":\#(reacted),"reaction_count":4}"#)
         let state = try await client(stub).setReaction(
-            reacted, slug: "party", momentID: "m1", reactorID: "abcdef0123456789",
-            credentials: .init(accessGrant: "grant-1", guestToken: "gt_me")
+            reacted, slug: "party", momentID: "m1", credentials: .init(accessGrant: "grant-1", guestToken: "gt_me")
         )
         #expect(state == ReactionState(reacted: reacted, reactionCount: 4))
         let request = try #require(stub.requests.first)
@@ -67,8 +66,7 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
         #expect(request.request.path == "/events/party/moments/m1/reaction")
         #expect(request.request.headerFields[HTTPField.Name("X-Event-Access")!] == "grant-1")
         #expect(request.request.headerFields[HTTPField.Name("X-Guest-Token")!] == "gt_me")
-        let body = try JSONSerialization.jsonObject(with: Data(try #require(request.body).utf8)) as? [String: String]
-        #expect(body == ["reactor_id": "abcdef0123456789"])
+        #expect(request.body == nil)
     }
 
     @Test(arguments: [
@@ -81,10 +79,10 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
     func mapsReactionErrors(_ status: Int, _ code: String, _ expected: MomentsAPIError) async throws {
         let stub = StubTransport(status: status, json: #"{"error":"x","code":"\#(code)"}"#)
         await #expect(throws: expected) {
-            _ = try await client(stub).setReaction(true, slug: "party", momentID: "m1", reactorID: "abcdef0123456789")
+            _ = try await client(stub).setReaction(true, slug: "party", momentID: "m1")
         }
         await #expect(throws: expected) {
-            _ = try await client(stub).setReaction(false, slug: "party", momentID: "m1", reactorID: "abcdef0123456789")
+            _ = try await client(stub).setReaction(false, slug: "party", momentID: "m1")
         }
     }
 
@@ -93,12 +91,12 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
             {"moments":[\(Fixtures.moment(id: "m1")),\(Fixtures.moment(id: "bad", kind: "hologram"))]}
             """)
         let moments = try await client(stub).highlights(
-            slug: "party", limit: 20, reactorID: "me", credentials: .init(accessGrant: "grant-1")
+            slug: "party", limit: 20, credentials: .init(accessGrant: "grant-1")
         )
         #expect(moments.map(\.id) == ["m1"])
         let request = try #require(stub.requests.first?.request)
         let query = URLComponents(string: try #require(request.path))?.queryItems ?? []
-        #expect(Set(query) == [URLQueryItem(name: "limit", value: "20"), URLQueryItem(name: "reactor_id", value: "me")])
+        #expect(Set(query) == [URLQueryItem(name: "limit", value: "20")])
         #expect(request.headerFields[HTTPField.Name("X-Event-Access")!] == "grant-1")
     }
 
@@ -122,12 +120,11 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
 
     @Test func passesFeedQuery() async throws {
         let stub = StubTransport(json: #"{"moments":[],"next_before":null,"cursor":7}"#)
-        let page = try await client(stub).feedPage(slug: "party", before: 10, limit: 30, reactorID: "me")
+        let page = try await client(stub).feedPage(slug: "party", before: 10, limit: 30)
         #expect(page.cursor == 7 && page.nextBefore == nil && page.moments.isEmpty)
         let query = URLComponents(string: try #require(stub.requests.first?.request.path))?.queryItems ?? []
         #expect(Set(query) == [
             URLQueryItem(name: "before", value: "10"), URLQueryItem(name: "limit", value: "30"),
-            URLQueryItem(name: "reactor_id", value: "me"),
         ])
     }
 

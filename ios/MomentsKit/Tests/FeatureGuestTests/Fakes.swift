@@ -15,14 +15,14 @@ final class FakeService: MomentsService, @unchecked Sendable {
     private(set) var accessCalls: [AccessCredential] = []
     private(set) var eventCalls: [EventCredentials] = []
     private(set) var joinCalls: [(nickname: String, credentials: EventCredentials)] = []
-    private(set) var pageCalls: [(before: Int?, reactorID: String?, credentials: EventCredentials)] = []
+    private(set) var pageCalls: [(before: Int?, credentials: EventCredentials)] = []
     private(set) var changesCalls: [Int] = []
     var reactionResults: [Result<ReactionState, Error>] = []
     var highlightsResults: [Result<[Moment], Error>] = []
     var leaderboardResults: [Result<[LeaderboardEntry], Error>] = []
-    private(set) var highlightsCalls: [(reactorID: String?, credentials: EventCredentials)] = []
+    private(set) var highlightsCalls: [EventCredentials] = []
     private(set) var leaderboardCalls = 0
-    private(set) var reactionCalls: [(reacted: Bool, momentID: String, reactorID: String)] = []
+    private(set) var reactionCalls: [(reacted: Bool, momentID: String)] = []
     /// Runs before a reaction request answers (to hold it open).
     var beforeReaction: (@Sendable () async -> Void)?
 
@@ -41,8 +41,8 @@ final class FakeService: MomentsService, @unchecked Sendable {
     /// that already reached the server).
     var reactionsIgnoreCancellation = false
 
-    func highlights(slug: String, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> [Moment] {
-        let result = lock.withLock { highlightsCalls.append((reactorID, credentials)); return highlightsResults.removeFirst() }
+    func highlights(slug: String, limit: Int?, credentials: EventCredentials) async throws -> [Moment] {
+        let result = lock.withLock { highlightsCalls.append(credentials); return highlightsResults.removeFirst() }
         if let beforeHighlights { await beforeHighlights() }
         return try result.get()
     }
@@ -50,10 +50,10 @@ final class FakeService: MomentsService, @unchecked Sendable {
         try lock.withLock { leaderboardCalls += 1; return try leaderboardResults.removeFirst().get() }
     }
     func setReaction(
-        _ reacted: Bool, slug: String, momentID: String, reactorID: String, credentials: EventCredentials
+        _ reacted: Bool, slug: String, momentID: String, credentials: EventCredentials
     ) async throws -> ReactionState {
         let result = lock.withLock {
-            reactionCalls.append((reacted, momentID, reactorID))
+            reactionCalls.append((reacted, momentID))
             return reactionResults.isEmpty ? .success(ReactionState(reacted: reacted, reactionCount: reacted ? 1 : 0)) : reactionResults.removeFirst()
         }
         if let beforeReaction { await beforeReaction() }
@@ -63,13 +63,13 @@ final class FakeService: MomentsService, @unchecked Sendable {
     /// Runs before a page request answers (to hold it open in race tests).
     var beforePage: (@Sendable (_ before: Int?) async -> Void)?
 
-    func feedPage(slug: String, before: Int?, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> FeedPage {
-        let result = lock.withLock { pageCalls.append((before, reactorID, credentials)); return pageResults.removeFirst() }
+    func feedPage(slug: String, before: Int?, limit: Int?, credentials: EventCredentials) async throws -> FeedPage {
+        let result = lock.withLock { pageCalls.append((before, credentials)); return pageResults.removeFirst() }
         if let beforePage { await beforePage(before) }
         try Task.checkCancellation()
         return try result.get()
     }
-    func feedChanges(slug: String, since: Int, limit: Int?, reactorID: String?, credentials: EventCredentials) async throws -> FeedChanges {
+    func feedChanges(slug: String, since: Int, limit: Int?, credentials: EventCredentials) async throws -> FeedChanges {
         try lock.withLock { changesCalls.append(since); return try changesResults.removeFirst().get() }
     }
 }

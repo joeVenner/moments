@@ -502,16 +502,6 @@
           "reaction_count"
         ]
       },
-      "ReactionRequest": {
-        "type": "object",
-        "properties": {
-          "reactor_id": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9-]{8,100}$",
-            "description": "Deprecated: ignored when X-Guest-Token is sent (the server reacts as the token's guest). Required only for tokenless requests, which GUEST_TOKENS_ENFORCED refuses."
-          }
-        }
-      },
       "LeaveResponse": {
         "type": "object",
         "properties": {
@@ -945,17 +935,6 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 100,
-              "description": "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's."
-            },
-            "required": false,
-            "description": "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's.",
-            "name": "reactor_id",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
               "maxLength": 512,
               "description": "Access grant; required for private events only"
             },
@@ -1064,17 +1043,6 @@
             },
             "required": false,
             "name": "limit",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "maxLength": 100,
-              "description": "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's."
-            },
-            "required": false,
-            "description": "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's.",
-            "name": "reactor_id",
             "in": "query"
           },
           {
@@ -1300,17 +1268,6 @@
             },
             "required": false,
             "name": "limit",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "maxLength": 100,
-              "description": "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's."
-            },
-            "required": false,
-            "description": "Deprecated: ignored when X-Guest-Token is sent; `reacted` is then the token's guest's.",
-            "name": "reactor_id",
             "in": "query"
           },
           {
@@ -1585,24 +1542,14 @@
             "schema": {
               "type": "string",
               "maxLength": 512,
-              "description": "This device's guest token; required once guest tokens are enforced"
+              "description": "This device's guest token (required: hearts belong to a joined guest)"
             },
             "required": false,
-            "description": "This device's guest token; required once guest tokens are enforced",
+            "description": "This device's guest token (required: hearts belong to a joined guest)",
             "name": "x-guest-token",
             "in": "header"
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReactionRequest"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "The guest's reaction state and the moment's total",
@@ -1615,7 +1562,7 @@
             }
           },
           "400": {
-            "description": "Invalid reactor id, or none sent without X-Guest-Token",
+            "description": "`invalid_request`: a malformed moment id",
             "content": {
               "application/json": {
                 "schema": {
@@ -1635,7 +1582,7 @@
             }
           },
           "403": {
-            "description": "`guest_required`: join the event first: the X-Guest-Token is unknown (the guest left), or none was sent once guest tokens are enforced",
+            "description": "`guest_required`: join the event first: no X-Guest-Token was sent, or it is unknown (the guest left)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1728,24 +1675,14 @@
             "schema": {
               "type": "string",
               "maxLength": 512,
-              "description": "This device's guest token; required once guest tokens are enforced"
+              "description": "This device's guest token (required: hearts belong to a joined guest)"
             },
             "required": false,
-            "description": "This device's guest token; required once guest tokens are enforced",
+            "description": "This device's guest token (required: hearts belong to a joined guest)",
             "name": "x-guest-token",
             "in": "header"
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReactionRequest"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "The guest's reaction state and the moment's total",
@@ -1758,7 +1695,7 @@
             }
           },
           "400": {
-            "description": "Invalid reactor id, or none sent without X-Guest-Token",
+            "description": "`invalid_request`: a malformed moment id",
             "content": {
               "application/json": {
                 "schema": {
@@ -1778,7 +1715,7 @@
             }
           },
           "403": {
-            "description": "`guest_required`: join the event first: the X-Guest-Token is unknown (the guest left), or none was sent once guest tokens are enforced",
+            "description": "`guest_required`: join the event first: no X-Guest-Token was sent, or it is unknown (the guest left)",
             "content": {
               "application/json": {
                 "schema": {
