@@ -54,6 +54,13 @@ public final class HostEventDetailModel {
         }
     }
 
+    /// Shows the event as a save just returned it, without another fetch.
+    public func apply(_ detail: AdminEventDetail) {
+        guard detail.summary.event.id == eventID else { return }
+        self.detail = detail
+        phase = .loaded
+    }
+
     private func clear() {
         detail = nil
         phase = .idle

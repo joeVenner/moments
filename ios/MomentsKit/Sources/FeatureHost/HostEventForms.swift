@@ -124,12 +124,14 @@ public final class HostEventFormModel {
     /// suggest checking the events list before saving again.
     public private(set) var mayHaveCreated = false
 
+    @ObservationIgnored private let initialDetails: EventDetails
     @ObservationIgnored private let service: any HostService
     @ObservationIgnored private let account: HostAccount
 
     /// A new event's form.
     public init(service: any HostService, account: HostAccount) {
         form = EventForm()
+        initialDetails = EventForm().details
         eventID = nil
         self.service = service
         self.account = account
@@ -138,12 +140,17 @@ public final class HostEventFormModel {
     /// The form to edit `event`.
     public init(editing event: Event, service: any HostService, account: HostAccount) {
         form = EventForm(event: event)
+        initialDetails = EventForm(event: event).details
         eventID = event.id
         self.service = service
         self.account = account
     }
 
     public func problems(now: Date = .now) -> Set<EventForm.Problem> { form.problems(now: now) }
+
+    /// Whether the details differ from how the form started, as the server
+    /// would store them (spaces at the ends don't count).
+    public var hasChanges: Bool { form.details != initialDetails || form.endsAt != nil }
 
     public func save(now: Date = .now) async {
         guard phase.canSave, form.problems(now: now).isEmpty else { return }

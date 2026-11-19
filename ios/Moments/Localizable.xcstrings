@@ -570,12 +570,32 @@
         }
       }
     },
+    "Dates": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dates"
+          }
+        }
+      }
+    },
     "Delete": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Supprimer"
+          }
+        }
+      }
+    },
+    "Delete the event": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer l'événement"
           }
         }
       }
@@ -620,6 +640,16 @@
         }
       }
     },
+    "Details": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Informations"
+          }
+        }
+      }
+    },
     "Details unavailable right now": {
       "localizations": {
         "fr": {
@@ -637,6 +667,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Terminé"
+          }
+        }
+      }
+    },
+    "Edit": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier"
+          }
+        }
+      }
+    },
+    "Edit details": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier les informations"
+          }
+        }
+      }
+    },
+    "Edit event": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier l'événement"
           }
         }
       }
@@ -814,6 +874,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Invités"
+          }
+        }
+      }
+    },
+    "Guests can share until then. A date that has passed closes uploads now.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les invités peuvent partager jusqu'à cette date. Une date passée arrête les partages tout de suite."
           }
         }
       }
@@ -1612,6 +1682,26 @@
         }
       }
     },
+    "Save": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer"
+          }
+        }
+      }
+    },
+    "Saving": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrement"
+          }
+        }
+      }
+    },
     "Scan QR code": {
       "localizations": {
         "fr": {
@@ -1963,6 +2053,16 @@
         }
       }
     },
+    "The deletion date has passed. Pick a later one, or turn it off.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La date de suppression est passée. Choisissez une date ultérieure ou désactivez-la."
+          }
+        }
+      }
+    },
     "The description can be at most %lld characters.": {
       "localizations": {
         "fr": {
@@ -1989,6 +2089,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "La date de fin est avant la date de l'événement."
+          }
+        }
+      }
+    },
+    "The event and its photos and videos are deleted on this date. Off keeps them.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'événement, ses photos et ses vidéos sont supprimés à cette date. Désactivé, ils sont conservés."
           }
         }
       }
@@ -2020,6 +2130,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "L'événement n'accepte plus d'envois."
+          }
+        }
+      }
+    },
+    "The event's link and QR code stay the same.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le lien et le QR code de l'événement ne changent pas."
           }
         }
       }
@@ -2125,6 +2245,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "L'envoi n'est pas arrivé intact."
+          }
+        }
+      }
+    },
+    "These changes couldn't be saved. Check the dates and try again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ces modifications n'ont pas pu être enregistrées. Vérifiez les dates et réessayez."
           }
         }
       }
@@ -2290,6 +2420,16 @@
         }
       }
     },
+    "Too many changes just now. Wait a minute and try again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop de modifications d'un coup. Attendez une minute et réessayez."
+          }
+        }
+      }
+    },
     "Too many moments are waiting to upload. Try again once some have finished.": {
       "extractionState": "manual",
       "localizations": {
@@ -2383,6 +2523,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mettez à jour Moments pour créer des événements."
+          }
+        }
+      }
+    },
+    "Update Moments to edit events.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettez à jour Moments pour modifier des événements."
           }
         }
       }
@@ -2492,12 +2642,32 @@
         }
       }
     },
+    "Uploads close": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fin des partages"
+          }
+        }
+      }
+    },
     "Uploads in the last 14 days: %lld": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Envois sur les 14 derniers jours : %lld"
+          }
+        }
+      }
+    },
+    "Uploads must close before the event is deleted.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les partages doivent s'arrêter avant la suppression de l'événement."
           }
         }
       }

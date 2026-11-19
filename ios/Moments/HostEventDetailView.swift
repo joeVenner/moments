@@ -18,6 +18,7 @@ struct HostEventDetailView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var isConfirmingInviteCopy = false
     @State private var didCopyInvite = false
+    @State private var editing: HostEventEdit?
 
     init(summary: AdminEvent, host: HomeView.Host) {
         self.init(summary: summary, host: host, model: HostEventDetailModel(eventID: summary.id, service: host.service, account: host.account))
@@ -55,6 +56,12 @@ struct HostEventDetailView: View {
                 AccessibilityNotification.Announcement(message).post()
             }
         }
+        .sheet(item: $editing) { edit in
+            switch edit {
+            case .details: HostEditDetailsView(event: event, host: host, onDone: finishEditing)
+            case .dates: HostEditDatesView(event: event, host: host, onDone: finishEditing)
+            }
+        }
         .confirmationDialog(
             Text("Copy the invite link?"),
             isPresented: $isConfirmingInviteCopy,
@@ -74,6 +81,17 @@ struct HostEventDetailView: View {
                     .contentShape(Rectangle())
             }
             Spacer()
+            if model.detail != nil {
+                Menu {
+                    Button { editing = .details } label: { Label("Details", systemImage: "pencil") }
+                    Button { editing = .dates } label: { Label("Dates", systemImage: "calendar") }
+                } label: {
+                    Text("Edit")
+                        .frame(minWidth: Radius.minimumTapTarget, minHeight: Radius.minimumTapTarget, alignment: .trailing)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel(Text("Edit event"))
+            }
         }
         .font(MomentsFont.body())
         .foregroundStyle(MomentsColor.text)
@@ -139,6 +157,15 @@ struct HostEventDetailView: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// Shows a saved event as the server returned it (a reload could be
+    /// skipped while another is in flight); the list behind catches up.
+    private func finishEditing(_ saved: AdminEventDetail?) {
+        editing = nil
+        guard let saved else { return }
+        model.apply(saved)
+        Task { await host.events.load() }
     }
 
     private func copyInvite() {

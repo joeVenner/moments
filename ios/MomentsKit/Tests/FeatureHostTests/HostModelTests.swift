@@ -525,6 +525,15 @@ private func detail(_ id: String) -> AdminEventDetail {
 }
 
 @Suite @MainActor struct HostEventDetailModelTests {
+    @Test func showsASavedEventWithoutFetching() {
+        let service = FakeHostService()
+        let model = HostEventDetailModel(eventID: "a", service: service, account: account(service, store: FlakyHostStore(live)))
+        model.apply(detail("b"))
+        #expect(model.detail == nil)
+        model.apply(detail("a"))
+        #expect(model.phase == .loaded && model.detail == detail("a") && service.detailCalls.isEmpty)
+    }
+
     @Test func loadsTheEventWithTheStoredToken() async {
         let service = FakeHostService()
         service.detailResult = .success(detail("a"))
@@ -911,6 +920,16 @@ private func plainEvent(_ id: String, mode: Event.AccessMode = .public, close: D
         #expect(model.phase == .failed(expected))
         model.dismissFailure()
         #expect(model.phase == .editing)
+    }
+
+    @Test func anEditFormHasChangesOnlyWhenTheStoredDetailsDiffer() {
+        let service = FakeHostService()
+        let model = HostEventFormModel(editing: plainEvent("e1"), service: service, account: account(service, store: FlakyHostStore(live)))
+        #expect(!model.hasChanges)
+        model.form.title += "  "
+        #expect(!model.hasChanges)
+        model.form.title = "Another party"
+        #expect(model.hasChanges)
     }
 
     @Test func aSavedFormNeverCreatesAgain() async {
