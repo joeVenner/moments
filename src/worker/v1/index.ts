@@ -204,7 +204,7 @@ const joinEventRoute = createRoute({
 const reactionResponses = {
   200: json(ReactionSchema, "The guest's reaction state and the moment's total"),
   400: json(ErrorSchema, "Invalid reactor id, or none sent without X-Guest-Token"),
-  403: json(ErrorSchema, "`guest_required`: join the event first (once guest tokens are enforced)"),
+  403: json(ErrorSchema, "`guest_required`: join the event first: the X-Guest-Token is unknown (the guest left), or none was sent once guest tokens are enforced"),
   429: json(ErrorSchema, "`rate_limited`: too many reactions from this device; slow down"),
   ...commonErrors,
   404: json(ErrorSchema, "No live event with this slug, or `moment_not_found`"),

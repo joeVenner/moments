@@ -3,6 +3,7 @@ import { getAdminAuthHeader } from "./adminAuth";
 import { getReactionId } from "./reactionId";
 import { getGuestToken, guestTokenHeaders, setGuestToken } from "./nickname";
 import { joinOutcome, type JoinOutcome } from "./joinOutcome";
+import { announceGuestRequired, isGuestRequired } from "./guestRequired";
 
 export class UnauthorizedError extends Error {}
 export class AccessRequiredError extends Error {}
@@ -108,13 +109,22 @@ export function listHighlights(slug: string) {
   );
 }
 
-export function toggleMomentReaction(slug: string, momentId: string) {
-  return fetch(`/api/events/${encodeURIComponent(slug)}/moments/${encodeURIComponent(momentId)}/reactions`, {
+export async function toggleMomentReaction(
+  slug: string,
+  momentId: string
+): Promise<{ reacted: boolean; reaction_count: number }> {
+  // The guest token ties this device's hearts to the guest (see worker reactions.ts).
+  const headers = { "Content-Type": "application/json", ...guestTokenHeaders(slug) };
+  const response = await fetch(`/api/events/${encodeURIComponent(slug)}/moments/${encodeURIComponent(momentId)}/reactions`, {
     method: "POST",
-    // The guest token ties this device's hearts to the guest (see worker reactions.ts).
-    headers: { "Content-Type": "application/json", ...guestTokenHeaders(slug) },
+    headers,
     body: JSON.stringify({ reactor_id: getReactionId() }),
-  }).then((response) => asJson<{ reacted: boolean; reaction_count: number }>(response));
+  });
+  if (response.status === 403) {
+    const body: unknown = await response.clone().json().catch(() => null);
+    if (isGuestRequired(response.status, body)) throw announceGuestRequired(slug, headers);
+  }
+  return asJson<{ reacted: boolean; reaction_count: number }>(response);
 }
 
 export function listAdminMoments(slug: string) {

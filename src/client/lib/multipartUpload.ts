@@ -1,3 +1,4 @@
+import { GuestRequiredError, announceGuestRequired, isGuestRequired, slugOfEventUrl } from "./guestRequired";
 import type { MomentData } from "./types";
 import {
   createUpload,
@@ -101,6 +102,7 @@ export class UploadRequestError extends Error {
 async function jsonReq<T>(url: string, init: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   const body = await res.json().catch(() => ({}));
+  if (isGuestRequired(res.status, body)) throw announceGuestRequired(slugOfEventUrl(url), init.headers);
   if (!res.ok) throw new UploadRequestError((body as { error?: string }).error || `request failed (${res.status})`, res.status);
   return body as T;
 }
@@ -245,6 +247,9 @@ async function runResumableUpload(
   let assemblyComplete = false;
   let lastProgressPersistedAt = 0;
   let stopped = false; // set on hard part failure or abort so sibling workers stop
+  // Set when the server refused the guest: the row is final ("failed") and no
+  // sibling still finishing a part may write it back to uploading/paused.
+  let refused = false;
 
   const partByteSize = (n: number) =>
     n < partCount ? partSize : state.fileSize - (partCount - 1) * partSize;
@@ -284,7 +289,8 @@ async function runResumableUpload(
       emitProgress();
       return undefined;
     } catch {
-      // Best-effort: if status is unreachable, fall back to our local map.
+      // Best-effort: if status is unreachable, fall back to our local map. (A
+      // guest_required refusal has already told the page; part-url hits it again.)
       return undefined;
     }
   };
@@ -315,8 +321,8 @@ async function runResumableUpload(
         );
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") throw err;
-        // The session is gone or isn't this guest's: retrying can't help.
-        if (err instanceof UploadRequestError && err.status === 404) throw err;
+        // The session is gone, isn't this guest's, or the guest is: retrying can't help.
+        if ((err instanceof UploadRequestError && err.status === 404) || err instanceof GuestRequiredError) throw err;
         inFlightBytes.delete(partNumber);
         emitProgress();
         lastErr = err;
@@ -354,6 +360,7 @@ async function runResumableUpload(
         if (n in completedParts) continue;
         try {
           const etag = await uploadOnePart(n);
+          if (refused) return;
           completedParts[n] = etag;
           state.completedParts = { ...completedParts };
           state.status = "uploading";
@@ -363,8 +370,17 @@ async function runResumableUpload(
         } catch (err) {
           inFlightBytes.delete(n);
           if (err instanceof DOMException && err.name === "AbortError") throw err;
-          // Hard part failure: leave the R2 upload OPEN so it can be resumed.
           stopped = true;
+          if (refused) throw err;
+          if (err instanceof GuestRequiredError) {
+            // Final: the token can't resume this upload; the page sends the guest to join again.
+            refused = true;
+            state.status = "failed";
+            state.lastError = err.message;
+            await saveUpload(state);
+            throw err;
+          }
+          // Hard part failure: leave the R2 upload OPEN so it can be resumed.
           state.status = "paused";
           state.lastError = err instanceof Error ? err.message : "part upload failed";
           await saveUpload(state);
@@ -412,6 +428,13 @@ async function runResumableUpload(
       }
       state.status = "paused";
       state.lastError = "upload cancelled or suspended";
+      await saveUpload(state);
+      throw err;
+    }
+    if (err instanceof GuestRequiredError) {
+      // No background retry: it would be refused the same way.
+      state.status = "failed";
+      state.lastError = err.message;
       await saveUpload(state);
       throw err;
     }

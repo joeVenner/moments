@@ -1,3 +1,4 @@
+import { GuestRequiredError, announceGuestRequired, isGuestRequired, slugOfEventUrl } from "./guestRequired";
 import { Upload, type DetailedError } from "tus-js-client";
 import type { MomentData } from "./types";
 import { getGuestToken, guestTokenHeaders, uploadTokenHeaders } from "./nickname";
@@ -47,6 +48,7 @@ export class StreamUploadAlreadyRunningError extends Error {
 async function jsonRequest<T>(url: string, init: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   const body = await response.json().catch(() => ({}));
+  if (isGuestRequired(response.status, body)) throw announceGuestRequired(slugOfEventUrl(url), init.headers);
   if (!response.ok) throw new Error((body as { error?: string }).error || `request failed (${response.status})`);
   return body as T;
 }
@@ -106,6 +108,12 @@ async function runStreamUpload(opts: StreamUploadOptions, localId: string): Prom
     } catch (error) {
       if (cancelledStreamUploads.has(localId)) {
         await deleteUpload(localId);
+        throw error;
+      }
+      if (error instanceof GuestRequiredError) {
+        state.status = "failed";
+        state.lastError = error.message;
+        await saveUpload(state);
         throw error;
       }
       state.status = "paused";
@@ -200,7 +208,7 @@ async function runStreamUpload(opts: StreamUploadOptions, localId: string): Prom
             reject(error);
             return;
           }
-          state.status = "paused";
+          state.status = error instanceof GuestRequiredError ? "failed" : "paused";
           state.lastError = error instanceof Error ? error.message : "Stream completion failed";
           await saveUpload(state);
           reject(error);
