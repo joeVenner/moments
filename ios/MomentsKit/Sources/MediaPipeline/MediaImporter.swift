@@ -170,7 +170,12 @@ public enum MediaImporter {
         _ picked: PickedMedia, into folder: URL, videoLimits: VideoPreparer.Limits
     ) async throws(Problem) -> PreparedMedia {
         do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            // Readable after first unlock, so a background wake while the
+            // phone is locked can still send it; never only by inheritance.
+            try FileManager.default.createDirectory(
+                at: folder, withIntermediateDirectories: true,
+                attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+            )
             var exclusion = URLResourceValues()
             exclusion.isExcludedFromBackup = true
             var excluded = folder

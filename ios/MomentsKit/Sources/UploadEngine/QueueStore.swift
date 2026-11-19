@@ -130,6 +130,17 @@ public struct QueueStore: Sendable {
         return Loaded(items: items, quarantined: quarantined, deferred: deferred, overflow: max(records.count - maxItems, 0))
     }
 
+    /// The ids of every record on disk, loaded or not (deferred, overflow):
+    /// whatever owns a staged folder. Read from file names only, so it works
+    /// while the phone is locked. Empty when the folder doesn't exist.
+    public func recordIDs() throws -> Set<UUID> {
+        guard FileManager.default.fileExists(atPath: directory.path(percentEncoded: false)) else { return [] }
+        let names = try FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false))
+        return Set(names.compactMap { name in
+            Self.isCanonicalRecordName(name) ? UUID(uuidString: String(name.dropLast(5))) : nil
+        })
+    }
+
     /// `<UPPERCASE-UUID>.json`, as `save` writes it.
     static func isCanonicalRecordName(_ name: String) -> Bool {
         guard name.hasSuffix(".json"), let id = UUID(uuidString: String(name.dropLast(5))) else { return false }

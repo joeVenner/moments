@@ -224,6 +224,22 @@ public actor UploadQueue {
         }
     }
 
+    /// For a background wake: performs due work until nothing is in flight
+    /// and nothing is due now, or `seconds` pass, so finished parts reach
+    /// "complete" before the app tells the system it is done. Safe beside
+    /// `run()`: an item already in flight is never stepped twice.
+    public func settle(within seconds: TimeInterval) async {
+        let deadline = now().addingTimeInterval(seconds)
+        while !Task.isCancelled, now() < deadline {
+            let (didWork, next) = await runDue()
+            let isIdle = inFlight.isEmpty && (next.map { $0 > now() } ?? true)
+            if !didWork, isIdle { return }
+            // Polls: a part in flight has no completion signal to await here.
+            // A cancelled sleep is fine; the loop checks cancellation.
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+    }
+
     /// Performs the due action of every item once, in queue order. Returns
     /// whether any item changed and when the next item is due (nil: nothing
     /// left to do). Stops early when cancelled.
