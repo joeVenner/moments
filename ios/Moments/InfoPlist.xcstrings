@@ -18,6 +18,24 @@
           }
         }
       }
+    },
+    "NSPhotoLibraryAddUsageDescription" : {
+      "comment" : "Shown the first time a guest saves a shared photo to their library.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moments saves the photos you choose to your library."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moments enregistre dans votre photothèque les photos que vous choisissez."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
