@@ -1,3 +1,4 @@
+import { eventGuestCap, guestFitsSql } from "./guestCap";
 import type { ParticipantRow } from "./types";
 
 /** Header native and web clients send the per-device guest token in. */
@@ -29,7 +30,7 @@ export interface JoinInput {
 
 export type JoinResult =
   | { ok: true; participant: ParticipantRow; guestToken: string | null }
-  | { ok: false; error: "nickname_taken" | "rate_limited" };
+  | { ok: false; error: "nickname_taken" | "rate_limited" | "guest_cap_reached" };
 
 function base64UrlEncode(bytes: Uint8Array): string {
   let binary = "";
@@ -127,17 +128,20 @@ export async function joinEventAsGuest(db: D1Database, input: JoinInput): Promis
   if (input.isLimited && (await input.isLimited())) return { ok: false, error: "rate_limited" };
 
   const token = generateGuestToken();
+  const cap = await eventGuestCap(db, input.eventId);
   const [claim, session] = await db.batch([
     // Inserts a new claimed participant, or claims a legacy one. changes() is 1
-    // exactly when this request won the nickname.
+    // exactly when this request won the nickname. A full event inserts
+    // nothing, checked in the same statement so two joins can't both take
+    // the last seat.
     db
       .prepare(
         `INSERT INTO participants (id, event_id, nickname, avatar_seed, claimed_at)
-         VALUES (?, ?, ?, ?, datetime('now'))
+         SELECT ?1, ?2, ?3, ?4, datetime('now') WHERE ${guestFitsSql("?5", "?2", "?3")}
          ON CONFLICT (event_id, nickname) DO UPDATE SET claimed_at = excluded.claimed_at
          WHERE participants.claimed_at IS NULL`
       )
-      .bind(crypto.randomUUID(), input.eventId, input.nickname, input.avatarSeed),
+      .bind(crypto.randomUUID(), input.eventId, input.nickname, input.avatarSeed, cap),
     // changes() here still refers to the statement above.
     db
       .prepare(
@@ -154,10 +158,10 @@ export async function joinEventAsGuest(db: D1Database, input: JoinInput): Promis
     throw new Error("guest claim and session insert diverged");
   }
 
-  if (!wonNickname && input.enforceClaims) return { ok: false, error: "nickname_taken" };
-
   const participant = await findParticipant(db, input.eventId, input.nickname);
-  if (!participant) throw new Error("participant missing after join");
+  // Only a full event leaves no participant behind (an existing one always fits).
+  if (!participant) return { ok: false, error: "guest_cap_reached" };
+  if (!wonNickname && input.enforceClaims) return { ok: false, error: "nickname_taken" };
   return {
     ok: true,
     participant: await backfillAvatar(db, participant, input.avatarSeed),

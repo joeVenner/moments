@@ -231,7 +231,7 @@ const joinEventRoute = createRoute({
   responses: {
     200: json(JoinResponseSchema, "Joined, or re-joined with the current guest token"),
     400: json(ErrorSchema, "Invalid body"),
-    409: json(ErrorSchema, "`nickname_taken`: another device owns this nickname"),
+    409: json(ErrorSchema, "`nickname_taken`: another device owns this nickname; `guest_cap_reached`: the event has as many guests as its plan allows (guests already in it can always rejoin)"),
     429: {
       description: "`rate_limited`: too many joins from this network; retry after `Retry-After` seconds",
       headers: z.object({ "Retry-After": z.string().optional() }),
@@ -1069,6 +1069,9 @@ v1.openapi(joinEventRoute, async (c) => {
   });
   if (!result.ok && result.error === "rate_limited") {
     return c.json(JOIN_RATE_LIMITED, 429, { "Retry-After": String(JOIN_RETRY_AFTER_SECONDS) });
+  }
+  if (!result.ok && result.error === "guest_cap_reached") {
+    return c.json({ error: "This event is full.", code: result.error }, 409);
   }
   if (!result.ok) {
     return c.json({ error: "This nickname is already taken in this event.", code: result.error }, 409);
