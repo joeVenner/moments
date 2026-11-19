@@ -20,7 +20,7 @@
     "verify:roadmap": "node scripts/verify-roadmap.mjs",
     "verify:seo": "node scripts/verify-seo.mjs",
     "ios:strings:check": "node scripts/check-ios-strings.mjs",
-    "avatar:fixtures": "UPDATE_AVATAR_FIXTURES=1 vitest run src/client/lib/avatar.fixtures.test.ts",
+    "avatar:fixtures": "UPDATE_AVATAR_FIXTURES=1 vitest run src/client/lib/avatar.fixtures.test.ts src/client/lib/avatar.shapes.test.ts",
     "seo:indexnow": "node scripts/submit-indexnow.mjs"
   },
   "dependencies": {
