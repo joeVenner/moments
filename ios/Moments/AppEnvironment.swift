@@ -4,6 +4,7 @@ import FeatureGuest
 import Foundation
 import MomentsAPI
 import OSLog
+import UploadEngine
 
 /// App-wide dependencies, built once at launch.
 @MainActor
@@ -26,7 +27,13 @@ struct AppEnvironment {
         return productionBaseURL
     }
 
-    static func live() -> AppEnvironment {
+    /// The app's environment, built once per process: the background upload
+    /// session behind it can't be created twice.
+    static func live() -> AppEnvironment { shared }
+
+    private static let shared: AppEnvironment = build()
+
+    private static func build() -> AppEnvironment {
         let credentials = KeychainEventCredentialStore()
         do {
             try CredentialLifecycle.resetIfFreshInstall(credentials)
@@ -37,7 +44,13 @@ struct AppEnvironment {
         // Before any screen can open the photo picker: picked originals
         // (with their location data) left by an earlier run go.
         GuestUploadsLaunch.clearLeftovers()
-        return make(credentials: credentials, defaults: .standard)
+        let client = makeClient()
+        // The app-hosted test run launches the app too: no real queue there.
+        let isHostingTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        let uploads = isHostingTests ? nil : startUploads(client: client, credentials: credentials)
+        // No queue to hand session events to: release the system at once.
+        if uploads == nil { BackgroundUploadEvents.connect { systemCompletion in systemCompletion() } }
+        return make(client: client, credentials: credentials, defaults: .standard, uploads: uploads)
     }
 
     /// For tests and previews: no keychain, no network calls until used.
@@ -46,14 +59,16 @@ struct AppEnvironment {
         let suite = "moments.tests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite) ?? .standard
         defaults.removePersistentDomain(forName: suite)
-        return make(credentials: InMemoryEventCredentialStore(), defaults: defaults)
+        // No uploads: a background session can't be created twice per process.
+        return make(client: makeClient(), credentials: InMemoryEventCredentialStore(), defaults: defaults, uploads: nil)
     }
 
-    private static func make(credentials: any EventCredentialStore, defaults: UserDefaults) -> AppEnvironment {
-        let client = makeClient()
+    private static func make(
+        client: MomentsClient, credentials: any EventCredentialStore, defaults: UserDefaults, uploads: UploadDependencies?
+    ) -> AppEnvironment {
         let guest = GuestDependencies(
             service: client, store: credentials, mediaFetcher: makeMediaFetcher(),
-            reactorID: reactorIDs(secret: reactorSecret(defaults)), leaver: client
+            reactorID: reactorIDs(secret: reactorSecret(defaults)), uploads: uploads, leaver: client
         )
         return AppEnvironment(service: client, credentials: credentials, guest: guest)
     }
@@ -76,6 +91,73 @@ struct AppEnvironment {
             let mac = HMAC<SHA256>.authenticationCode(for: Data(eventID.utf8), using: key)
             return mac.prefix(16).map { String(format: "%02x", $0) }.joined()
         }
+    }
+
+    // MARK: Uploads
+
+    /// The background URLSession's identifier; one per app, never reused.
+    static let uploadSessionIdentifier = "com.moments-hq.moments.uploads"
+    /// Our R2 account: the only storage host part URLs may name.
+    static let storageAccountID = "30062218f6ae591808563f1afd8c479a"
+
+    /// Builds the upload queue on the app's one background session, then
+    /// loads it, sweeps prepared files nothing owns, and runs it for the
+    /// app's life. Nil (uploads hidden) if the folders can't be set up.
+    private static func startUploads(client: MomentsClient, credentials: any EventCredentialStore) -> UploadDependencies? {
+        let log = Logger(subsystem: "moments", category: "uploads")
+        guard let hosts = StorageHostPolicy.r2Account(storageAccountID) else {
+            fatalError("the storage account id must be a valid R2 account id")
+        }
+        let staging: StagingArea
+        let store: QueueStore
+        do {
+            staging = try StagingArea.appDefault()
+            store = try QueueStore.appDefault()
+        } catch {
+            // Counts and types only: paths can hold the user's name on a Mac.
+            log.error("upload folders unavailable: \(String(describing: type(of: error)), privacy: .public)")
+            return nil
+        }
+        let uploader = BackgroundPartUploader(identifier: uploadSessionIdentifier, service: client, staging: staging, hosts: hosts)
+        let queue = UploadQueue(
+            store: store, staging: staging, service: client, partUploader: uploader,
+            credentials: uploadCredentialsLookup(store: credentials)
+        )
+        let launchedAt = Date()
+        // Sharing waits for this, so it runs at the guest's priority.
+        let launch = Task(priority: .userInitiated) { () -> Bool in
+            // A failed read leaves the queue unloaded, so it can be tried again
+            // (a passing I/O error); after that, sharing reports a failure.
+            var report = await UploadLaunch.prepare(queue: queue, store: store, staging: staging, launchedAt: launchedAt)
+            for delay in [1, 3] where report.loaded == nil {
+                try? await Task.sleep(for: .seconds(delay))
+                report = await UploadLaunch.prepare(queue: queue, store: store, staging: staging, launchedAt: launchedAt)
+            }
+            guard let loaded = report.loaded else {
+                log.error("upload queue could not load")
+                return false
+            }
+            log.info("upload queue loaded: \(loaded.items.count, privacy: .public) items, \(loaded.deferred, privacy: .public) deferred, \(loaded.quarantined, privacy: .public) set aside, sweep \(report.swept.map(String.init) ?? "skipped", privacy: .public)")
+            return true
+        }
+        Task {
+            // Runs for the app's life, once loaded; a dead queue isn't run.
+            guard await launch.value else { return }
+            await queue.run()
+        }
+        // A background wake: let finished parts reach "complete" before
+        // telling the system the session's events are handled.
+        BackgroundUploadEvents.connect { systemCompletion in
+            uploader.handleBackgroundEvents {
+                Task {
+                    if await launch.value { await queue.settle(within: 20) }
+                    systemCompletion()
+                }
+            }
+        }
+        return UploadDependencies(
+            staging: staging, submitter: QueueSubmitter(queue: queue, isReady: { await launch.value }), progress: queue
+        )
     }
 
     private static func makeMediaFetcher() -> MediaFetcher {
