@@ -135,9 +135,16 @@ public struct Media: Sendable, Hashable {
         return Double(width) / Double(height)
     }
 
-    /// Best image for a grid cell: thumbnail, then poster (videos), then the original image.
-    public var gridImageURL: String? {
-        thumbURL ?? posterURL ?? (kind == .image ? url : nil)
+    /// Images a grid cell can show, smallest first: the thumbnail, then a
+    /// larger still for when it is missing or broken (a photo's display
+    /// rendition or original, a video's poster). Never a video file.
+    public var gridImageURLs: [String] {
+        let fallback = kind == .video ? posterURL : displayURL ?? url
+        var urls: [String] = []
+        for candidate in [thumbURL, fallback].compactMap(\.self) where !urls.contains(candidate) {
+            urls.append(candidate)
+        }
+        return urls
     }
 
     /// Best still for the full-screen viewer: the display rendition, else the

@@ -302,11 +302,19 @@ private func loaded(_ page: [Moment], nextBefore: Int? = nil, cursor: Int = 10) 
 }
 
 @Suite struct ModelTests {
-    @Test func picksTheBestGridImage() {
-        #expect(Media(kind: .image, url: "o", thumbURL: "t").gridImageURL == "t")
-        #expect(Media(kind: .video, url: "o", posterURL: "p").gridImageURL == "p")
-        #expect(Media(kind: .image, url: "o").gridImageURL == "o")
-        #expect(Media(kind: .video, url: "o").gridImageURL == nil)
+    @Test func listsGridImagesSmallestFirst() {
+        // The thumbnail, then a larger still if it is missing or broken.
+        #expect(Media(kind: .image, url: "o", thumbURL: "t").gridImageURLs == ["t", "o"])
+        #expect(Media(kind: .image, url: "o", thumbURL: "t", displayURL: "d").gridImageURLs == ["t", "d"])
+        #expect(Media(kind: .image, url: "o", displayURL: "d").gridImageURLs == ["d"])
+        #expect(Media(kind: .image, url: "o").gridImageURLs == ["o"])
+        #expect(Media(kind: .video, url: "o", thumbURL: "t", posterURL: "p").gridImageURLs == ["t", "p"])
+        #expect(Media(kind: .video, url: "o", posterURL: "p").gridImageURLs == ["p"])
+        // Never the video file itself.
+        #expect(Media(kind: .video, url: "o", thumbURL: "t").gridImageURLs == ["t"])
+        #expect(Media(kind: .video, url: "o").gridImageURLs.isEmpty)
+        // The same URL twice is tried once.
+        #expect(Media(kind: .image, url: "o", thumbURL: "o").gridImageURLs == ["o"])
     }
 
     @Test func picksTheViewerImage() {
