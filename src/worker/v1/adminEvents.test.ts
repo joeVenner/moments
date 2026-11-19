@@ -5,6 +5,8 @@ import type { Env } from "../types";
 import { AdminEventDetailSchema, AdminEventListSchema, ErrorSchema, HostSignInResponseSchema } from "./schemas";
 
 let sqlite: SqliteD1;
+/** Keys the limiter refuses (everything else passes). */
+let limitedKeys: RegExp | null = null;
 
 function env(): Env {
   return {
@@ -13,7 +15,9 @@ function env(): Env {
     ASSETS: {} as Fetcher,
     ADMIN_USER: "admin",
     ADMIN_PASSWORD: "secret-password",
-    ADMIN_AUTH_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) } as unknown as RateLimit,
+    ADMIN_AUTH_LIMITER: {
+      limit: vi.fn(async ({ key }: { key: string }) => ({ success: !limitedKeys?.test(key) })),
+    } as unknown as RateLimit,
     EVENT_ACCESS_SECRET: "test-access-secret-123",
   };
 }
@@ -43,6 +47,7 @@ function insertEvent(id: string, createdAt: string, accessMode = "public", cover
 
 beforeEach(() => {
   sqlite = createSqliteD1();
+  limitedKeys = null;
 });
 
 describe("GET /api/v1/admin/events", () => {
@@ -206,4 +211,160 @@ describe("GET /api/v1/admin/events/{id}", () => {
       upload_states: [],
     });
   });
+});
+
+describe("POST /api/v1/admin/events", () => {
+  async function create(body: unknown, auth = true) {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (auth) headers.Authorization = `Bearer ${await token()}`;
+    return call("/admin/events", { method: "POST", headers, body: JSON.stringify(body) });
+  }
+
+  it("needs a host session", async () => {
+    const response = await create({ title: "Party", type: "Party" }, false);
+    expect(response.status).toBe(401);
+    expect(sqlite.raw.prepare("SELECT COUNT(*) AS n FROM events").get()).toEqual({ n: 0 });
+  });
+
+  it("creates a public event with a slug from its title and answers its detail", async () => {
+    const response = await create({
+      title: "  Sara & Omar's wedding ",
+      type: "Wedding",
+      main_characters: "Sara & Omar",
+      description: "",
+      starts_at: "2026-12-05T18:00:00+01:00",
+      expires_at: null,
+    });
+    expect(response.status).toBe(201);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    const detail = AdminEventDetailSchema.parse(await response.json());
+    expect(detail.event.title).toBe("Sara & Omar's wedding");
+    expect(detail.event.slug).toMatch(/^sara-omar/);
+    expect(detail.event.access_mode).toBe("public");
+    expect(detail.event.main_characters).toBe("Sara & Omar");
+    expect(detail.event.description).toBeNull();
+    expect(detail.event.starts_at).toBe("2026-12-05 17:00:00");
+    expect(detail.event.uploads_open).toBe(true);
+    expect(detail.share.event_url).toBe(`https://moments.test/e/${detail.event.slug}`);
+    expect(detail.share.invite_url).toBeNull();
+    expect(detail.analytics.summary.total_moments).toBe(0);
+  });
+
+  it("gives a second event with the same title its own slug", async () => {
+    const first = AdminEventDetailSchema.parse(await (await create({ title: "Party", type: "Party" })).json());
+    const second = AdminEventDetailSchema.parse(await (await create({ title: "Party", type: "Party" })).json());
+    expect(first.event.slug).toBe("party");
+    expect(second.event.slug).not.toBe("party");
+  });
+
+  it.each([
+    [{ type: "Party" }],
+    [{ title: "   ", type: "Party" }],
+    [{ title: "Party", type: "" }],
+    [{ title: "x".repeat(121), type: "Party" }],
+    [{ title: "Party", type: "Party", description: "x".repeat(1001) }],
+    [{ title: "Party", type: "Party", expires_at: "tomorrow" }],
+    [{ title: "Party", type: "Party", starts_at: "1999-12-31T00:00:00Z" }],
+    // No time zone (it would be read as UTC and shift the host's time), or not a date-time.
+    [{ title: "Party", type: "Party", starts_at: "2026-12-05T18:00:00" }],
+    [{ title: "Party", type: "Party", starts_at: "2026-12-05" }],
+    [{ title: "Party", type: "Party", starts_at: "Dec 5 2026" }],
+    // An end in the past would purge the new event at the next cleanup.
+    [{ title: "Party", type: "Party", expires_at: "2020-01-01T00:00:00Z" }],
+    [{ title: "Party", type: "Party", starts_at: "2099-12-05T18:00:00Z", expires_at: "2099-12-01T00:00:00Z" }],
+    [{ title: "Party", type: "Party", access_mode: "private" }],
+    [{ title: "Party", type: "Party", invite_token: "mine" }],
+  ])("refuses %j without creating anything", async (body) => {
+    const response = await create(body);
+    expect(response.status).toBe(400);
+    expect(ErrorSchema.parse(await response.json()).code).toBe("invalid_request");
+    expect(sqlite.raw.prepare("SELECT COUNT(*) AS n FROM events").get()).toEqual({ n: 0 });
+  });
+});
+
+describe("POST /api/v1/admin/events limits", () => {
+  it("names the bad field", async () => {
+    const response = await call("/admin/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}` },
+      body: JSON.stringify({ title: "Party", type: "Party", expires_at: "2020-01-01T00:00:00Z" }),
+    });
+    expect(ErrorSchema.parse(await response.json()).error).toBe("expires_at is invalid");
+  });
+
+  it("refuses a flood of new events with rate_limited", async () => {
+    const bearer = `Bearer ${await token()}`;
+    limitedKeys = /^host-create:/;
+    const response = await call("/admin/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: bearer },
+      body: JSON.stringify({ title: "Party", type: "Party" }),
+    });
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("60");
+    expect(ErrorSchema.parse(await response.json()).code).toBe("rate_limited");
+    expect(sqlite.raw.prepare("SELECT COUNT(*) AS n FROM events").get()).toEqual({ n: 0 });
+  });
+});
+
+describe("PATCH /api/v1/admin/events/{id}", () => {
+  async function update(id: string, body: unknown) {
+    return call(`/admin/events/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}` },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("changes only what it's sent and never the slug or access secrets", async () => {
+    insertEvent("e", "2026-01-01 10:00:00", "private");
+    sqlite.raw.prepare("UPDATE events SET description = 'Old', main_characters = 'Sara' WHERE id = 'e'").run();
+    const response = await update("e", { title: "New title", description: null, starts_at: "2026-12-05T17:00:00Z" });
+    expect(response.status).toBe(200);
+    const raw = await response.text();
+    expect(raw).not.toMatch(/pin-hash|access_pin|access_version/);
+    const detail = AdminEventDetailSchema.parse(JSON.parse(raw));
+    expect(detail.event).toMatchObject({
+      title: "New title", slug: "slug-e", type: "Party", main_characters: "Sara", description: null,
+      starts_at: "2026-12-05 17:00:00", access_mode: "private",
+    });
+    expect(detail.share.invite_url).toContain("invite-secret-e");
+    const row = sqlite.raw.prepare("SELECT access_pin_hash, invite_token FROM events WHERE id = 'e'").get();
+    expect(row).toEqual({ access_pin_hash: "pin-hash", invite_token: "invite-secret-e" });
+  });
+
+  it("clears a date with null and changes the date alone", async () => {
+    insertEvent("e", "2026-01-01 10:00:00");
+    await update("e", { starts_at: "2026-12-05T18:00:00-05:00" });
+    expect(sqlite.raw.prepare("SELECT starts_at, title FROM events WHERE id = 'e'").get()).toEqual({
+      starts_at: "2026-12-05 23:00:00", title: "Event e",
+    });
+    await update("e", { starts_at: null });
+    expect(sqlite.raw.prepare("SELECT starts_at FROM events WHERE id = 'e'").get()).toEqual({ starts_at: null });
+  });
+
+  it("needs a host session", async () => {
+    insertEvent("e", "2026-01-01 10:00:00");
+    const response = await call("/admin/events/e", {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Hacked" }),
+    });
+    expect(response.status).toBe(401);
+    expect(sqlite.raw.prepare("SELECT title FROM events WHERE id = 'e'").get()).toEqual({ title: "Event e" });
+  });
+
+  it("answers event_not_found for an unknown id", async () => {
+    const response = await update("missing", { title: "x" });
+    expect(response.status).toBe(404);
+    expect(ErrorSchema.parse(await response.json()).code).toBe("event_not_found");
+  });
+
+  it.each([[{}], [{ title: "" }], [{ starts_at: "soon" }], [{ starts_at: "2026-12-05T18:00:00" }], [{ slug: "mine" }], [{ expires_at: null }], [{ access_mode: "public" }]])(
+    "refuses %j and leaves the event as it was",
+    async (body) => {
+      insertEvent("e", "2026-01-01 10:00:00");
+      const response = await update("e", body);
+      expect(response.status).toBe(400);
+      expect(sqlite.raw.prepare("SELECT title, slug FROM events WHERE id = 'e'").get()).toEqual({ title: "Event e", slug: "slug-e" });
+    }
+  );
 });

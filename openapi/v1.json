@@ -575,6 +575,100 @@
           "status"
         ]
       },
+      "CreateAdminEventRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "description": "Free text, e.g. Wedding, Birthday"
+          },
+          "main_characters": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200,
+            "description": "Who it's about, e.g. Sara & Omar. Empty or null clears it."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1000,
+            "description": "Shown to guests under the title. Empty or null clears it."
+          },
+          "starts_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,3})?)?(Z|[+-]\\d{2}:\\d{2})$",
+            "description": "When the event happens. ISO 8601 with a time zone (e.g. 2026-12-05T18:00:00+01:00), years 2000-2100; null clears it."
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,3})?)?(Z|[+-]\\d{2}:\\d{2})$",
+            "description": "When uploads stop and the event is later deleted; null keeps it open. ISO 8601 with a time zone (e.g. 2026-12-05T18:00:00+01:00), years 2000-2100; null clears it."
+          }
+        },
+        "required": [
+          "title",
+          "type"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateAdminEventRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "description": "Free text, e.g. Wedding, Birthday"
+          },
+          "main_characters": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200,
+            "description": "Who it's about. Empty or null clears it."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1000,
+            "description": "Shown to guests under the title. Empty or null clears it."
+          },
+          "starts_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,3})?)?(Z|[+-]\\d{2}:\\d{2})$",
+            "description": "When the event happens. ISO 8601 with a time zone (e.g. 2026-12-05T18:00:00+01:00), years 2000-2100; null clears it."
+          }
+        },
+        "additionalProperties": false
+      },
       "EventResponse": {
         "type": "object",
         "properties": {
@@ -1428,6 +1522,90 @@
             }
           }
         }
+      },
+      "post": {
+        "operationId": "createAdminEvent",
+        "tags": [
+          "Host"
+        ],
+        "summary": "Create an event (public, open for uploads); its slug comes from the title",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAdminEventRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminEventDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`: a missing title or type, a field too long, a bad date, or an end date that is past or before the start",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`host_auth_required`: sign in again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: too many new events in a minute; see Retry-After",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/admin/events/{id}": {
@@ -1463,6 +1641,104 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminEventDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`host_auth_required`: sign in again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`event_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateAdminEvent",
+        "tags": [
+          "Host"
+        ],
+        "summary": "Change an event's title, type, people, description or date; the slug (and so its links) never changes",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "description": "The event's id (from the events list)"
+            },
+            "required": true,
+            "description": "The event's id (from the events list)",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAdminEventRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The event as it is now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminEventDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`: nothing to change, an empty title or type, a field too long, or a bad date",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

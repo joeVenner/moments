@@ -3,7 +3,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { getEventAnalytics } from "./adminAnalytics";
 import { deleteAdminMoment } from "./adminModeration";
 import type { Env, EventRow, MomentRow, LeaderboardEntry, UploadRow } from "./types";
-import { slugify, randomSuffix } from "./slugify";
+import { insertEvent, normalizeDate } from "./eventWrites";
 import { putMedia, pointsForContentType, isAllowedContentType, MAX_UPLOAD_BYTES, momentKey } from "./storage";
 import {
   isR2Configured,
@@ -188,31 +188,6 @@ function rejectOversizedMultipart(c: Context<{ Bindings: Env }>): Response | nul
   return null;
 }
 
-async function uniqueSlug(db: D1Database, title: string): Promise<string> {
-  const base = slugify(title) || "event";
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const candidate = attempt === 0 ? base : `${base}-${randomSuffix()}`;
-    const existing = await db
-      .prepare("SELECT id FROM events WHERE slug = ?")
-      .bind(candidate)
-      .first();
-    if (!existing) return candidate;
-  }
-  return `${base}-${crypto.randomUUID().slice(0, 8)}`;
-}
-
-function normalizeDate(value: unknown): string | null | undefined {
-  if (value === null || value === "") return null;
-  if (typeof value !== "string") return undefined;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return undefined;
-  // Outside this range toISOString() is not "YYYY-..." and would compare as
-  // already past against datetime('now'), purging the event immediately.
-  const year = parsed.getUTCFullYear();
-  if (year < 2000 || year > 2100) return undefined;
-  return parsed.toISOString().slice(0, 19).replace("T", " ");
-}
-
 async function upsertParticipant(
   db: D1Database,
   eventId: string,
@@ -289,7 +264,6 @@ app.post("/api/events", async (c) => {
   if (expiresAt === undefined) return c.json({ error: "expires_at is invalid" }, 400);
 
   const id = crypto.randomUUID();
-  const slug = await uniqueSlug(c.env.DB, title);
 
   let coverImageUrl: string | null = null;
   if (cover) {
@@ -306,12 +280,11 @@ app.post("/api/events", async (c) => {
     coverImageUrl = coverImageUrlField;
   }
 
-  await c.env.DB.prepare(
-    `INSERT INTO events (id, slug, title, type, main_characters, description, cover_image_url, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  )
-    .bind(id, slug, title, type, mainCharacters, description, coverImageUrl, expiresAt)
-    .run();
+  await insertEvent(
+    c.env.DB,
+    { title, type, mainCharacters, description, coverImageUrl, startsAt: null, expiresAt },
+    id
+  );
 
   const event = await c.env.DB.prepare("SELECT * FROM events WHERE id = ?")
     .bind(id)

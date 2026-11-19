@@ -446,6 +446,44 @@ export const ModerationBodySchema = z
   .object({ status: ModerationStatusSchema.openapi({ description: "`hidden` hides it from guests; `approved` shows it again" }) })
   .openapi("ModerationRequest");
 
+const eventTitle = z.string().trim().min(1).max(120);
+const eventType = z.string().trim().min(1).max(60).openapi({ description: "Free text, e.g. Wedding, Birthday" });
+const optionalText = (max: number, description: string) =>
+  z.string().trim().max(max).nullable().optional().openapi({ description: `${description} Empty or null clears it.` });
+/** Full ISO 8601 with an explicit zone, so no host's time is silently shifted. */
+const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
+const eventDate = (description: string) =>
+  z
+    .string()
+    .regex(ISO_DATE_TIME)
+    .nullable()
+    .optional()
+    .openapi({ description: `${description} ISO 8601 with a time zone (e.g. 2026-12-05T18:00:00+01:00), years 2000-2100; null clears it.` });
+
+export const CreateAdminEventBodySchema = z
+  .object({
+    title: eventTitle,
+    type: eventType,
+    main_characters: optionalText(200, "Who it's about, e.g. Sara & Omar."),
+    description: optionalText(1000, "Shown to guests under the title."),
+    starts_at: eventDate("When the event happens."),
+    expires_at: eventDate("When uploads stop and the event is later deleted; null keeps it open."),
+  })
+  .strict()
+  .openapi("CreateAdminEventRequest");
+
+export const UpdateAdminEventBodySchema = z
+  .object({
+    title: eventTitle.optional(),
+    type: eventType.optional(),
+    main_characters: optionalText(200, "Who it's about."),
+    description: optionalText(1000, "Shown to guests under the title."),
+    starts_at: eventDate("When the event happens."),
+  })
+  .strict()
+  .refine((body) => Object.values(body).some((value) => value !== undefined), { message: "nothing to change" })
+  .openapi("UpdateAdminEventRequest");
+
 export const HostSignInResponseSchema = HostSessionSchema.extend({
   token: z.string().openapi({ description: "Send as `Authorization: Bearer <token>`. Returned only here; keep it in the keychain." }),
   token_type: z.string().openapi({ description: "`Bearer`" }),
