@@ -33,6 +33,14 @@ private func detail(eventURL: String = "https://moments.test/e/party", inviteURL
     """
 }
 
+private func adminMoment(id: String = "m1", status: String = "approved", kind: String = "image") -> String {
+    """
+    {"id":"\(id)","event_id":"e1","uploader_name":"Sara","caption":null,"created_at":"2026-11-17 18:30:00",
+     "mime_type":"image/jpeg","size_bytes":2048,"moderation_status":"\(status)","reaction_count":4,
+     "media":\(Fixtures.media(kind: kind, url: "/media/events/e1/moments/\(id).jpg?mv=sig"))}
+    """
+}
+
 @Suite struct HostClientTests {
     @Test func signsInWithTheJSONBodyAndNoBearer() async throws {
         let stub = StubTransport(status: 201, json: """
@@ -166,5 +174,83 @@ private func detail(eventURL: String = "https://moments.test/e/party", inviteURL
         for text in [String(describing: links), String(reflecting: links), "\(links)", dumped] {
             #expect(!text.contains("secret123"), "\(text)")
         }
+    }
+
+    @Test func listsAnEventsMomentsAndSkipsRowsItCantTrust() async throws {
+        let stub = StubTransport(json: """
+        {"moments":[\(adminMoment(id: "m1")),\(adminMoment(id: "m2", status: "hidden")),
+          \(adminMoment(id: "m3", status: "pending")),\(adminMoment(id: "m4", kind: "audio"))],"truncated":true}
+        """)
+        let list = try await client(stub).adminMoments(token: hostToken, eventID: "e1")
+        // An unknown status is never guessed as visible or hidden.
+        #expect(list.moments.map(\.id) == ["m1", "m2"])
+        #expect(list.moments.map(\.isHidden) == [false, true])
+        #expect(list.isTruncated)
+        let first = try #require(list.moments.first)
+        #expect(first.reactionCount == 4 && first.sizeBytes == 2048)
+        #expect(first.media.url == "https://moments.test/media/events/e1/moments/m1.jpg?mv=sig")
+        let request = try #require(stub.requests.first)
+        #expect(request.request.method == .get && request.request.path == "/admin/events/e1/moments")
+        #expect(request.request.headerFields[.authorization] == "Bearer \(hostToken)")
+    }
+
+    @Test func hidesAMomentAndReturnsItAsSaved() async throws {
+        let stub = StubTransport(json: #"{"moment":\#(adminMoment(id: "m1", status: "hidden"))}"#)
+        let saved = try await client(stub).moderate(token: hostToken, momentID: "m1", status: .hidden)
+        #expect(saved.id == "m1" && saved.isHidden)
+        let request = try #require(stub.requests.first)
+        #expect(request.request.method == .patch && request.request.path == "/admin/moments/m1")
+        #expect(request.request.headerFields[.authorization] == "Bearer \(hostToken)")
+        let body = try JSONSerialization.jsonObject(with: Data(try #require(request.body).utf8)) as? [String: String]
+        #expect(body == ["status": "hidden"])
+    }
+
+    @Test func acceptsTheSavedStatusEvenWhenAnotherDeviceChangedIt() async throws {
+        let stub = StubTransport(json: #"{"moment":\#(adminMoment(id: "m1", status: "approved"))}"#)
+        let saved = try await client(stub).moderate(token: hostToken, momentID: "m1", status: .hidden)
+        #expect(saved.status == .approved)
+    }
+
+    @Test(arguments: [
+        #"{"moment":\#(adminMoment(id: "other", status: "hidden"))}"#,
+        #"{"moment":\#(adminMoment(id: "m1", status: "pending"))}"#,
+    ])
+    func refusesASavedMomentThatDoesntMatch(_ json: String) async throws {
+        await #expect(throws: MomentsAPIError.unexpectedResponse) {
+            _ = try await client(StubTransport(json: json)).moderate(token: hostToken, momentID: "m1", status: .hidden)
+        }
+    }
+
+    @Test func deletesAMomentWithTheBearer() async throws {
+        let stub = StubTransport(status: 204, json: "")
+        try await client(stub).deleteMoment(token: hostToken, momentID: "m1")
+        let request = try #require(stub.requests.first)
+        #expect(request.request.method == .delete && request.request.path == "/admin/moments/m1")
+        #expect(request.request.headerFields[.authorization] == "Bearer \(hostToken)")
+    }
+
+    @Test(arguments: [
+        (502, "media_delete_failed", MomentsAPIError.mediaDeleteFailed),
+        (404, "moment_not_found", .momentNotFound),
+        (401, "host_auth_required", .hostAuthRequired),
+    ])
+    func mapsDeleteFailures(_ status: Int, _ code: String, _ expected: MomentsAPIError) async throws {
+        let stub = StubTransport(status: status, json: #"{"error":"x","code":"\#(code)"}"#)
+        await #expect(throws: expected) { try await client(stub).deleteMoment(token: hostToken, momentID: "m1") }
+    }
+
+    @Test func moderationNeverCallsWithAnImpossibleIDOrNoToken() async throws {
+        let stub = StubTransport(json: "{}")
+        let long = String(repeating: "x", count: 101)
+        await #expect(throws: MomentsAPIError.eventNotFound) { _ = try await client(stub).adminMoments(token: hostToken, eventID: "") }
+        await #expect(throws: MomentsAPIError.momentNotFound) { _ = try await client(stub).moderate(token: hostToken, momentID: long, status: .hidden) }
+        await #expect(throws: MomentsAPIError.momentNotFound) { try await client(stub).deleteMoment(token: hostToken, momentID: "") }
+        await #expect(throws: MomentsAPIError.hostAuthRequired) { try await client(stub).deleteMoment(token: "", momentID: "m1") }
+        #expect(stub.requests.isEmpty)
+    }
+
+    @Test func aMissingEventsMomentsAreEventNotFound() async throws {
+        let stub = StubTransport(status: 404, json: #"{"error":"x","code":"event_not_found"}"#)
+        await #expect(throws: MomentsAPIError.eventNotFound) { _ = try await client(stub).adminMoments(token: hostToken, eventID: "e1") }
     }
 }
