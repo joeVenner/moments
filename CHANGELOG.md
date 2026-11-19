@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Smart App Banner on event pages (`apple-itunes-app` meta with the App Clip card and the page URL as `app-argument`), injected by the worker only when `APP_STORE_ID` is set; the slideshow never shows it.
 - `/.well-known/apple-app-site-association`: event links (`/e/*`, except the slideshow) open in the iOS app, and the App Clip is declared, for team 7877JLKPRQ.
 - iOS: the leaderboard shows each guest's avatar face, drawn on the phone exactly as on the web (guests without one keep their initial).
 - iOS: guests' avatar faces (eyes, mouth, color) are chosen on the phone from their avatar seed, exactly as on the web; a test against fixtures made from the web code keeps the two in sync.
