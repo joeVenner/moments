@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS: the app makes a small thumbnail of each photo and video it prepares (upright, without any metadata, at most 200 KB), ready to be sent for the feed grid.
 - Server: uploads from the app can carry a small thumbnail for the feed grid. The server checks it, keeps its own copy, and the feed serves it in place of the full photo. A missing or bad thumbnail never holds up the upload. Deleting a moment, cancelling an upload or purging an event removes thumbnails too.
 - iOS: leaving an event now also deletes that event's uploads still waiting on the phone, and no new ones can start while leaving. If the server no longer knows the guest, tapping a heart ends the screen with "You're no longer in this event" and a **Join again** button, instead of failing silently.
 - iOS: sharing photos and videos from the app now works. Shared items join the app's upload queue and keep sending in the background or after the app closes, only to the event's storage. They finish on their own when the system wakes the app. If a guest shares in the first moments after launch, the app waits for its saved uploads to load instead of failing. Files prepared but never shared are cleared at the next launch.
