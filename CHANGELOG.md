@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS host app: "New event" button on your events list. It opens a form for the title, type, who it's about, description, and optional event and end dates, and shows problems as you type. A new event opens straight away.
 - iOS: groundwork for creating and editing events in the host app. The API client can create an event, edit its details, change its privacy and PIN, and set its dates. Form models check the same limits as the server. The screens come next.
 - App API: hosts can make an event public or private with a new PIN (`PATCH /api/v1/admin/events/{id}/access`) and change when uploads close and when it is deleted (`PATCH /api/v1/admin/events/{id}/lifecycle`). A new PIN signs every guest out and replaces the invite link, as on the web. A deletion date in the past is refused.
 - App API: hosts can create an event (`POST /api/v1/admin/events`) and change its title, type, people, description or date (`PATCH /api/v1/admin/events/{id}`). New events start public and open for uploads; the slug comes from the title and never changes, so shared links and QR codes keep working.

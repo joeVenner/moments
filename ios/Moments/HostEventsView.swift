@@ -15,9 +15,11 @@ struct HostEventsView: View {
 
     @Environment(\.scenePhase) private var scenePhase
     @State private var isConfirmingSignOut = false
+    @State private var isCreatingEvent = false
+    @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             VStack(spacing: 0) {
                 topBar
                 ScrollView { list }
@@ -51,6 +53,11 @@ struct HostEventsView: View {
             }
         }
         .privacyShielded()
+        // Every way the sheet closes refreshes the list, so a create that
+        // may or may not have happened shows up.
+        .sheet(isPresented: $isCreatingEvent, onDismiss: { Task { await model.load() } }) {
+            HostNewEventView(host: host, onCreated: showCreated, onCancel: { isCreatingEvent = false })
+        }
         .confirmationDialog(Text("Sign out of hosting on this phone?"), isPresented: $isConfirmingSignOut, titleVisibility: .visible) {
             Button("Sign out", role: .destructive) {
                 Task { await account.signOut() }
@@ -80,6 +87,13 @@ struct HostEventsView: View {
                     .contentShape(Rectangle())
             }
             Spacer()
+            // Icon only, so the bar fits at the largest text sizes.
+            Button { isCreatingEvent = true } label: {
+                Image(systemName: "plus")
+                    .frame(minWidth: Radius.minimumTapTarget, minHeight: Radius.minimumTapTarget)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel(Text("New event"))
             Button { isConfirmingSignOut = true } label: {
                 Text("Sign out")
                     .frame(minWidth: Radius.minimumTapTarget, minHeight: Radius.minimumTapTarget, alignment: .trailing)
@@ -100,7 +114,7 @@ struct HostEventsView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, Spacing.xl)
             case .loaded:
-                notice(String(localized: "No events yet. Create one on the web for now."))
+                notice(String(localized: "No events yet. Tap New event to create your first one."))
             case let .failed(failure):
                 notice(Self.message(for: failure))
             }
@@ -114,6 +128,12 @@ struct HostEventsView: View {
                 notice(String(localized: "Showing the newest 500 events."))
             }
         }
+    }
+
+    /// Closes the sheet, shows the new event, and refreshes the list behind it.
+    private func showCreated(_ detail: AdminEventDetail) {
+        isCreatingEvent = false
+        path.append(detail.summary)
     }
 
     private func notice(_ text: String) -> some View {
