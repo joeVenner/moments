@@ -90,6 +90,7 @@ import {
   randomAccessToken,
   verifyEventAccess,
 } from "./eventAccess";
+import { APPLE_APP_SITE_ASSOCIATION_PATH, appleAppSiteAssociation } from "./appleApp";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -113,6 +114,15 @@ app.use("/api/*", async (c, next) => {
 app.use("/media/*", async (c, next) => {
   await next();
   c.res.headers.set("X-Robots-Tag", `${NO_INDEX}, noimageindex`);
+});
+
+// Fetched by Apple's CDN, not browsers: plain JSON, cacheable, never a redirect.
+app.get(APPLE_APP_SITE_ASSOCIATION_PATH, (c) => {
+  // Short until the app is verified live: a wrong file would otherwise stick.
+  c.header("Cache-Control", "public, max-age=300");
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("X-Robots-Tag", NO_INDEX);
+  return c.json(appleAppSiteAssociation(), 200);
 });
 
 app.get("/", (c) => {
