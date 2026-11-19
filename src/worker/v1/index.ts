@@ -48,6 +48,7 @@ import {
 } from "../hostSessions";
 import { ADMIN_RETRY_AFTER_SECONDS, attemptAdminLogin } from "../adminLogin";
 import { getAdminEventDetail, listAdminEvents } from "../adminEvents";
+import { insertEvent, normalizeDate, updateEventDetails } from "../eventWrites";
 import { deleteAdminMoment, listAdminMoments, setMomentModeration } from "../adminModeration";
 import {
   AccessRequestSchema,
@@ -59,6 +60,8 @@ import {
   AdminMomentParamSchema,
   AdminMomentSchema,
   ModerationBodySchema,
+  CreateAdminEventBodySchema,
+  UpdateAdminEventBodySchema,
   ChangesQuerySchema,
   ErrorSchema,
   EventHeadersSchema,
@@ -548,6 +551,41 @@ const deleteMomentRoute = createRoute({
   },
 });
 
+const createAdminEventRoute = createRoute({
+  method: "post",
+  path: "/admin/events",
+  operationId: "createAdminEvent",
+  tags: ["Host"],
+  summary: "Create an event (public, open for uploads); its slug comes from the title",
+  security: HOST_SECURITY,
+  request: { body: { required: true, content: { "application/json": { schema: CreateAdminEventBodySchema } } } },
+  responses: {
+    201: json(AdminEventDetailSchema, "The new event"),
+    400: json(ErrorSchema, "`invalid_request`: a missing title or type, a field too long, a bad date, or an end date that is past or before the start"),
+    429: json(ErrorSchema, "`rate_limited`: too many new events in a minute; see Retry-After"),
+    ...hostErrors,
+  },
+});
+
+const updateAdminEventRoute = createRoute({
+  method: "patch",
+  path: "/admin/events/{id}",
+  operationId: "updateAdminEvent",
+  tags: ["Host"],
+  summary: "Change an event's title, type, people, description or date; the slug (and so its links) never changes",
+  security: HOST_SECURITY,
+  request: {
+    params: AdminEventParamSchema,
+    body: { required: true, content: { "application/json": { schema: UpdateAdminEventBodySchema } } },
+  },
+  responses: {
+    200: json(AdminEventDetailSchema, "The event as it is now"),
+    400: json(ErrorSchema, "`invalid_request`: nothing to change, an empty title or type, a field too long, or a bad date"),
+    404: json(ErrorSchema, "`event_not_found`"),
+    ...hostErrors,
+  },
+});
+
 const signOutRoute = createRoute({
   method: "delete",
   path: "/admin/session",
@@ -729,6 +767,64 @@ v1.openapi(deleteMomentRoute, async (c) => {
     return c.json({ error: "The files couldn't be deleted. Try again.", code: "media_delete_failed" }, 502);
   }
   return c.body(null, 204);
+});
+
+/** Optional text as stored (already trimmed): empty means none; undefined leaves it. */
+const storedText = (value: string | null | undefined): string | null | undefined =>
+  value === undefined ? undefined : value || null;
+
+/** A 400 that names the field, so the app can point at it. */
+const invalidField = (field: string) => ({ error: `${field} is invalid`, code: "invalid_request" }) as const;
+const EVENT_NOT_FOUND = { error: "Event not found.", code: "event_not_found" } as const;
+
+/** Each host may create a few events a minute: plenty by hand, not a flood. */
+async function isCreateLimited(c: Context<V1Env>): Promise<boolean> {
+  return !(await c.env.ADMIN_AUTH_LIMITER.limit({ key: `host-create:${c.get("hostSession").id}` })).success;
+}
+
+v1.openapi(createAdminEventRoute, async (c) => {
+  const body = c.req.valid("json");
+  const startsAt = normalizeDate(body.starts_at ?? null);
+  if (startsAt === undefined) return c.json(invalidField("starts_at"), 400);
+  const expiresAt = normalizeDate(body.expires_at ?? null);
+  // A past end would close and purge the new event on the next cleanup run.
+  if (expiresAt === undefined || (expiresAt !== null && expiresAt <= sqlTimestamp(new Date()))) {
+    return c.json(invalidField("expires_at"), 400);
+  }
+  if (expiresAt !== null && startsAt !== null && expiresAt < startsAt) return c.json(invalidField("expires_at"), 400);
+  if (await isCreateLimited(c)) {
+    return c.json({ error: "Too many new events; try again in a minute.", code: "rate_limited" }, 429, { "Retry-After": "60" });
+  }
+  const id = await insertEvent(c.env.DB, {
+    title: body.title,
+    type: body.type,
+    mainCharacters: storedText(body.main_characters) ?? null,
+    description: storedText(body.description) ?? null,
+    coverImageUrl: null,
+    startsAt,
+    expiresAt,
+  });
+  const detail = await getAdminEventDetail(c.env.DB, c.env.EVENT_ACCESS_SECRET, id, new URL(c.req.url).origin);
+  if (!detail) throw new HTTPException(500, { message: "created event missing" });
+  return c.json(detail, 201);
+});
+
+v1.openapi(updateAdminEventRoute, async (c) => {
+  const { id } = c.req.valid("param");
+  const body = c.req.valid("json");
+  const startsAt = body.starts_at === undefined ? undefined : normalizeDate(body.starts_at);
+  if (body.starts_at !== undefined && startsAt === undefined) return c.json(invalidField("starts_at"), 400);
+  const found = await updateEventDetails(c.env.DB, id, {
+    title: body.title,
+    type: body.type,
+    mainCharacters: storedText(body.main_characters),
+    description: storedText(body.description),
+    startsAt,
+  });
+  if (!found) return c.json(EVENT_NOT_FOUND, 404);
+  const detail = await getAdminEventDetail(c.env.DB, c.env.EVENT_ACCESS_SECRET, id, new URL(c.req.url).origin);
+  if (!detail) return c.json(EVENT_NOT_FOUND, 404);
+  return c.json(detail, 200);
 });
 
 v1.openapi(signOutRoute, async (c) => {
