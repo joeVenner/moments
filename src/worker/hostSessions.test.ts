@@ -4,6 +4,7 @@ import {
   createHostSession,
   deleteHostSession,
   HOST_SESSION_TTL_DAYS,
+  OPERATOR_USER_ID,
   resolveHostSession,
 } from "./hostSessions";
 import { createSqliteD1, type SqliteD1 } from "./testing/sqliteD1";
@@ -48,6 +49,48 @@ describe("host sessions", () => {
     expect(await resolveHostSession(sqlite.db, ENV, `${token} `, now)).toBeNull();
     await deleteHostSession(sqlite.db, session.id);
     expect(await resolveHostSession(sqlite.db, ENV, token, now)).toBeNull();
+  });
+
+  it("belongs to the seeded operator user", async () => {
+    const { session } = await createHostSession(sqlite.db, ENV, now);
+    expect(session.userId).toBe(OPERATOR_USER_ID);
+    expect(sqlite.raw.prepare("SELECT user_id FROM host_sessions").get()).toEqual({ user_id: OPERATOR_USER_ID });
+    expect(sqlite.raw.prepare("SELECT role, status FROM users WHERE id = ?").get(OPERATOR_USER_ID)).toEqual({
+      role: "operator",
+      status: "active",
+    });
+  });
+
+  it("stops working once its account is deleted", async () => {
+    const { token } = await createHostSession(sqlite.db, ENV, now);
+    sqlite.raw.prepare("UPDATE users SET status = 'deleted', deleted_at = '2026-11-20 00:00:00' WHERE id = ?").run(OPERATOR_USER_ID);
+    expect(await resolveHostSession(sqlite.db, ENV, token, now)).toBeNull();
+  });
+
+  it("returns the session's own user, not the operator", async () => {
+    const hostId = "6f1c2a0e-1b2c-4d3e-8f90-123456789abc";
+    sqlite.raw.prepare("INSERT INTO users (id, role) VALUES (?, 'host')").run(hostId);
+    const { token, session } = await createHostSession(sqlite.db, ENV, now);
+    sqlite.raw.prepare("UPDATE host_sessions SET user_id = ?").run(hostId);
+    expect(await resolveHostSession(sqlite.db, ENV, token, now)).toEqual({ ...session, userId: hostId });
+  });
+
+  it("treats a session opened by older code (no user) as the operator's", async () => {
+    const { token, session } = await createHostSession(sqlite.db, ENV, now);
+    sqlite.raw.prepare("UPDATE host_sessions SET user_id = NULL").run();
+    expect(await resolveHostSession(sqlite.db, ENV, token, now)).toEqual(session);
+  });
+
+  it("refuses a session linked to a user that doesn't exist", async () => {
+    await createHostSession(sqlite.db, ENV, now);
+    expect(() => sqlite.raw.prepare("UPDATE host_sessions SET user_id = 'nobody'").run()).toThrow(/FOREIGN KEY/);
+  });
+
+  it("refuses an unknown role and a deletion without a date", () => {
+    expect(() => sqlite.raw.prepare("INSERT INTO users (id, role) VALUES ('x', 'admin')").run()).toThrow(/CHECK/);
+    expect(() =>
+      sqlite.raw.prepare("UPDATE users SET status = 'deleted' WHERE id = ?").run(OPERATOR_USER_ID)
+    ).toThrow(/CHECK/);
   });
 
   it("clears expired sessions on the next sign-in", async () => {
