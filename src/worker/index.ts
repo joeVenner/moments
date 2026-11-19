@@ -352,9 +352,8 @@ async function unlockResponse(
 
 /** The web's answer for a refused settings change (its messages are unchanged). */
 function webSettingsRefusal(c: Context<{ Bindings: Env }>, refusal: SettingsRefusal) {
-  return refusal.kind === "not_found"
-    ? c.json({ error: "event not found" }, 404)
-    : c.json({ error: refusal.error }, 400);
+  if (refusal.kind === "not_found") return c.json({ error: "event not found" }, 404);
+  return c.json({ error: refusal.error }, refusal.kind === "dates_fixed" ? 409 : 400);
 }
 
 app.patch("/api/admin/events/:id/access", async (c) => {

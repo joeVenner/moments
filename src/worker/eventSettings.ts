@@ -7,7 +7,9 @@ import type { Env, EventRow } from "./types";
 /** Why a settings change was refused; `error` is the message the web has always shown. */
 export type SettingsRefusal =
   | { kind: "not_found" }
-  | { kind: "invalid"; field: string; error: string };
+  | { kind: "invalid"; field: string; error: string }
+  /** A test event lasts its plan's first month; moving its dates could stretch that. */
+  | { kind: "dates_fixed"; error: string };
 
 export type SettingsResult = { kind: "ok" } | SettingsRefusal;
 
@@ -128,6 +130,7 @@ export function lifecycleChangeFrom(
 export async function updateEventLifecycle(db: D1Database, eventId: string, change: LifecycleChange): Promise<SettingsResult> {
   const event = await db.prepare("SELECT * FROM events WHERE id = ?").bind(eventId).first<EventRow>();
   if (!event) return { kind: "not_found" };
+  if (event.kind === "test") return { kind: "dates_fixed", error: "A test event's dates can't be changed." };
 
   const isSingleDate = change.uploadsCloseAt === undefined && change.purgeAfter === undefined;
   const expiresAt = change.expiresAt === undefined ? event.expires_at : change.expiresAt;

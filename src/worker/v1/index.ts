@@ -49,8 +49,16 @@ import {
 import { ADMIN_RETRY_AFTER_SECONDS, attemptAdminLogin } from "../adminLogin";
 import { getAdminEventDetail, listAdminEvents } from "../adminEvents";
 import { hostCanAccessEvent, hostCanAccessMoment, ownerScope } from "../eventOwnership";
-import { insertEvent, insertPlanEvent, normalizeDate, type NewEvent, updateEventDetails } from "../eventWrites";
-import { planAccess } from "../plans";
+import {
+  insertEvent,
+  insertPlanEvent,
+  normalizeDate,
+  type NewEvent,
+  type PlanEventDates,
+  type PlanEventSpec,
+  updateEventDetails,
+} from "../eventWrites";
+import { planAccess, testEventDates } from "../plans";
 import { loadLivePlan } from "../plansRepo";
 import { lifecycleChangeFrom, type SettingsResult, updateEventAccess, updateEventLifecycle } from "../eventSettings";
 import { deleteAdminMoment, listAdminMoments, setMomentModeration } from "../adminModeration";
@@ -567,9 +575,9 @@ const createAdminEventRoute = createRoute({
   request: { body: { required: true, content: { "application/json": { schema: CreateAdminEventBodySchema } } } },
   responses: {
     201: json(AdminEventDetailSchema, "The new event"),
-    400: json(ErrorSchema, "`invalid_request`: a missing title or type, a field too long, a bad date, or an end date that is past or before the start"),
+    400: json(ErrorSchema, "`invalid_request`: a missing title or type, a field too long, a bad date, an end date that is past or before the start, an end date on a test event, or a test event asked for by the operator"),
     402: json(ErrorSchema, "`plan_required`: no hosting plan that allows new events (none, ended, or a payment is failing)"),
-    409: json(ErrorSchema, "`no_events_left`: every event the plan includes is used; an Extra event adds one"),
+    409: json(ErrorSchema, "`no_events_left`: every event of that kind the plan includes is used (an Extra event adds a main one), or the test event's month is over"),
     429: json(ErrorSchema, "`rate_limited`: too many new events in a minute; see Retry-After"),
     ...hostErrors,
   },
@@ -628,6 +636,7 @@ const updateEventLifecycleRoute = createRoute({
     200: json(AdminEventDetailSchema, "The event as it is now"),
     400: json(ErrorSchema, "`invalid_request`: nothing to change, a bad date, a deletion date in the past, or uploads closing after deletion"),
     404: json(ErrorSchema, "`event_not_found`"),
+    409: json(ErrorSchema, "`test_event_dates_fixed`: a test event's dates come from the plan"),
     ...hostErrors,
   },
 });
@@ -859,10 +868,22 @@ async function isCreateLimited(c: Context<V1Env>): Promise<boolean> {
  * A host's event, paid for by one of their plan's events: its id, or why
  * there is none. The operator's events need no plan.
  */
-async function insertHostEvent(db: D1Database, event: NewEvent): Promise<string | "plan_required" | "no_events_left"> {
+async function insertHostEvent(
+  db: D1Database,
+  event: NewEvent,
+  kind: PlanEventSpec["kind"]
+): Promise<string | "plan_required" | "no_events_left"> {
+  const now = new Date();
   const stored = await loadLivePlan(db, event.ownerUserId);
-  if (!stored || !planAccess(stored.plan, new Date()).hostCanEdit) return "plan_required";
-  return (await insertPlanEvent(db, event, stored.id)) ?? "no_events_left";
+  if (!stored || !planAccess(stored.plan, now).hostCanEdit) return "plan_required";
+  let dates: PlanEventDates | null = null;
+  if (kind === "test") {
+    // The test event lives for the plan's first month, whenever it is created.
+    const { closesAt, purgeAt } = testEventDates(stored.plan);
+    if (now >= closesAt) return "no_events_left";
+    dates = { uploadsCloseAt: sqlTimestamp(closesAt), purgeAfter: sqlTimestamp(purgeAt) };
+  }
+  return (await insertPlanEvent(db, event, { id: stored.id, kind, dates })) ?? "no_events_left";
 }
 
 v1.openapi(createAdminEventRoute, async (c) => {
@@ -889,7 +910,11 @@ v1.openapi(createAdminEventRoute, async (c) => {
     expiresAt,
     ownerUserId: session.userId,
   };
-  const created = session.role === "operator" ? await insertEvent(c.env.DB, event) : await insertHostEvent(c.env.DB, event);
+  const kind = body.kind ?? "main";
+  if (kind === "test" && session.role === "operator") return c.json(invalidField("kind"), 400);
+  if (kind === "test" && body.expires_at) return c.json(invalidField("expires_at"), 400);
+  const created =
+    session.role === "operator" ? await insertEvent(c.env.DB, event) : await insertHostEvent(c.env.DB, event, kind);
   if (created === "plan_required") {
     return c.json({ error: "A hosting plan is needed to create events.", code: "plan_required" }, 402);
   }
@@ -922,6 +947,8 @@ v1.openapi(updateAdminEventRoute, async (c) => {
 async function settingsAnswer(c: Context<V1Env>, id: string, result: SettingsResult) {
   if (result.kind === "not_found") return c.json(EVENT_NOT_FOUND, 404);
   if (result.kind === "invalid") return c.json({ error: result.error, code: "invalid_request" }, 400);
+  // Only the dates route can answer this; the owner gate has already sent anyone else a 404.
+  if (result.kind === "dates_fixed") return c.json({ error: result.error, code: "test_event_dates_fixed" }, 409);
   const detail = await getAdminEventDetail(c.env.DB, c.env.EVENT_ACCESS_SECRET, id, new URL(c.req.url).origin);
   if (!detail) return c.json(EVENT_NOT_FOUND, 404);
   return c.json(detail, 200);

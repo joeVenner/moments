@@ -43,10 +43,30 @@ export interface NewEvent {
 /** How often a create races another for the same slug before giving up. */
 const SLUG_ATTEMPTS = 3;
 
-const EVENT_COLUMNS =
-  "id, slug, title, type, main_characters, description, cover_image_url, starts_at, expires_at, owner_user_id";
+/** Billing kind (migration 0026): the operator's own, or paid by a plan's main or test event. */
+export type NewEventKind = "operator" | "main" | "test";
 
-function eventValues(event: NewEvent, id: string, slug: string): unknown[] {
+/**
+ * A plan event's dates when the plan sets them (test events), else null:
+ * then expires_at alone decides, as for any event.
+ */
+export interface PlanEventDates {
+  uploadsCloseAt: string;
+  purgeAfter: string;
+}
+
+// The order is the bind order: ?1 is id, ?10 owner_user_id, ?11 kind.
+const EVENT_COLUMNS =
+  "id, slug, title, type, main_characters, description, cover_image_url, starts_at, expires_at, owner_user_id, kind, uploads_close_at, purge_after";
+const EVENT_PARAMS = "?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13";
+
+function eventValues(
+  event: NewEvent,
+  id: string,
+  slug: string,
+  kind: NewEventKind,
+  dates: PlanEventDates | null
+): unknown[] {
   return [
     id,
     slug,
@@ -58,6 +78,9 @@ function eventValues(event: NewEvent, id: string, slug: string): unknown[] {
     event.startsAt,
     event.expiresAt,
     event.ownerUserId,
+    kind,
+    dates?.uploadsCloseAt ?? null,
+    dates?.purgeAfter ?? null,
   ];
 }
 
@@ -77,56 +100,60 @@ async function withFreeSlug<T>(db: D1Database, title: string, insert: (slug: str
   }
 }
 
-/** Creates an event (public, open for uploads) and returns its id. */
+/** Creates one of the operator's events (public, open for uploads, no plan) and returns its id. */
 export async function insertEvent(db: D1Database, event: NewEvent, id: string = crypto.randomUUID()): Promise<string> {
   return withFreeSlug(db, event.title, async (slug) => {
     await db
-      .prepare(`INSERT INTO events (${EVENT_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(...eventValues(event, id, slug))
+      .prepare(`INSERT INTO events (${EVENT_COLUMNS}) VALUES (${EVENT_PARAMS})`)
+      .bind(...eventValues(event, id, slug, "operator", null))
       .run();
     return id;
   });
 }
 
+/** The plan that pays for an event, which of its events is used, and the dates it sets. */
+export interface PlanEventSpec {
+  id: string;
+  kind: Exclude<NewEventKind, "operator">;
+  dates: PlanEventDates | null;
+}
+
 /**
- * An unused main-event allowance of the plan in ?11, which must belong to the
- * new event's owner (?10) and not be purged. Included events go before
- * bought ones (`source = 'addon'` sorts false, i.e. included, first).
+ * An unused allowance of the new event's kind (?11) on the plan in ?14,
+ * which must belong to the event's owner (?10) and not be purged. Included
+ * events go before bought ones (`source = 'addon'` sorts false, i.e.
+ * included, first).
  */
-const FREE_MAIN_ALLOWANCE = `
+const FREE_ALLOWANCE = `
   SELECT a.id FROM event_allowances a JOIN plans p ON p.id = a.plan_id
-  WHERE p.id = ?11 AND p.user_id = ?10 AND p.state != 'purged' AND a.kind = 'main' AND a.consumed_event_id IS NULL
+  WHERE p.id = ?14 AND p.user_id = ?10 AND p.state != 'purged' AND a.kind = ?11 AND a.consumed_event_id IS NULL
   ORDER BY a.source = 'addon', a.created_at, a.id
   LIMIT 1`;
 
 /**
- * Creates an event paid for by one of the plan's main-event allowances, and
- * marks that allowance used, in one batch: either both happen or neither.
- * Returns the id, or null when the plan has no main event left.
+ * Creates an event paid for by one of the plan's allowances of that kind,
+ * and marks the allowance used, in one batch: either both happen or
+ * neither. Returns the id, or null when the plan has none left.
  */
 export async function insertPlanEvent(
   db: D1Database,
   event: NewEvent,
-  planId: string,
+  plan: PlanEventSpec,
   id: string = crypto.randomUUID()
 ): Promise<string | null> {
   return withFreeSlug(db, event.title, async (slug) => {
-    // ?1–?10 are the event's columns, ?11 the plan.
-    const values = [...eventValues(event, id, slug), planId];
+    // ?1–?13 are the event's columns, ?14 the plan.
+    const values = [...eventValues(event, id, slug, plan.kind, plan.dates), plan.id];
     const [inserted, spent] = await db.batch([
       db
-        .prepare(
-          `INSERT INTO events (${EVENT_COLUMNS})
-           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10
-           WHERE EXISTS (${FREE_MAIN_ALLOWANCE})`
-        )
+        .prepare(`INSERT INTO events (${EVENT_COLUMNS}) SELECT ${EVENT_PARAMS} WHERE EXISTS (${FREE_ALLOWANCE})`)
         .bind(...values),
       // Same transaction, so the allowance the insert saw is still free. It
-      // binds the same list as the insert (it uses only ?1, ?10 and ?11).
+      // binds the same list as the insert (it uses only ?1, ?10, ?11 and ?14).
       db
         .prepare(
           `UPDATE event_allowances SET consumed_event_id = ?1
-           WHERE id = (${FREE_MAIN_ALLOWANCE}) AND EXISTS (SELECT 1 FROM events WHERE id = ?1)`
+           WHERE id = (${FREE_ALLOWANCE}) AND EXISTS (SELECT 1 FROM events WHERE id = ?1)`
         )
         .bind(...values),
     ]);

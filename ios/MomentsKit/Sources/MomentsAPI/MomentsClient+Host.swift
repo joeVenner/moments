@@ -268,6 +268,7 @@ extension MomentsClient: HostService {
             case let .badRequest(response): throw Self.hostError(400, try? response.body.json.code)
             case let .unauthorized(response): throw Self.hostError(401, try? response.body.json.code)
             case let .notFound(response): throw Self.hostError(404, try? response.body.json.code)
+            case let .conflict(response): throw Self.hostError(409, try? response.body.json.code)
             case let .upgradeRequired(response): throw Self.hostError(426, try? response.body.json.code)
             case let .default(status, response): throw Self.hostError(status, try? response.body.json.code)
             }

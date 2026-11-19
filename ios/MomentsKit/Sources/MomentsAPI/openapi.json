@@ -68,7 +68,7 @@
           },
           "code": {
             "type": "string",
-            "description": "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, media_delete_failed, not_found, internal"
+            "description": "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, media_delete_failed, plan_required, no_events_left, test_event_dates_fixed, not_found, internal"
           }
         },
         "required": [
@@ -123,6 +123,10 @@
           {
             "type": "object",
             "properties": {
+              "kind": {
+                "type": "string",
+                "description": "legacy: from before hosting plans; operator: the operator's own; main: paid by the host's plan; test: the plan's one-month test event (its dates are fixed)"
+              },
               "moment_count": {
                 "type": "integer",
                 "description": "All moments, hidden ones included"
@@ -133,6 +137,7 @@
               }
             },
             "required": [
+              "kind",
               "moment_count",
               "participant_count"
             ]
@@ -603,7 +608,11 @@
               "null"
             ],
             "pattern": "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,3})?)?(Z|[+-]\\d{2}:\\d{2}))?$",
-            "description": "When uploads stop and the event is later deleted; null keeps it open. ISO 8601 with a time zone (e.g. 2026-12-05T18:00:00+01:00), years 2000-2100; empty or null clears it."
+            "description": "When uploads stop and the event is later deleted; null keeps it open. Not allowed for a test event. ISO 8601 with a time zone (e.g. 2026-12-05T18:00:00+01:00), years 2000-2100; empty or null clears it."
+          },
+          "kind": {
+            "type": "string",
+            "description": "Which of the plan's events to use (default main). A test event's dates come from the plan: uploads close a month after purchase and it is deleted a week later."
           }
         },
         "required": [
@@ -1589,7 +1598,7 @@
             }
           },
           "400": {
-            "description": "`invalid_request`: a missing title or type, a field too long, a bad date, or an end date that is past or before the start",
+            "description": "`invalid_request`: a missing title or type, a field too long, a bad date, an end date that is past or before the start, an end date on a test event, or a test event asked for by the operator",
             "content": {
               "application/json": {
                 "schema": {
@@ -1619,7 +1628,7 @@
             }
           },
           "409": {
-            "description": "`no_events_left`: every event the plan includes is used; an Extra event adds one",
+            "description": "`no_events_left`: every event of that kind the plan includes is used (an Extra event adds a main one), or the test event's month is over",
             "content": {
               "application/json": {
                 "schema": {
@@ -2255,6 +2264,16 @@
           },
           "404": {
             "description": "`event_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`test_event_dates_fixed`: a test event's dates come from the plan",
             "content": {
               "application/json": {
                 "schema": {

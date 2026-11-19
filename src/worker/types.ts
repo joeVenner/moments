@@ -73,6 +73,8 @@ export interface EventRow {
   access_version: number;
   /** The host who owns it (`users.id`); never sent to guests. */
   owner_user_id: string | null;
+  /** For billing (migration 0026): before plans, the operator's, or a plan's main or test event. */
+  kind: "legacy" | "operator" | "main" | "test";
 }
 
 export interface MomentRow {

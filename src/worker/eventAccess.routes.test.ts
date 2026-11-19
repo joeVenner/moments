@@ -88,6 +88,7 @@ beforeEach(async () => {
       invite_token: INVITE_TOKEN,
       access_version: 1,
       owner_user_id: null,
+      kind: "legacy",
     },
     clientFailures: 0,
     eventFailures: 0,
