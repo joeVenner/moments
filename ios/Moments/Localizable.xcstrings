@@ -330,6 +330,26 @@
         }
       }
     },
+    "Baby shower, reunion…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Baby shower, retrouvailles…"
+          }
+        }
+      }
+    },
+    "Birthday": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anniversaire"
+          }
+        }
+      }
+    },
     "Camera": {
       "localizations": {
         "fr": {
@@ -486,6 +506,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copier le lien d'invitation ?"
+          }
+        }
+      }
+    },
+    "Corporate": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entreprise"
           }
         }
       }
@@ -934,6 +964,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Commencer"
+          }
+        }
+      }
+    },
+    "Graduation": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remise de diplôme"
           }
         }
       }
@@ -1582,6 +1622,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ouvre l'événement"
+          }
+        }
+      }
+    },
+    "Other": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autre"
+          }
+        }
+      }
+    },
+    "Party": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fête"
           }
         }
       }
@@ -2774,6 +2834,16 @@
         }
       }
     },
+    "Type your own": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisissez le vôtre"
+          }
+        }
+      }
+    },
     "Unlock": {
       "extractionState": "manual",
       "localizations": {
@@ -3098,12 +3168,12 @@
         }
       }
     },
-    "Wedding, birthday, party…": {
+    "Wedding": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mariage, anniversaire, fête…"
+            "value": "Mariage"
           }
         }
       }
