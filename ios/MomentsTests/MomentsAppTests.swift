@@ -1,5 +1,6 @@
 import AppRouting
 import AVFoundation
+import FeatureHost
 import Foundation
 import MomentsDomain
 import Testing
@@ -155,6 +156,25 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(navigation.handle(text: "https://moments-hq.com/e/party?invite=\(invite)"))
         #expect(navigation.destination == .event(EventSlug("party")!))
         #expect(!navigation.handle(text: "WIFI:S:guest;T:WPA;P:secret;;"))
+    }
+
+    @Test func everySignInFailureHasItsOwnMessage() {
+        let failures: [HostAccount.SignInFailure] = [.invalidCredentials, .locked, .unavailable, .appTooOld, .offline, .failed]
+        let messages = failures.map(HostSignInView.message(for:))
+        #expect(Set(messages).count == failures.count)
+        #expect(HostSignInView.message(for: .locked).contains("15"))
+    }
+
+    @Test func hostEventDatesSayWhenArchivedOrClosed() {
+        func event(open: Bool, archived: Bool) -> Event {
+            Event(id: "e", slug: "e", title: "Party", type: "Party", mainCharacters: nil, description: nil, coverImageURL: nil,
+                  createdAt: Date(timeIntervalSince1970: 1_795_000_000), startsAt: nil, expiresAt: nil, uploadsCloseAt: nil,
+                  purgeAfter: nil, archivedAt: archived ? Date() : nil, accessMode: .public, areUploadsOpen: open)
+        }
+        let plain = HostEventsView.dateLine(event(open: true, archived: false))
+        #expect(!plain.contains("·"))
+        #expect(HostEventsView.dateLine(event(open: false, archived: false)).hasPrefix(plain + " · "))
+        #expect(HostEventsView.dateLine(event(open: false, archived: true)) != HostEventsView.dateLine(event(open: false, archived: false)))
     }
 
     @Test func theSimulatorHasNoScanner() {
