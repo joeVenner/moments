@@ -27,7 +27,9 @@ export async function resolveWebUploader(
 ): Promise<WebUploader> {
   const session = await resolveGuestSession(env.DB, input.eventId, input.token);
   if (session) return { ok: true, uploaderName: session.participant.nickname, participantId: session.participant.id };
-  if (env.GUEST_TOKENS_ENFORCED === "true") return { ok: false, status: 403, body: GUEST_REQUIRED };
+  // A token we don't know (the guest left, or it is another event's) means
+  // "join again", never the tokenless name path.
+  if (input.token || env.GUEST_TOKENS_ENFORCED === "true") return { ok: false, status: 403, body: GUEST_REQUIRED };
   const raw = await input.clientName();
   const name = typeof raw === "string" ? raw.trim() : "";
   if (!name) return { ok: false, status: 400, body: { error: "uploader_name is required" } };
@@ -41,24 +43,29 @@ export async function resolveWebUploader(
   return { ok: true, uploaderName: name, participantId: null };
 }
 
+/** How a follow-up call (part URL, status, complete, abort) may treat an upload row. */
+export type UploadAccess = "ok" | "not_found" | "guest_required";
+
 /**
- * Whether a follow-up call (part URL, status, complete, abort) may act on this
- * row. A guest's row: their token, or, until enforcement, no token at all (an
- * old upload service worker that saved none); never another guest's. Rows
- * opened without a token have no owner to check here.
+ * A guest's row: their token, or, until enforcement, no token at all (an old
+ * upload service worker that saved none); never another guest's, which reads
+ * as not found so rows don't leak. Rows opened without a token have no owner
+ * to check. A token we don't know is refused as guest_required on any row, so
+ * the client can send its guest back to join.
  */
-export async function mayUseUpload(
+export async function uploadAccess(
   env: GuestEnv,
   input: { eventId: string; token: string | null | undefined; row: { participant_id: string | null } }
-): Promise<boolean> {
-  if (input.row.participant_id === null) return true;
-  const session = await resolveGuestSession(env.DB, input.eventId, input.token);
-  if (session) return session.participant.id === input.row.participant_id;
-  return env.GUEST_TOKENS_ENFORCED !== "true";
+): Promise<UploadAccess> {
+  const session = input.token ? await resolveGuestSession(env.DB, input.eventId, input.token) : null;
+  if (input.token && !session) return "guest_required";
+  if (input.row.participant_id === null) return "ok";
+  if (session) return session.participant.id === input.row.participant_id ? "ok" : "not_found";
+  return env.GUEST_TOKENS_ENFORCED === "true" ? "guest_required" : "ok";
 }
 
-/** mayUseUpload, and a tokenless row also needs the name it was opened with. */
-export async function mayFinishUpload(
+/** uploadAccess, and a tokenless row also needs the name it was opened with. */
+export async function finishAccess(
   env: GuestEnv,
   input: {
     eventId: string;
@@ -66,9 +73,21 @@ export async function mayFinishUpload(
     row: { participant_id: string | null; uploader_name: string };
     clientName: string;
   }
-): Promise<boolean> {
-  if (input.row.participant_id === null) return input.row.uploader_name === input.clientName;
-  return mayUseUpload(env, input);
+): Promise<UploadAccess> {
+  const access = await uploadAccess(env, input);
+  if (access !== "ok") return access;
+  return input.row.participant_id === null && input.row.uploader_name !== input.clientName ? "not_found" : "ok";
+}
+
+export type UploadRefusal =
+  | { body: typeof GUEST_REQUIRED; status: 403 }
+  | { body: { error: "upload not found" }; status: 404 };
+
+/** The response for a refused follow-up call. */
+export function uploadRefusal(access: Exclude<UploadAccess, "ok">): UploadRefusal {
+  return access === "guest_required"
+    ? ({ body: GUEST_REQUIRED, status: 403 } as const)
+    : ({ body: { error: "upload not found" }, status: 404 } as const);
 }
 
 /** A moment as guests may see it: without the owner's participant id. */

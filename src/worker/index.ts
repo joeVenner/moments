@@ -69,7 +69,7 @@ import {
 import { leaveEvent, leaveStorage } from "./guestLeave";
 import { isJoinLimited, JOIN_RATE_LIMITED, JOIN_RETRY_AFTER_SECONDS } from "./joinLimit";
 import { gateReaction, GUEST_REQUIRED, REACTOR_ID_PATTERN, setReaction, viewerReactorId } from "./reactions";
-import { guestMoment, mayFinishUpload, mayUseUpload, resolveWebUploader } from "./webUploader";
+import { finishAccess, guestMoment, resolveWebUploader, uploadAccess, uploadRefusal } from "./webUploader";
 import { cleanWebCaption } from "./captionText";
 import {
   MAX_PIN_LENGTH,
@@ -978,8 +978,10 @@ app.post("/api/events/:slug/moments/stream/complete", async (c) => {
   // App sessions never finish here.
   if (!upload || upload.client_upload_id) return c.json({ error: "upload not found" }, 404);
   const token = c.req.header(GUEST_TOKEN_HEADER);
-  if (!(await mayFinishUpload(c.env, { eventId: event.id, token, row: upload, clientName: uploaderName }))) {
-    return c.json({ error: "upload not found" }, 404);
+  const access = await finishAccess(c.env, { eventId: event.id, token, row: upload, clientName: uploaderName });
+  if (access !== "ok") {
+    const refusal = uploadRefusal(access);
+    return c.json(refusal.body, refusal.status);
   }
   const mediaUrl = streamMediaUrl(c.env, streamUid);
   const existingMoment = await c.env.DB.prepare("SELECT * FROM moments WHERE event_id = ? AND media_url = ?")
@@ -1079,8 +1081,10 @@ app.post("/api/events/:slug/moments/stream/abort", async (c) => {
         .bind(sessionId, event.id)
         .first<UploadRow>();
   if (!upload) return c.json({ error: "upload not found" }, 404);
-  if (!(await mayUseUpload(c.env, { eventId: event.id, token: c.req.header(GUEST_TOKEN_HEADER), row: upload }))) {
-    return c.json({ error: "upload not found" }, 404);
+  const access = await uploadAccess(c.env, { eventId: event.id, token: c.req.header(GUEST_TOKEN_HEADER), row: upload });
+  if (access !== "ok") {
+    const refusal = uploadRefusal(access);
+    return c.json(refusal.body, refusal.status);
   }
 
   const effectiveUid = upload.key.startsWith("stream/") ? upload.upload_id : "";
@@ -1199,8 +1203,10 @@ app.post("/api/events/:slug/moments/multipart/part-url", async (c) => {
   }
   const upload = await getOpenUpload(c.env.DB, event.id, uploadId, key);
   if (!upload) return c.json({ error: "upload not found" }, 404);
-  if (!(await mayUseUpload(c.env, { eventId: event.id, token: c.req.header(GUEST_TOKEN_HEADER), row: upload }))) {
-    return c.json({ error: "upload not found" }, 404);
+  const access = await uploadAccess(c.env, { eventId: event.id, token: c.req.header(GUEST_TOKEN_HEADER), row: upload });
+  if (access !== "ok") {
+    const refusal = uploadRefusal(access);
+    return c.json(refusal.body, refusal.status);
   }
 
   let url: string;
@@ -1236,8 +1242,10 @@ app.get("/api/events/:slug/moments/multipart/status", async (c) => {
   }
   const upload = await getUpload(c.env.DB, event.id, uploadId, key);
   if (!upload) return c.json({ error: "upload not found" }, 404);
-  if (!(await mayUseUpload(c.env, { eventId: event.id, token: c.req.header(GUEST_TOKEN_HEADER), row: upload }))) {
-    return c.json({ error: "upload not found" }, 404);
+  const access = await uploadAccess(c.env, { eventId: event.id, token: c.req.header(GUEST_TOKEN_HEADER), row: upload });
+  if (access !== "ok") {
+    const refusal = uploadRefusal(access);
+    return c.json(refusal.body, refusal.status);
   }
   if (upload.status === "completed") {
     const moment = await getMomentForUpload(c.env.DB, event.id, key);
@@ -1328,8 +1336,10 @@ app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
   // App sessions finish through v1, which checks part sizes and file bytes.
   if (upload.client_upload_id) return c.json(V1_SESSION_ERROR, 409);
   const token = c.req.header(GUEST_TOKEN_HEADER);
-  if (!(await mayFinishUpload(c.env, { eventId: event.id, token, row: upload, clientName: uploaderName }))) {
-    return c.json({ error: "upload not found" }, 404);
+  const access = await finishAccess(c.env, { eventId: event.id, token, row: upload, clientName: uploaderName });
+  if (access !== "ok") {
+    const refusal = uploadRefusal(access);
+    return c.json(refusal.body, refusal.status);
   }
   const existingMoment = await getMomentForUpload(c.env.DB, event.id, key);
   if (existingMoment) {
@@ -1460,8 +1470,12 @@ app.post("/api/events/:slug/moments/multipart/abort", async (c) => {
   }
   const upload = await getUpload(c.env.DB, event.id, uploadId, key);
   if (upload?.client_upload_id) return c.json(V1_SESSION_ERROR, 409);
-  if (upload && !(await mayUseUpload(c.env, { eventId: event.id, token: c.req.header(GUEST_TOKEN_HEADER), row: upload }))) {
-    return c.json({ error: "upload not found" }, 404);
+  if (upload) {
+    const access = await uploadAccess(c.env, { eventId: event.id, token: c.req.header(GUEST_TOKEN_HEADER), row: upload });
+    if (access !== "ok") {
+      const refusal = uploadRefusal(access);
+      return c.json(refusal.body, refusal.status);
+    }
   }
 
   try {

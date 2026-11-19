@@ -93,7 +93,8 @@ export type ReactionGate =
 
 /**
  * Shared by the web toggle and the v1 add/remove routes, before any write:
- * the guest check (only when GUEST_TOKENS_ENFORCED), the rate limit (keyed on
+ * the guest check (an unknown token always; no token only when
+ * GUEST_TOKENS_ENFORCED), the rate limit (keyed on
  * the guest session when there is one, else the client IP). On success,
  * `reactorId` is the id to write under: the guest's own (guestReactorId), or
  * for a tokenless request the client's id, which it then must send.
@@ -108,7 +109,8 @@ export async function gateReaction(
   }
 ): Promise<ReactionGate> {
   const session = await resolveGuestSession(env.DB, input.eventId, input.token);
-  if (env.GUEST_TOKENS_ENFORCED === "true" && !session) return { ok: false, status: 403, body: GUEST_REQUIRED };
+  // A token we don't know means "join again", never the tokenless path.
+  if (!session && (input.token || env.GUEST_TOKENS_ENFORCED === "true")) return { ok: false, status: 403, body: GUEST_REQUIRED };
   if (env.REACTION_LIMITER) {
     const who = session ? `guest:${session.sessionId}` : `ip:${input.clientIp ?? "unknown"}`;
     const { success } = await env.REACTION_LIMITER.limit({ key: `${input.eventId}:${who}` });

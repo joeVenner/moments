@@ -72,9 +72,12 @@ describe("gateReaction", () => {
     expect(await gate(null, "guest:p1")).toMatchObject({ ok: false, status: 400 });
   });
 
-  it("ignores an unknown token like no token", async () => {
-    const result = await heart("gt_" + "a".repeat(43), DEVICE_A, "m1", { GUEST_TOKENS_ENFORCED: "true" });
-    expect(result).toMatchObject({ ok: false, status: 403 });
+  it("asks an unknown token to join again, enforced or not, before any write", async () => {
+    for (const env of [{}, { GUEST_TOKENS_ENFORCED: "true" }]) {
+      const result = await heart("gt_" + "a".repeat(43), DEVICE_A, "m1", env);
+      expect(result).toMatchObject({ ok: false, status: 403, body: { code: "guest_required" } });
+    }
+    expect(hearts("m1")).toBe(0);
   });
 
   it("rate-limits per guest session, else per IP", async () => {

@@ -4,7 +4,7 @@ import worker from "./index";
 import { createSqliteD1, type SqliteD1 } from "./testing/sqliteD1";
 import type { Env } from "./types";
 import { streamMediaUrl } from "./stream";
-import { mayFinishUpload, mayUseUpload, resolveWebUploader } from "./webUploader";
+import { finishAccess, resolveWebUploader, uploadAccess } from "./webUploader";
 
 let sqlite: SqliteD1;
 let put: ReturnType<typeof vi.fn>;
@@ -101,6 +101,13 @@ describe("resolveWebUploader", () => {
     expect(await resolve(null, "Lina")).toMatchObject({ ok: true, uploaderName: "Lina" });
   });
 
+  it("asks an unknown token to join again rather than taking the body's name, before enforcement too", async () => {
+    const clientName = vi.fn(() => "Lina");
+    const result = await resolveWebUploader({ DB: sqlite.db }, { eventId: "ev1", token: "gt_" + "b".repeat(43), clientName });
+    expect(result).toMatchObject({ ok: false, status: 403, body: { code: "guest_required" } });
+    expect(clientName).not.toHaveBeenCalled();
+  });
+
   it("treats another event's, a malformed or an unknown token as none", async () => {
     sqlite.raw.prepare("INSERT INTO events (id, slug, title, type) VALUES ('ev2', 'other', 'Other', 'party')").run();
     const sara = await join("Sara");
@@ -112,9 +119,9 @@ describe("resolveWebUploader", () => {
   });
 });
 
-describe("mayFinishUpload", () => {
-  const may = (row: { participant_id: string | null; uploader_name: string }, token: string | null, clientName: string, enforced = false) =>
-    mayFinishUpload({ DB: sqlite.db, GUEST_TOKENS_ENFORCED: enforced ? "true" : undefined }, { eventId: "ev1", token, row, clientName });
+describe("finishAccess", () => {
+  const may = async (row: { participant_id: string | null; uploader_name: string }, token: string | null, clientName: string, enforced = false) =>
+    (await finishAccess({ DB: sqlite.db, GUEST_TOKENS_ENFORCED: enforced ? "true" : undefined }, { eventId: "ev1", token, row, clientName })) === "ok";
 
   it("lets only the owner's token finish a guest's row", async () => {
     const sara = await join("Sara");
@@ -231,7 +238,11 @@ describe("web complete routes", () => {
         kind === "multipart" ? "/api/events/party/moments/multipart/complete" : "/api/events/party/moments/stream/complete",
         jsonPost(kind === "multipart" ? { upload_id: "mp-1", key: KEY, uploader_name: "Sara", parts: [] } : { stream_uid: "uid1", uploader_name: "Sara" }),
         ENFORCED
-      )).status).toBe(404);
+      )).status).toBe(403);
+      // A token the server doesn't know: join again.
+      const dead = await complete(kind, "Sara", "gt_" + "c".repeat(43));
+      expect(dead.status).toBe(403);
+      expect(await dead.json()).toMatchObject({ code: "guest_required" });
     });
 
     it(`${kind}: a tokenless row needs its own name, and a hidden moment isn't replayed`, async () => {
@@ -244,17 +255,28 @@ describe("web complete routes", () => {
   }
 });
 
-describe("mayUseUpload", () => {
+describe("uploadAccess", () => {
+  const access = (participant_id: string | null, token: string | null, enforced = false) =>
+    uploadAccess({ DB: sqlite.db, GUEST_TOKENS_ENFORCED: enforced ? "true" : undefined }, { eventId: "ev1", token, row: { participant_id } });
+
   it("checks the owner on owned rows only", async () => {
     const sara = await join("Sara");
     const lina = await join("Lina");
-    const may = (participant_id: string | null, token: string | null, enforced = false) =>
-      mayUseUpload({ DB: sqlite.db, GUEST_TOKENS_ENFORCED: enforced ? "true" : undefined }, { eventId: "ev1", token, row: { participant_id } });
-    expect(await may(sara.participantId, sara.token)).toBe(true);
-    expect(await may(sara.participantId, lina.token)).toBe(false);
-    expect(await may(sara.participantId, null)).toBe(true);
-    expect(await may(sara.participantId, null, true)).toBe(false);
-    expect(await may(null, lina.token)).toBe(true);
+    expect(await access(sara.participantId, sara.token)).toBe("ok");
+    expect(await access(sara.participantId, lina.token)).toBe("not_found");
+    expect(await access(sara.participantId, null)).toBe("ok");
+    expect(await access(sara.participantId, null, true)).toBe("guest_required");
+    expect(await access(null, lina.token)).toBe("ok");
+  });
+
+  it("asks a token it doesn't know to join again, on any row, enforced or not", async () => {
+    const sara = await join("Sara");
+    for (const enforced of [false, true]) {
+      for (const token of ["gt_" + "a".repeat(43), "nope"]) {
+        expect(await access(sara.participantId, token, enforced)).toBe("guest_required");
+        expect(await access(null, token, enforced)).toBe("guest_required");
+      }
+    }
   });
 });
 
@@ -281,6 +303,10 @@ describe("web follow-up upload routes", () => {
     const r = await res;
     return r.status === 404 && ((await r.json()) as { error?: string }).error === "upload not found";
   };
+  const joinAgain = async (res: Response | Promise<Response>) => {
+    const r = await res;
+    return r.status === 403 && ((await r.json()) as { code?: string }).code === "guest_required";
+  };
 
   for (const [name, kind, run] of routes) {
     it(`${name}: another guest's token is refused before anything happens; the owner's goes through`, async () => {
@@ -296,9 +322,17 @@ describe("web follow-up upload routes", () => {
     it(`${name}: an owned row takes tokenless calls only until enforcement`, async () => {
       const sara = await join("Sara");
       openRow(sara.participantId, kind);
-      expect(await refused(run(undefined, ENFORCED))).toBe(true);
-      expect(await refused(run(sara.token, ENFORCED))).toBe(false);
-      expect(await refused(run(undefined))).toBe(false);
+      expect(await joinAgain(run(undefined, ENFORCED))).toBe(true);
+      expect(await joinAgain(run(sara.token, ENFORCED))).toBe(false);
+      expect(await joinAgain(run(undefined))).toBe(false);
+    });
+
+    it(`${name}: a token the server doesn't know (the guest left) is asked to join again, touching nothing`, async () => {
+      const sara = await join("Sara");
+      openRow(sara.participantId, kind);
+      expect(await joinAgain(run("gt_" + "d".repeat(43)))).toBe(true);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(sqlite.raw.prepare("SELECT status FROM uploads").get()).toEqual({ status: "open" });
     });
 
     it(`${name}: a row opened without a token takes any caller`, async () => {

@@ -1603,7 +1603,7 @@
             }
           },
           "403": {
-            "description": "`guest_required`: join the event first (once guest tokens are enforced)",
+            "description": "`guest_required`: join the event first: the X-Guest-Token is unknown (the guest left), or none was sent once guest tokens are enforced",
             "content": {
               "application/json": {
                 "schema": {
@@ -1746,7 +1746,7 @@
             }
           },
           "403": {
-            "description": "`guest_required`: join the event first (once guest tokens are enforced)",
+            "description": "`guest_required`: join the event first: the X-Guest-Token is unknown (the guest left), or none was sent once guest tokens are enforced",
             "content": {
               "application/json": {
                 "schema": {
