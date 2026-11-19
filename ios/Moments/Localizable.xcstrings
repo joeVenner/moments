@@ -31,6 +31,47 @@
         }
       }
     },
+    "%lld hidden": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld hidden"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld hidden"
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld masqué"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld masqués"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld in progress": {
       "extractionState": "manual",
       "localizations": {
@@ -65,6 +106,47 @@
                 "stringUnit": {
                   "state": "translated",
                   "value": "%lld en cours"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld moments": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld moment"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld moments"
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld souvenir"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld souvenirs"
                 }
               }
             }
@@ -458,6 +540,36 @@
         }
       }
     },
+    "Delete": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer"
+          }
+        }
+      }
+    },
+    "Delete this moment?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer ce souvenir ?"
+          }
+        }
+      }
+    },
+    "Deleting removes it for everyone, files included. This can't be undone.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer l'efface pour tout le monde, fichiers compris. C'est définitif."
+          }
+        }
+      }
+    },
     "Details unavailable right now": {
       "localizations": {
         "fr": {
@@ -518,6 +630,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saisissez votre nom pour rejoindre"
+          }
+        }
+      }
+    },
+    "Event": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Événement"
           }
         }
       }
@@ -668,6 +790,36 @@
         }
       }
     },
+    "Hidden photo by %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo masquée de %@"
+          }
+        }
+      }
+    },
+    "Hidden video by %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vidéo masquée de %@"
+          }
+        }
+      }
+    },
+    "Hide from guests": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer aux invités"
+          }
+        }
+      }
+    },
     "Highlights": {
       "extractionState": "manual",
       "localizations": {
@@ -736,6 +888,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lien d'invitation copié"
+          }
+        }
+      }
+    },
+    "It's removed for everyone, files included. This can't be undone.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il est supprimé pour tout le monde, fichiers compris. C'est définitif."
           }
         }
       }
@@ -894,6 +1056,16 @@
         }
       }
     },
+    "Moderate moments": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modérer les souvenirs"
+          }
+        }
+      }
+    },
     "Moment %lld of %lld": {
       "extractionState": "manual",
       "localizations": {
@@ -999,6 +1171,16 @@
         }
       }
     },
+    "No moments yet.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun souvenir pour l'instant."
+          }
+        }
+      }
+    },
     "Nothing is uploading.": {
       "extractionState": "manual",
       "localizations": {
@@ -1006,6 +1188,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aucun envoi en cours."
+          }
+        }
+      }
+    },
+    "OK": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
           }
         }
       }
@@ -1457,12 +1649,42 @@
         }
       }
     },
+    "Show to guests": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Montrer aux invités"
+          }
+        }
+      }
+    },
     "Showing the newest 500 events.": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Affichage des 500 événements les plus récents."
+          }
+        }
+      }
+    },
+    "Showing the newest 500 moments.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seuls les 500 souvenirs les plus récents sont affichés."
+          }
+        }
+      }
+    },
+    "Shows the hide and delete options.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affiche les options pour masquer ou supprimer."
           }
         }
       }
@@ -1601,6 +1823,16 @@
         }
       }
     },
+    "That didn't work, so nothing changed. Try again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ça n'a pas marché : rien n'a changé. Réessayez."
+          }
+        }
+      }
+    },
     "That isn't a Moments event link.": {
       "localizations": {
         "fr": {
@@ -1640,6 +1872,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "L'hôte a modifié l'accès à cet événement. Rejoignez-le à nouveau pour continuer."
+          }
+        }
+      }
+    },
+    "The moment's files couldn't be deleted, so it was kept. Try again in a moment.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les fichiers de ce souvenir n'ont pas pu être supprimés, il a donc été conservé. Réessayez dans un instant."
+          }
+        }
+      }
+    },
+    "The moments couldn't be loaded. Pull down to try again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de charger les souvenirs. Tirez vers le bas pour réessayer."
           }
         }
       }
@@ -1926,6 +2178,16 @@
         }
       }
     },
+    "Update Moments to moderate this event.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettez Moments à jour pour modérer cet événement."
+          }
+        }
+      }
+    },
     "Update Moments to see this event.": {
       "localizations": {
         "fr": {
@@ -1974,6 +2236,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mise à jour requise"
+          }
+        }
+      }
+    },
+    "Updating": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mise à jour"
           }
         }
       }
@@ -2117,6 +2389,16 @@
         }
       }
     },
+    "What should happen to this moment?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Que faire de ce souvenir ?"
+          }
+        }
+      }
+    },
     "You": {
       "extractionState": "manual",
       "localizations": {
@@ -2135,6 +2417,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vous ne faites plus partie de cet événement"
+          }
+        }
+      }
+    },
+    "You're offline, so nothing changed. Try again when you're connected.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous êtes hors ligne : rien n'a changé. Réessayez une fois connecté."
           }
         }
       }

@@ -15,11 +15,14 @@ struct HomeView: View {
     /// Shown above the link field, e.g. after a slideshow link.
     let notice: String?
 
-    /// The host's account and events, for the hosting entry at the bottom.
+    /// The host's account and events, for the hosting entry at the bottom
+    /// and every host screen behind it.
     struct Host {
         let account: HostAccount
         let events: HostEventsModel
         let service: any HostService
+        /// Loads moment thumbnails (host URLs carry their own signature).
+        let mediaFetcher: MediaFetcher
     }
 
     @Environment(\.scenePhase) private var scenePhase
@@ -116,7 +119,7 @@ struct HomeView: View {
             }
         }
         .fullScreenCover(isPresented: $isShowingHostEvents) {
-            HostEventsView(account: host.account, model: host.events, service: host.service) { isShowingHostEvents = false }
+            HostEventsView(host: host) { isShowingHostEvents = false }
         }
         // Picks up expiry and a keychain that was locked at launch.
         .onChange(of: scenePhase, initial: true) {

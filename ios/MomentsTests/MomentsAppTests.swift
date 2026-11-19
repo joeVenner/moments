@@ -246,6 +246,34 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(Set(phases.compactMap(HostEventDetailView.message(for:))).count == phases.count)
     }
 
+    @Test func moderationCountsUseSingularAndPlural() {
+        #expect(HostModeration.summary(total: 0, hidden: 0) == "0 moments")
+        #expect(HostModeration.summary(total: 1, hidden: 0) == "1 moment")
+        #expect(HostModeration.summary(total: 2, hidden: 1) == "2 moments · 1 hidden")
+        #expect(HostModeration.summary(total: 3, hidden: 2) == "3 moments · 2 hidden")
+    }
+
+    @Test func moderationLabelsSayWhoAndWhetherHidden() {
+        let photo = AdminMoment(
+            id: "m1", eventID: "e1", uploaderName: "Sara", createdAt: .now, status: .hidden,
+            media: Media(kind: .image, url: "https://moments-hq.com/media/m1.jpg")
+        )
+        let video = AdminMoment(
+            id: "m2", eventID: "e1", uploaderName: "Omar", createdAt: .now, status: .approved,
+            media: Media(kind: .video, url: "https://moments-hq.com/media/m2.mp4")
+        )
+        #expect(HostModeration.label(for: photo) == "Hidden photo by Sara")
+        #expect(HostModeration.label(for: video) == "Video by Omar")
+    }
+
+    @Test func everyModerationProblemHasItsOwnMessage() {
+        #expect(HostModeration.message(for: HostModerationModel.Phase.loaded) == nil)
+        let phases: [HostModerationModel.Phase] = [.gone, .failed(.offline), .failed(.appTooOld), .failed(.failed)]
+        #expect(Set(phases.compactMap { HostModeration.message(for: $0) }).count == phases.count)
+        let failures: [HostModerationModel.ActionFailure] = [.offline, .appTooOld, .mediaKept, .failed]
+        #expect(Set(failures.map { HostModeration.message(for: $0) }).count == failures.count)
+    }
+
     @Test func theSimulatorHasNoScanner() {
         #if targetEnvironment(simulator)
         #expect(CameraAccess.current == .unsupported)

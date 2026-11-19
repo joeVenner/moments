@@ -12,19 +12,21 @@ struct HostEventDetailView: View {
     @State private var model: HostEventDetailModel
     /// The list row, shown while the detail loads.
     let summary: AdminEvent
+    let host: HomeView.Host
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var isConfirmingInviteCopy = false
     @State private var didCopyInvite = false
 
-    init(summary: AdminEvent, service: any HostService, account: HostAccount) {
-        self.init(summary: summary, model: HostEventDetailModel(eventID: summary.id, service: service, account: account))
+    init(summary: AdminEvent, host: HomeView.Host) {
+        self.init(summary: summary, host: host, model: HostEventDetailModel(eventID: summary.id, service: host.service, account: host.account))
     }
 
     /// With a model that may already be loaded (screenshot tests).
-    init(summary: AdminEvent, model: HostEventDetailModel) {
+    init(summary: AdminEvent, host: HomeView.Host, model: HostEventDetailModel) {
         self.summary = summary
+        self.host = host
         _model = State(initialValue: model)
     }
 
@@ -94,6 +96,10 @@ struct HostEventDetailView: View {
             if let message = Self.message(for: model.phase) { notice(message) }
             if let detail = model.detail {
                 shareSection(detail.share)
+                NavigationLink(value: HostModerationRoute(eventID: event.id, title: event.title)) {
+                    Label("Moderate moments", systemImage: "square.grid.3x3")
+                }
+                .buttonStyle(.momentsSecondary)
                 HostEventStatsView(analytics: detail.analytics)
             } else if model.phase == .loading || model.phase == .idle {
                 ProgressView()
