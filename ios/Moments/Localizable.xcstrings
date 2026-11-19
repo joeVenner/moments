@@ -822,24 +822,12 @@
         }
       }
     },
-    "Enter the event PIN or open the private invitation link from the host.": {
-      "extractionState": "manual",
+    "Enter the event PIN. It's on the invitation; an invite link skips this step.": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Saisissez le code de l'événement ou ouvrez le lien d'invitation privé de l'hôte."
-          }
-        }
-      }
-    },
-    "Enter your name to join": {
-      "extractionState": "manual",
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Saisissez votre nom pour rejoindre"
+            "value": "Saisissez le PIN de l'événement. Il figure sur l'invitation ; un lien d'invitation évite cette étape."
           }
         }
       }
@@ -1246,13 +1234,12 @@
         }
       }
     },
-    "Join the Feed": {
-      "extractionState": "manual",
+    "Join the event": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rejoindre le fil"
+            "value": "Rejoindre l'événement"
           }
         }
       }
@@ -1454,6 +1441,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nouvel événement"
+          }
+        }
+      }
+    },
+    "New face": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau visage"
           }
         }
       }
@@ -1727,6 +1724,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Les photos et vidéos partagées par les invités apparaîtront ici."
+          }
+        }
+      }
+    },
+    "Picks a different face": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisit un autre visage"
           }
         }
       }
@@ -2641,6 +2648,16 @@
         }
       }
     },
+    "This face goes next to everything you share.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce visage accompagne tout ce que vous partagez."
+          }
+        }
+      }
+    },
     "This file can't be shared.": {
       "extractionState": "manual",
       "localizations": {
@@ -3246,6 +3263,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vous"
+          }
+        }
+      }
+    },
+    "You're invited": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une invitation pour vous"
           }
         }
       }
