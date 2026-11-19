@@ -58,4 +58,27 @@ private let invite = String(repeating: "ab12", count: 16)
         navigation.handle(URL(string: "https://moments-hq.com/e/party")!)
         #expect(navigation.takeInvite(for: EventSlug("party")!) == nil)
     }
+
+    @Test func pastedTextIsCappedAt2048Characters() {
+        let prefix = "https://moments-hq.com/e/party?x="
+        let navigation = AppNavigation(router: AppRouter())
+        #expect(navigation.handle(text: prefix + String(repeating: "a", count: 2048 - prefix.count)))
+        #expect(!navigation.handle(text: prefix + String(repeating: "a", count: 2049 - prefix.count)))
+    }
+
+    @Test func aPastedLinkOpensTheEventWithItsInvite() {
+        let navigation = AppNavigation(router: AppRouter())
+        #expect(navigation.handle(text: "  https://moments-hq.com/e/party?invite=\(invite)\n"))
+        #expect(navigation.destination == .event(EventSlug("party")!))
+        #expect(navigation.takeInvite(for: EventSlug("party")!) == InviteToken(invite))
+    }
+
+    @Test(arguments: ["", "   ", "party", "moments-hq.com/e/party", "https://evil.test/e/party", "https://moments-hq.com/admin",
+                      "http://moments-hq.com/e/party",
+                      "https://moments-hq.com/e/" + String(repeating: "a", count: 2048)])
+    func pastedTextThatIsntAnEventLinkIsRefused(_ text: String) {
+        let navigation = AppNavigation(router: AppRouter())
+        #expect(!navigation.handle(text: text))
+        #expect(navigation.destination == nil && navigation.openCount == 0)
+    }
 }

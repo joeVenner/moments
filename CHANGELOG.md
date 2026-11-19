@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS home screen: paste or type an event link to open it (replaces the placeholder that offered no way in).
 - Smart App Banner on event pages (`apple-itunes-app` meta with the App Clip card and the page URL as `app-argument`), injected by the worker only when `APP_STORE_ID` is set; the slideshow never shows it.
 - `/.well-known/apple-app-site-association`: event links (`/e/*`, except the slideshow) open in the iOS app, and the App Clip is declared, for team 7877JLKPRQ.
 - iOS: the leaderboard shows each guest's avatar face, drawn on the phone exactly as on the web (guests without one keep their initial).

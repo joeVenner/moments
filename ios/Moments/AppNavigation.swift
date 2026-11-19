@@ -53,6 +53,14 @@ final class AppNavigation {
         return true
     }
 
+    /// A link typed or pasted on the home screen; same rules as `handle(_:)`.
+    @discardableResult
+    func handle(text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count <= 2048, let url = URL(string: trimmed) else { return false }
+        return handle(url)
+    }
+
     /// The invite that came with the link to `slug`, at most once.
     func takeInvite(for slug: EventSlug) -> InviteToken? {
         guard let pending = pendingInvite, pending.slug == slug else { return nil }
