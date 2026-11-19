@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS: each upload now sends its thumbnail, so the feed grid can show a small picture instead of the full file. It only ever goes to the app's own storage, and a thumbnail that can't be sent never holds the upload back.
 - iOS: the app makes a small thumbnail of each photo and video it prepares (upright, without any metadata, at most 200 KB), ready to be sent for the feed grid.
 - Server: uploads from the app can carry a small thumbnail for the feed grid. The server checks it, keeps its own copy, and the feed serves it in place of the full photo. A missing or bad thumbnail never holds up the upload. Deleting a moment, cancelling an upload or purging an event removes thumbnails too.
 - iOS: leaving an event now also deletes that event's uploads still waiting on the phone, and no new ones can start while leaving. If the server no longer knows the guest, tapping a heart ends the screen with "You're no longer in this event" and a **Join again** button, instead of failing silently.
@@ -71,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Website uploads now belong to the guest who made them. A guest who joined always uploads under their own nickname, whatever name the page sends, so nobody can post photos as someone else. Once guest identities are required, the website refuses uploads from visitors who haven't joined, before anything is stored.
 - Hearts now belong to the guest, not the device. A guest who joined reacts as themselves on the website and in the app: the server decides whose heart it is, so a client can no longer send hearts on another guest's behalf, and a guest sees their hearts on every device where they joined. Leaving an event takes back that guest's hearts. Clients without a guest identity keep their device id only until guest identities are required.
 ### Fixed
+- iOS: retrying a picture right after it failed to load now really loads it again.
 - Leaving an event now deletes everything the guest shared with their identity, including website photos and videos and their thumbnails, not only what came from the app. A guest with an unfinished website upload can now finish leaving.
 
 - Website: going from one event straight to another no longer carries over the first event's screen state ("not found", the PIN prompt, the open tab, an upload or a join in progress).
