@@ -57,7 +57,7 @@ public struct GuestEventView: View {
                     .safeAreaInset(edge: .top) {
                         if leave != nil || progress != nil { topBar }
                     }
-                    if feed.phase == .accessLost {
+                    if feed.phase == .accessLost || feed.phase == .guestRequired {
                         Button("Join again", action: rejoin)
                             .buttonStyle(.momentsPrimary)
                             .padding(Spacing.md)
@@ -97,7 +97,7 @@ public struct GuestEventView: View {
         // The event ended for this guest: every tab stops; lost access also
         // drops cached images of the private event.
         .onChange(of: feed?.phase) { _, phase in
-            guard phase == .accessLost || phase == .failed(.eventGone) else { return }
+            guard phase == .accessLost || phase == .guestRequired || phase == .failed(.eventGone) else { return }
             // The event ended: an open upload screen closes and drops its picks.
             upload?.discardAll()
             upload = nil
@@ -140,7 +140,10 @@ public struct GuestEventView: View {
             leaderboard = leaderboardModel
             feed = feedModel
             if let leaver = dependencies.leaver {
-                leave = LeaveModel(slug: join.slug, service: leaver, store: dependencies.store)
+                leave = LeaveModel(
+                    slug: join.slug, service: leaver, store: dependencies.store,
+                    uploads: dependencies.uploads?.leaving
+                )
             }
             if let source = dependencies.uploads?.progress {
                 progress = UploadProgressModel(eventSlug: join.slug.value, source: source)
@@ -250,7 +253,8 @@ public struct GuestEventView: View {
     /// Shown at the bottom of a tab (above the tab bar, insetting the
     /// tab's content) when uploads are available and the event is open.
     @ViewBuilder private func shareButton(_ feed: FeedModel) -> some View {
-        if let uploads = dependencies.uploads, feed.phase != .accessLost, feed.phase != .failed(.eventGone) {
+        if let uploads = dependencies.uploads, feed.phase != .accessLost, feed.phase != .guestRequired,
+           feed.phase != .failed(.eventGone) {
             shareButton(uploads)
         }
     }

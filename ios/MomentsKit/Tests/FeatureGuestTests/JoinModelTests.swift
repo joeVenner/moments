@@ -162,6 +162,16 @@ private func makeModel(invite: InviteToken? = nil, store: InMemoryEventCredentia
         #expect(store.credentials(for: slug) == nil)
     }
 
+    @Test func returningGuestTheServerForgotChoosesANameAgain() async throws {
+        let store = InMemoryEventCredentialStore([slug: StoredEventCredentials(eventID: "e1", guestToken: "gt", participantID: "p1", nickname: "Lea")])
+        let (model, service, _) = makeModel(store: store)
+        service.eventResults = [.success(publicEvent)]
+        service.joinResults = [.failure(MomentsAPIError.guestRequired)]
+        await model.start()
+        #expect(model.phase == .needsNickname(publicEvent, nil))
+        #expect(store.credentials(for: slug)?.guestToken == nil)
+    }
+
     @Test func tokenlessJoinOfSomeoneElsesNameCountsAsTaken() async throws {
         // Before enforcement the server lets a losing request in without a token.
         let (model, service, store) = makeModel()

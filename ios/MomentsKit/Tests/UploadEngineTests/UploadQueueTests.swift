@@ -514,3 +514,115 @@ actor Gate {
         #expect(Date().timeIntervalSince(started) < 1)
     }
 }
+
+@Suite struct UploadQueueLeavingTests {
+    private func other(_ harness: Harness) throws -> QueuedUpload {
+        let item = try harness.stage("b.jpg")
+        return QueuedUpload(id: item.id, eventSlug: "other", file: item.file, caption: nil, createdAt: item.createdAt)
+    }
+
+    @Test func removesOnlyThatEventsItemsAndTheirFiles() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue()
+        let mine = try harness.stage()
+        let kept = try other(harness)
+        try await queue.enqueue(mine)
+        try await queue.enqueue(kept)
+
+        #expect(await queue.beginLeaving(eventSlug: "party") == 1)
+
+        #expect(await queue.snapshot().map(\.id) == [kept.id])
+        #expect(!harness.stagedFileExists(mine))
+        #expect(harness.stagedFileExists(kept))
+        #expect(try harness.store.recordIDs() == [kept.id])
+    }
+
+    @Test func removesRecordsNotLoadedAtLaunch() async throws {
+        let harness = try Harness(maxItems: 1)
+        let loaded = try harness.stage()
+        let overCap = try harness.stage("b.jpg")
+        let otherEvent = try other(harness)
+        for item in [loaded, overCap, otherEvent] { try harness.store.save(item) }
+        // One of the three loads (the cap); the others stay on disk only.
+        let queue = try await harness.queue()
+
+        #expect(await queue.beginLeaving(eventSlug: "party") == 2)
+        #expect(try harness.store.recordIDs() == [otherEvent.id])
+        #expect(!harness.stagedFileExists(loaded) && !harness.stagedFileExists(overCap))
+        #expect(harness.stagedFileExists(otherEvent))
+    }
+
+    @Test func waitsForARequestAlreadyRunning() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue()
+        let item = try harness.stage()
+        try await queue.enqueue(item)
+        await queue.step(id: item.id) // session open
+        let gate = Gate()
+        harness.server.beforeParts = { await gate.wait() }
+        let sending = Task { await queue.step(id: item.id) }
+        while !harness.server.calls.contains("parts") { await Task.yield() }
+
+        let leaving = Task { await queue.beginLeaving(eventSlug: "party") }
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(await queue.snapshot().count == 1) // still waiting
+        await gate.open()
+        _ = await sending.value
+
+        #expect(await leaving.value == 1)
+        #expect(await queue.snapshot().isEmpty)
+        #expect(!harness.stagedFileExists(item))
+    }
+
+    @Test func removesARequestStillRunningAfterTheWait() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue()
+        let item = try harness.stage()
+        try await queue.enqueue(item)
+        await queue.step(id: item.id)
+        let gate = Gate()
+        harness.server.beforeParts = { await gate.wait() }
+        let sending = Task { await queue.step(id: item.id) }
+        while !harness.server.calls.contains("parts") { await Task.yield() }
+
+        #expect(await queue.beginLeaving(eventSlug: "party", waitingAtMost: .milliseconds(100)) == 1)
+        await gate.open()
+        #expect(await sending.value == false) // the late answer changes nothing
+        #expect(await queue.snapshot().isEmpty)
+        #expect(try harness.store.recordIDs().isEmpty)
+    }
+
+    @Test func staysClosedUntilEveryLeaveEnds() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue()
+        await queue.beginLeaving(eventSlug: "party")
+        await queue.beginLeaving(eventSlug: "party")
+        await #expect(throws: UploadQueue.EnqueueError.leaving) { try await queue.enqueue(try harness.stage()) }
+        await queue.endLeaving(eventSlug: "party")
+        await #expect(throws: UploadQueue.EnqueueError.leaving) { try await queue.enqueue(try harness.stage()) }
+        await queue.endLeaving(eventSlug: "party")
+        let item = try harness.stage()
+        try await queue.enqueue(item)
+        #expect(await queue.step(id: item.id))
+    }
+
+    @Test func aCancelledLeaveDoesntWaitOut() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue()
+        let item = try harness.stage()
+        try await queue.enqueue(item)
+        await queue.step(id: item.id)
+        let gate = Gate()
+        harness.server.beforeParts = { await gate.wait() }
+        let sending = Task { await queue.step(id: item.id) }
+        while !harness.server.calls.contains("parts") { await Task.yield() }
+
+        let started = ContinuousClock.now
+        let leaving = Task { await queue.beginLeaving(eventSlug: "party") }
+        leaving.cancel()
+        #expect(await leaving.value == 1)
+        #expect(ContinuousClock.now - started < .seconds(5))
+        await gate.open()
+        _ = await sending.value
+    }
+}

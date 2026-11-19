@@ -42,6 +42,8 @@ public struct QueueSubmitter: UploadSubmitting {
         case .file(.unreadable): .failed
         // Gone, moved, replaced or changed: this file will never upload.
         case .file(.missing), .file(.outsideStaging), .file(.notAFile), .file(.sizeChanged): .invalid
+        // The guest is leaving this event: the screen is going away.
+        case .leaving: .failed
         // Unreachable after `isReady` (the launch load finished); kept total.
         case .notLoaded, .alreadyLoaded: .failed
         }

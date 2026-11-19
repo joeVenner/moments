@@ -45,6 +45,8 @@ public actor UploadQueue {
         case notLoaded
         /// The staged file can't be used.
         case file(StagingArea.Problem)
+        /// The guest is leaving the item's event.
+        case leaving
     }
 
     public typealias CredentialsLookup = @Sendable (_ eventSlug: String) async -> CredentialsLookupResult
@@ -70,6 +72,9 @@ public actor UploadQueue {
     /// count toward the cap, and their staged files are never touched.
     private var unloaded = 0
     private var inFlight: Set<UUID> = []
+    /// Events the guest is leaving (with how many leaves overlap): none of
+    /// their items starts and nothing is enqueued for them meanwhile.
+    private var leavingEvents: [String: Int] = [:]
     private var heldUntil: [UUID: Date] = [:]
     private var observers: [UUID: AsyncStream<[QueuedUpload]>.Continuation] = [:]
     private var sleeper: Task<Void, Never>?
@@ -140,6 +145,7 @@ public actor UploadQueue {
     public func enqueue(_ item: QueuedUpload) throws {
         guard isLoaded else { throw EnqueueError.notLoaded }
         guard items[item.id] == nil else { throw EnqueueError.duplicate }
+        guard leavingEvents[item.eventSlug] == nil else { throw EnqueueError.leaving }
         guard items.count + unloaded < store.maxItems else { throw EnqueueError.full }
         do throws(StagingArea.Problem) {
             _ = try staging.open(item.file, owner: item.id)
@@ -190,6 +196,52 @@ public actor UploadQueue {
         heldUntil[id] = nil
         removeStagedFile(of: item)
         publish()
+    }
+
+    /// The guest is leaving `eventSlug`, which deletes their uploads: until
+    /// `endLeaving`, nothing of that event starts or can be enqueued. Waits
+    /// (up to `timeout`, or until cancelled) for a request already running
+    /// for one of its items, so a "complete" doesn't race the server's
+    /// leave; then removes every item of the event, records not loaded at
+    /// launch included, with their staged files. An item still sending
+    /// after the wait is removed too (its late answer is ignored). Returns
+    /// how many were removed. Calls may overlap; each needs `endLeaving`.
+    @discardableResult
+    public func beginLeaving(eventSlug: String, waitingAtMost timeout: Duration = .seconds(10)) async -> Int {
+        leavingEvents[eventSlug, default: 0] += 1
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline, snapshot().contains(where: { $0.eventSlug == eventSlug && inFlight.contains($0.id) }) {
+            do {
+                try await Task.sleep(for: .milliseconds(50))
+            } catch {
+                break // Cancelled: remove now rather than spin.
+            }
+        }
+        let handled = Set(items.keys)
+        var removed = 0
+        for item in snapshot() where item.eventSlug == eventSlug {
+            remove(item)
+            removed += 1
+        }
+        do {
+            // Loaded items are handled above, even one whose record stayed.
+            let others = try store.removeRecords(eventSlug: eventSlug, excluding: handled)
+            unloaded = max(unloaded - others.count, 0)
+            for item in others { removeStagedFile(of: item) }
+            removed += others.count
+        } catch {
+            // Left on disk; without the guest's token they can't upload.
+            cleanupFailures += 1
+        }
+        publish()
+        return removed
+    }
+
+    /// The leave that `beginLeaving` started is over (left or failed).
+    public func endLeaving(eventSlug: String) {
+        guard let count = leavingEvents[eventSlug] else { return }
+        leavingEvents[eventSlug] = count > 1 ? count - 1 : nil
     }
 
     /// Removes every item that finished successfully.
@@ -258,7 +310,7 @@ public actor UploadQueue {
     /// is never asked again in a tight loop.
     @discardableResult
     public func step(id: UUID) async -> Bool {
-        guard let item = items[id], !inFlight.contains(id) else { return false }
+        guard let item = items[id], !inFlight.contains(id), leavingEvents[item.eventSlug] == nil else { return false }
         let current = now()
         if let held = heldUntil[id], held > current { return false }
         let action = item.nextAction(now: current)
@@ -270,7 +322,8 @@ public actor UploadQueue {
         defer { inFlight.remove(id) }
         guard let event = await perform(action, for: item) else { return false }
         if apply(event, to: id) { return true }
-        if !Task.isCancelled { heldUntil[id] = now().addingTimeInterval(Self.noProgressHold) }
+        // A removed item (the guest left meanwhile) needs no hold.
+        if items[id] != nil, !Task.isCancelled { heldUntil[id] = now().addingTimeInterval(Self.noProgressHold) }
         return false
     }
 
@@ -360,6 +413,20 @@ public actor UploadQueue {
             saveFailures += 1
             return false
         }
+    }
+
+    /// Drops one item: record, memory and staged file.
+    private func remove(_ item: QueuedUpload) {
+        do {
+            try store.remove(id: item.id)
+        } catch {
+            // Kept on disk; without the guest's token it can't upload.
+            saveFailures += 1
+        }
+        items[item.id] = nil
+        order.removeAll { $0 == item.id }
+        heldUntil[item.id] = nil
+        removeStagedFile(of: item)
     }
 
     private func removeStagedFile(of item: QueuedUpload) {
