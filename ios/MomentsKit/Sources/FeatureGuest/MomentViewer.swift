@@ -120,16 +120,30 @@ struct MomentViewer: View {
                         .background(MomentsColor.background.opacity(0.6), in: Circle())
                 }
                 .accessibilityLabel(Text("Close"))
-                Spacer()
+                if !isPlaying { uploader(moment) }
+                Spacer(minLength: Spacing.sm)
                 if !isPlaying { counter(position: position, total: total) }
             }
             .padding(.horizontal, Spacing.md)
+            .padding(.bottom, Spacing.lg)
+            // Keeps the name readable over a bright photo, like the bottom.
+            .background {
+                if !isPlaying {
+                    LinearGradient(
+                        colors: [MomentsColor.background.opacity(0.7), MomentsColor.background.opacity(0)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    .ignoresSafeArea(edges: .top)
+                }
+            }
             Spacer()
             if !isPlaying {
-                HStack(alignment: .bottom, spacing: 0) {
-                    details(moment)
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    caption(moment)
                     reactionButton(moment)
                 }
+                .padding(Spacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     LinearGradient(
                         colors: [MomentsColor.background.opacity(0), MomentsColor.background.opacity(0.85)],
@@ -143,19 +157,20 @@ struct MomentViewer: View {
 
     private func reactionButton(_ moment: Moment) -> some View {
         Button { toggleReaction(moment) } label: {
-            VStack(spacing: Spacing.xxs) {
+            HStack(spacing: Spacing.xs) {
                 Image(systemName: moment.hasReacted ? "heart.fill" : "heart")
-                    .font(MomentsFont.heading())
+                    .font(MomentsFont.body().weight(.semibold))
                     .foregroundStyle(moment.hasReacted ? MomentsColor.accent : MomentsColor.text)
                     .contentTransition(.symbolEffect(.replace))
                     .animation(Motion.animation(Motion.standard, reduceMotion: reduceMotion), value: moment.hasReacted)
-                Text(verbatim: "\(moment.reactionCount)")
-                    .font(MomentsFont.number(.caption))
+                Text(moment.reactionCount, format: .number)
+                    .font(MomentsFont.number(.body))
                     .foregroundStyle(MomentsColor.text)
-                    .opacity(moment.reactionCount > 0 ? 1 : 0)
             }
+            .padding(.horizontal, Spacing.md)
             .frame(minWidth: Radius.minimumTapTarget, minHeight: Radius.minimumTapTarget)
-            .padding(Spacing.md)
+            .background(MomentsColor.surface.opacity(0.85), in: Capsule())
+            .overlay(Capsule().stroke(moment.hasReacted ? MomentsColor.accent : MomentsColor.border))
         }
         .accessibilityLabel(Text("Heart"))
         .accessibilityValue(Text(moment.hasReacted ? "On, ^[\(moment.reactionCount) heart](inflect: true)" : "Off, ^[\(moment.reactionCount) heart](inflect: true)"))
@@ -169,25 +184,39 @@ struct MomentViewer: View {
                 .padding(.horizontal, Spacing.sm)
                 .padding(.vertical, Spacing.xxs)
                 .background(MomentsColor.background.opacity(0.6), in: Capsule())
+                .lineLimit(1)
+                .fixedSize()
                 .accessibilityLabel(Text("Moment \(position) of \(total)"))
     }
 
-    private func details(_ moment: Moment) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.xxs) {
+    /// Who shared it and how long ago, beside Close.
+    private func uploader(_ moment: Moment) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
             Text(verbatim: moment.uploaderName)
                 .font(MomentsFont.body(.subheadline).bold())
                 .foregroundStyle(MomentsColor.text)
-            if let caption = moment.caption, !caption.isEmpty {
-                Text(verbatim: caption)
-                    .font(MomentsFont.body())
-                    .foregroundStyle(MomentsColor.text)
-                    .lineLimit(4)
-                }
-            }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Spacing.md)
-        // The page already reads the uploader and caption.
+                .lineLimit(1)
+            // A server clock ahead of this phone would read "in 2 minutes".
+            Text(min(moment.createdAt, .now), format: .relative(presentation: .named))
+                .font(MomentsFont.caption())
+                .foregroundStyle(MomentsColor.textMuted)
+                .lineLimit(1)
+        }
+        // The name gives way first when space runs out.
+        .layoutPriority(-1)
+        // The page already reads the uploader.
         .accessibilityHidden(true)
+    }
+
+    @ViewBuilder private func caption(_ moment: Moment) -> some View {
+        if let caption = moment.caption, !caption.isEmpty {
+            Text(verbatim: caption)
+                .font(MomentsFont.body())
+                .foregroundStyle(MomentsColor.text)
+                .lineLimit(4)
+                // The page already reads the caption.
+                .accessibilityHidden(true)
+        }
     }
 }
 
