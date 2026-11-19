@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { MomentData } from "../lib/types";
 import { toggleMomentReaction } from "../lib/api";
+import { gridPhotoSources, videoPoster } from "../lib/gridImage";
 
 // Admin URLs carry a signed ?mv= view query, so match the path part only.
 const VIDEO_EXT = /\.(mp4|webm|mov|m4v)(?:\?|$)/i;
@@ -33,6 +34,14 @@ export interface PendingMoment extends MomentData {
 
 export function MomentCard({ moment, index = 0, slug }: { moment: PendingMoment; index?: number; slug?: string }) {
   const [activated, setActivated] = useState(false);
+  // Which of the photo's images is shown: a broken thumbnail moves on to the
+  // original once (gridPhotoSources), never back and forth.
+  const [photoSourceIndex, setPhotoSourceIndex] = useState(0);
+  const photoSources = gridPhotoSources(moment);
+  const photoSource = photoSources[Math.min(photoSourceIndex, photoSources.length - 1)];
+  const poster = videoPoster(moment);
+  // The URL whose still failed: a changed poster gets its own try.
+  const [failedPoster, setFailedPoster] = useState<string | null>(null);
   const [reactionCount, setReactionCount] = useState(moment.reaction_count ?? 0);
   const [reacted, setReacted] = useState(Boolean(moment.reacted));
   const [reacting, setReacting] = useState(false);
@@ -69,14 +78,24 @@ export function MomentCard({ moment, index = 0, slug }: { moment: PendingMoment;
           aria-label="Play video"
           className="group relative block aspect-square w-full bg-[var(--color-bg)]"
         >
-          {stream && (
+          {stream ? (
             <img
               src={moment.media_url.replace("/iframe", "/thumbnails/thumbnail.jpg?height=480&fit=crop")}
               alt=""
               loading="lazy"
               className="absolute inset-0 h-full w-full object-cover opacity-70"
             />
-          )}
+          ) : poster && poster !== failedPoster && !moment._pending ? (
+            <img
+              src={poster}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              // Without a usable still the plain placeholder stays.
+              onError={() => setFailedPoster(poster)}
+              className="absolute inset-0 h-full w-full object-cover opacity-70"
+            />
+          ) : null}
           {/* Subtle diagonal scan-lines so the placeholder reads as "video, tap to play". */}
           <div
             className="absolute inset-0 opacity-[0.08]"
@@ -115,10 +134,11 @@ export function MomentCard({ moment, index = 0, slug }: { moment: PendingMoment;
         />
       ) : (
         <img
-          src={moment.media_url}
+          src={photoSource}
           alt={moment.caption ?? `Photo by ${moment.uploader_name}`}
           loading="lazy"
           decoding="async"
+          onError={() => setPhotoSourceIndex((current) => (current + 1 < photoSources.length ? current + 1 : current))}
           className={`aspect-square w-full object-cover ${moment._pending ? "opacity-60" : ""}`}
         />
       )}

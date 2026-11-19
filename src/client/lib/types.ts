@@ -19,6 +19,8 @@ export interface MomentData {
   event_id: string;
   uploader_name: string;
   media_url: string;
+  /** ~400 px grid thumbnail; null or absent when the moment has none. */
+  thumb_url?: string | null;
   caption: string | null;
   points_awarded: number;
   created_at: string;
