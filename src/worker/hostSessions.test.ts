@@ -5,7 +5,6 @@ import {
   deleteHostSession,
   HOST_SESSION_TTL_DAYS,
   resolveHostSession,
-  verifyHostCredentials,
 } from "./hostSessions";
 import { createSqliteD1, type SqliteD1 } from "./testing/sqliteD1";
 
@@ -14,29 +13,6 @@ let sqlite: SqliteD1;
 
 beforeEach(() => {
   sqlite = createSqliteD1();
-});
-
-describe("verifyHostCredentials", () => {
-  it("accepts only the configured pair", async () => {
-    expect(await verifyHostCredentials(ENV, "admin", "correct horse")).toBe(true);
-    expect(await verifyHostCredentials(ENV, "admin", "correct horsE")).toBe(false);
-    expect(await verifyHostCredentials(ENV, "Admin", "correct horse")).toBe(false);
-    expect(await verifyHostCredentials(ENV, "", "")).toBe(false);
-  });
-
-  it("can't be fooled by moving the separator between username and password", async () => {
-    const env = { ...ENV, ADMIN_USER: "ad", ADMIN_PASSWORD: "min\0x" };
-    expect(await verifyHostCredentials(env, "ad", "min\0x")).toBe(true);
-    expect(await verifyHostCredentials(env, "ad\0min", "x")).toBe(false);
-  });
-
-  it.each([
-    ["no secret", { ...ENV, EVENT_ACCESS_SECRET: undefined }],
-    ["no password", { ...ENV, ADMIN_PASSWORD: "" }],
-    ["no user", { ...ENV, ADMIN_USER: "" }],
-  ])("refuses everything with %s", async (_, env) => {
-    expect(await verifyHostCredentials(env, env.ADMIN_USER ?? "", env.ADMIN_PASSWORD ?? "")).toBe(false);
-  });
 });
 
 describe("host sessions", () => {

@@ -62,11 +62,15 @@ export function generateBanner(data: FormData) {
   }).then((r) => asJson<{ banner_url: string }>(r));
 }
 
-export async function verifyAdminCredentials(username: string, password: string): Promise<boolean> {
+export type AdminLoginOutcome = "ok" | "invalid" | "locked";
+
+/** "locked": too many failed logins; the server refuses every login for 15 minutes. */
+export async function verifyAdminCredentials(username: string, password: string): Promise<AdminLoginOutcome> {
   const res = await fetch("/api/events", {
     headers: { Authorization: `Basic ${btoa(`${username}:${password}`)}` },
   });
-  return res.ok;
+  if (res.ok) return "ok";
+  return res.status === 429 ? "locked" : "invalid";
 }
 
 export function getEvent(slug: string) {

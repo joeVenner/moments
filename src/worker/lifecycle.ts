@@ -1,3 +1,4 @@
+import { pruneAdminLoginFailures } from "./adminLogin";
 import type { Env, EventRow, MomentRow } from "./types";
 import { PURGE_AT_SQL } from "./events";
 import { deleteMomentMedia } from "./moderation";
@@ -85,4 +86,5 @@ export async function cleanupExpiredEvents(env: Env): Promise<number> {
 /** Failed-PIN rows only matter inside the throttling window; keep a day for auditing. */
 export async function pruneAccessFailures(env: Env): Promise<void> {
   await env.DB.prepare("DELETE FROM access_failures WHERE created_at < datetime('now', '-1 day')").run();
+  await pruneAdminLoginFailures(env.DB);
 }

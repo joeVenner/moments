@@ -34,7 +34,9 @@ function makeDb(state: FakeDbState): D1Database {
       return { success: true };
     },
   });
-  return { prepare: vi.fn((sql: string) => statement(sql)), batch: vi.fn() } as unknown as D1Database;
+  // The admin login lockout batches its write and count; nothing recorded = no failures.
+  const batch = vi.fn(async (statements: unknown[]) => statements.map(() => ({ meta: { changes: 0 }, results: [] })));
+  return { prepare: vi.fn((sql: string) => statement(sql)), batch } as unknown as D1Database;
 }
 
 function makeEnv(state: FakeDbState, secret: string | null = SECRET): Env {

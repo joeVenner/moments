@@ -45,8 +45,8 @@ import {
   type HostSession,
   isHostSignInConfigured,
   resolveHostSession,
-  verifyHostCredentials,
 } from "../hostSessions";
+import { ADMIN_RETRY_AFTER_SECONDS, attemptAdminLogin } from "../adminLogin";
 import {
   AccessRequestSchema,
   AccessResponseSchema,
@@ -424,7 +424,7 @@ const signInRoute = createRoute({
   tags: ["Host"],
   summary: "Sign in as a host and get a bearer token",
   description:
-    "Uses the admin username and password for now. Every attempt counts against a per-IP limit (10 a minute), right or wrong.",
+    "Uses the admin username and password for now. Every attempt counts against a per-IP limit (10 a minute), right or wrong, and failed logins share a 15-minute lockout with the web dashboard.",
   request: { body: { content: { "application/json": { schema: HostSignInRequestSchema } }, required: true } },
   responses: {
     201: json(HostSignInResponseSchema, "Signed in; the token is shown only here"),
@@ -432,7 +432,7 @@ const signInRoute = createRoute({
     401: json(ErrorSchema, "`invalid_credentials`: wrong username or password"),
     426: json(ErrorSchema, "This app build is too old; show the update screen"),
     429: {
-      ...json(ErrorSchema, "`rate_limited`: too many sign-in attempts from this network"),
+      ...json(ErrorSchema, "`rate_limited`: too many sign-in attempts from this network, or too many failed admin logins overall; wait for Retry-After"),
       headers: z.object({ "Retry-After": z.string().optional() }),
     },
     503: json(ErrorSchema, "`sign_in_unavailable`: host sign-in is not set up on this server"),
@@ -578,7 +578,16 @@ v1.openapi(signInRoute, async (c) => {
     return c.json({ error: "Sign-in is not available right now.", code: "sign_in_unavailable" }, 503);
   }
   const { username, password } = c.req.valid("json");
-  if (!(await verifyHostCredentials(c.env, username, password))) {
+  // The same lockout as the web dashboard's login, checked before the password.
+  const result = await attemptAdminLogin(c.env.DB, c.env, { username, password, clientIp: ip });
+  if (result === "locked") {
+    return c.json(
+      { error: "Too many attempts. Try again later.", code: "rate_limited" },
+      429,
+      { "Retry-After": String(ADMIN_RETRY_AFTER_SECONDS) }
+    );
+  }
+  if (result === "invalid") {
     // Never the username, the password or the IP.
     console.warn(JSON.stringify({ msg: "host_sign_in_failed" }));
     return c.json({ error: "Wrong username or password.", code: "invalid_credentials" }, 401);

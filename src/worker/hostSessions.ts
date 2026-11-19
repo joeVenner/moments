@@ -66,16 +66,6 @@ export function isHostSignInConfigured(env: HostCredentialsEnv): boolean {
   return Boolean(env.EVENT_ACCESS_SECRET && env.ADMIN_USER && env.ADMIN_PASSWORD);
 }
 
-/**
- * Constant-time check of a sign-in attempt: both sides are compared as
- * equal-length HMACs, so neither the username nor the password length leaks.
- */
-export async function verifyHostCredentials(env: HostCredentialsEnv, username: string, password: string): Promise<boolean> {
-  const expected = await configured(env);
-  if (!expected) return false;
-  return timingSafeEqual(await credentialTag(expected.secret, username, password), expected.tag);
-}
-
 /** Opens a session for the operator. The raw token is returned once. */
 export async function createHostSession(
   db: D1Database,
