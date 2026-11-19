@@ -502,6 +502,16 @@ describe("PATCH /api/v1/admin/events/{id}/lifecycle", () => {
     });
   });
 
+  it("takes the app's body: both split dates and the single one cleared", async () => {
+    insertEvent("e", "2026-01-01 10:00:00");
+    sqlite.raw.prepare("UPDATE events SET expires_at = '2099-09-01 00:00:00' WHERE id = 'e'").run();
+    const response = await patchAuthed("/admin/events/e/lifecycle", {
+      uploads_close_at: "2099-01-01T00:00:00Z", purge_after: "", expires_at: "",
+    });
+    expect(response.status).toBe(200);
+    expect(datesRow("e")).toMatchObject({ expires_at: null, uploads_close_at: "2099-01-01 00:00:00", purge_after: null });
+  });
+
   it("refuses uploads closing after deletion", async () => {
     insertEvent("e", "2026-01-01 10:00:00");
     const response = await patchAuthed("/admin/events/e/lifecycle", {
