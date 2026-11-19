@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS: leaving an event now also deletes that event's uploads still waiting on the phone, and no new ones can start while leaving. If the server no longer knows the guest, tapping a heart ends the screen with "You're no longer in this event" and a **Join again** button, instead of failing silently.
 - iOS: sharing photos and videos from the app now works. Shared items join the app's upload queue and keep sending in the background or after the app closes, only to the event's storage. They finish on their own when the system wakes the app. If a guest shares in the first moments after launch, the app waits for its saved uploads to load instead of failing. Files prepared but never shared are cleared at the next launch.
 - Website: when the server no longer recognises a guest on this device (they left from another tab, or their identity expired), their next upload or heart takes them back to the nickname screen with "You're no longer joined to this event on this device. Pick a nickname to join again." The device forgets the old identity and its unfinished uploads. Those uploads stop at once instead of retrying in the background.
 - Website guests can "Leave" an event from the guest bar: after a confirmation, everything they shared from that browser is deleted, their nickname is freed, and the browser forgets them (saved uploads, nickname and identity).
