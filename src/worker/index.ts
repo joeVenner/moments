@@ -16,6 +16,7 @@ import {
   abortMultipartUpload,
   listParts,
   partCountForSize,
+  presignBoundPutUrl,
   MULTIPART_PART_BYTES,
 } from "./multipartPresign";
 import { requireAdmin } from "./auth";
@@ -44,10 +45,18 @@ import {
   syncStreamSigning,
 } from "./streamSigning";
 import { deleteMomentMedia } from "./moderation";
-import { isThumbnailUploadKey } from "./thumbnails";
+import {
+  THUMBNAIL_CONTENT_TYPE,
+  THUMBNAIL_URL_TTL_SECONDS,
+  acceptThumbnail,
+  isThumbnailUploadKey,
+  isValidThumbnailSize,
+  thumbnailKeys,
+  thumbnailUploadKey,
+} from "./thumbnails";
 import { cleanupEvent, cleanupExpiredEvents, pruneAccessFailures } from "./lifecycle";
 import { abortOrphanUploads } from "./orphanUploads";
-import { finalizeReadyUploads } from "./uploadFinalize";
+import { finalizeReadyUploads, r2FinalizeBackend } from "./uploadFinalize";
 import { attemptEventAccess } from "./accessAttempt";
 import {
   CHANGES_MAX_LIMIT,
@@ -123,6 +132,19 @@ function logUpload(
   if (level === "error") console.error(message);
   else if (level === "warn") console.warn(message);
   else console.log(message);
+}
+
+/** Best effort: the event's purge removes anything left behind. */
+async function deleteThumbnailUploads(env: Env, eventId: string, uploadRecordId: string, keys: string[]): Promise<void> {
+  try {
+    await env.BUCKET.delete(keys);
+  } catch (err) {
+    logUpload("error", "multipart_thumbnail_delete_failed", {
+      eventId,
+      uploadRecordId,
+      error: err instanceof Error ? err.name : "unknown",
+    });
+  }
 }
 
 // Admin-only: listing all events and creating new ones. Guest-facing routes
@@ -1225,6 +1247,56 @@ app.post("/api/events/:slug/moments/multipart/part-url", async (c) => {
   return c.json({ url, part_number: partNumber });
 });
 
+// Optional: a presigned PUT for the moment's ~400 px JPEG grid thumbnail,
+// bound to image/jpeg and the exact size. Sent before the parts; complete
+// keeps it only if it is a whole JPEG, and never fails because of it. Older
+// clients never call this, and their moments simply have no thumbnail.
+app.post("/api/events/:slug/moments/multipart/thumbnail-url", async (c) => {
+  const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
+  if (!event) return c.json({ error: "event not found" }, 404);
+  if (!event.uploads_finishing) return c.json(UPLOADS_CLOSED, 403);
+  if (!isR2Configured(c.env)) {
+    return c.json({ error: "Large direct uploads are not configured" }, 501);
+  }
+
+  const body = (await c.req.json().catch(() => null)) as {
+    upload_id?: unknown;
+    key?: unknown;
+    size?: unknown;
+  } | null;
+
+  const uploadId = typeof body?.upload_id === "string" ? body.upload_id : "";
+  const key = typeof body?.key === "string" ? body.key : "";
+  const size = typeof body?.size === "number" ? body.size : NaN;
+  if (!uploadId || !key || !isValidThumbnailSize(size)) {
+    return c.json({ error: "upload_id, key, and size (1..204800) are required" }, 400);
+  }
+  if (!registrationKeyBelongsToEvent(event.id, key)) {
+    return c.json({ error: "key does not belong to this event" }, 400);
+  }
+  const upload = await getOpenUpload(c.env.DB, event.id, uploadId, key);
+  if (!upload) return c.json({ error: "upload not found" }, 404);
+  // App sessions use v1's thumbnail-url.
+  if (upload.client_upload_id) return c.json(V1_SESSION_ERROR, 409);
+  const access = await uploadAccess(c.env, { eventId: event.id, token: c.req.header(GUEST_TOKEN_HEADER), row: upload });
+  if (access !== "ok") {
+    const refusal = uploadRefusal(access);
+    return c.json(refusal.body, refusal.status);
+  }
+
+  try {
+    const url = await presignBoundPutUrl(c.env, thumbnailUploadKey(key), THUMBNAIL_CONTENT_TYPE, size, THUMBNAIL_URL_TTL_SECONDS);
+    return c.json({ url, expires_in: THUMBNAIL_URL_TTL_SECONDS });
+  } catch (err) {
+    logUpload("error", "multipart_thumbnail_presign_failed", {
+      eventId: event.id,
+      uploadRecordId: upload.id,
+      error: err instanceof Error ? err.name : "presign failed",
+    });
+    return c.json({ error: "presign failed" }, 502);
+  }
+});
+
 // Resume query: which parts R2 already has. The client skips these and re-PUTs
 // the rest. Source of truth (survives reload + cross-device) — the D1 row only
 // confirms the upload is still open + owned by this event.
@@ -1413,6 +1485,8 @@ app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
   validated ??= await validateAssembledObject(c, key, upload.size_bytes);
   if (validated instanceof Response) {
     await c.env.DB.prepare("UPDATE uploads SET status = 'aborted' WHERE id = ?").bind(upload.id).run();
+    // No moment exists: both the slot and any served copy go.
+    await deleteThumbnailUploads(c.env, event.id, upload.id, thumbnailKeys(key));
     logUpload("error", "multipart_validation_failed", {
       eventId: event.id,
       uploadRecordId: upload.id,
@@ -1423,12 +1497,22 @@ app.post("/api/events/:slug/moments/multipart/complete", async (c) => {
 
   const points = pointsForContentType(validated.contentType);
   const id = crypto.randomUUID();
+  // Optional: a missing, bad or unreadable thumbnail never holds the moment
+  // back (the feed falls back to the file).
+  const thumbKey = await acceptThumbnail(r2FinalizeBackend(c.env), key).catch((err: unknown) => {
+    logUpload("error", "thumbnail_check_failed", {
+      eventId: event.id,
+      uploadRecordId: upload.id,
+      error: err instanceof Error ? err.name : "unknown",
+    });
+    return null;
+  });
   await c.env.DB.prepare(
-    `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type, participant_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO moments (id, event_id, uploader_name, media_url, caption, points_awarded, size_bytes, mime_type, participant_id, thumb_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     // The row's name and owner, set at init (never the body's).
-    .bind(id, event.id, upload.uploader_name, `/media/${key}`, caption, points, validated.size, validated.contentType || null, upload.participant_id)
+    .bind(id, event.id, upload.uploader_name, `/media/${key}`, caption, points, validated.size, validated.contentType || null, upload.participant_id, thumbKey)
     .run();
   await c.env.DB.prepare(
     "UPDATE uploads SET status = 'completed', completed_at = datetime('now') WHERE id = ?"
@@ -1493,6 +1577,9 @@ app.post("/api/events/:slug/moments/multipart/abort", async (c) => {
   )
     .bind(uploadId, key, event.id)
     .run();
+  // Only the never-served slot, and only for a row this caller may act on:
+  // a served `.thumb.jpg` belongs to a moment (the purge removes any orphan).
+  if (upload && upload.status !== "completed") await deleteThumbnailUploads(c.env, event.id, upload.id, [thumbnailUploadKey(key)]);
   logUpload("info", "multipart_aborted", { eventId: event.id });
   return c.json({ aborted: true });
 });
