@@ -1,22 +1,22 @@
-import AVFoundation
 import DesignSystem
 import FeatureGuest
 import FeatureHost
 import MomentsAPI
 import SwiftUI
 
-/// The home screen: the events joined on this phone, then opening another
-/// event from its link (one that arrived by message or a copied URL; the
-/// camera opens QR links directly).
+/// The Events tab: a card to join an event (scan its QR code or paste its
+/// link), then the events joined on this phone.
 struct HomeView: View {
     let navigation: AppNavigation
     let myEvents: MyEventsModel
-    let host: Host
-    /// Shown above the link field, e.g. after a slideshow link.
+    /// Shown in the join card instead of the usual hint, e.g. after a slideshow link.
     let notice: String?
+    /// Opens the scanner; nil on a device without a camera.
+    let onScan: (() -> Void)?
+    let isScanBusy: Bool
 
-    /// The host's account and events, for the hosting entry at the bottom
-    /// and every host screen behind it.
+    /// The host's account and events, for the Hosting tab and every host
+    /// screen behind it.
     struct Host {
         let account: HostAccount
         let events: HostEventsModel
@@ -25,150 +25,93 @@ struct HomeView: View {
         let mediaFetcher: MediaFetcher
     }
 
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var scanSheet: ScanSheet?
-    @State private var isShowingSignIn = false
-    @State private var isShowingHostEvents = false
-    @State private var cameraAccess = CameraAccess.unsupported
-    @State private var isRequestingCamera = false
     @State private var link = ""
     @State private var isRejected = false
     @FocusState private var isLinkFocused: Bool
 
     var body: some View {
         // Scrolls only when needed: large text sizes with the keyboard up.
-        ScrollView {
-            VStack(spacing: Spacing.md) {
-                Text("Moments")
-                    .font(MomentsFont.display())
-                    .foregroundStyle(MomentsColor.text)
-                if !myEvents.entries.isEmpty { MyEventsList(entries: myEvents.entries, open: navigation.open) }
-                if myEvents.phase == .unavailable {
-                    // The keychain is locked (or unreadable); pull to refresh retries.
-                    Text("Your events can't be shown right now. Pull down to try again.")
-                        .font(MomentsFont.caption())
-                        .foregroundStyle(MomentsColor.textMuted)
-                        .multilineTextAlignment(.center)
+        ScrollView { content }
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollDismissesKeyboard(.interactively)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(MomentsColor.background)
+            // Reloads each time home is built (e.g. back from an event, which
+            // replaces the whole shell) and on returning to the Events tab.
+            .task { await myEvents.load() }
+            .refreshable { await myEvents.load() }
+    }
+
+    /// Everything without the scroll view (also rendered by screenshot tests).
+    var content: some View {
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+            Text("Moments")
+                .font(MomentsFont.display())
+                .foregroundStyle(MomentsColor.text)
+                .accessibilityAddTraits(.isHeader)
+            joinCard
+            if !myEvents.entries.isEmpty {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    Text("Your events")
+                        .font(MomentsFont.heading())
+                        .foregroundStyle(MomentsColor.text)
+                        .accessibilityAddTraits(.isHeader)
+                    MyEventsList(entries: myEvents.entries, open: navigation.open)
                 }
-                Text(notice ?? String(localized: "Scan the event's QR code with your camera, or paste its link here."))
-                    .font(MomentsFont.body())
+            }
+            if myEvents.phase == .unavailable {
+                // The keychain is locked (or unreadable); pull to refresh retries.
+                Text("Your events can't be shown right now. Pull down to try again.")
+                    .font(MomentsFont.caption())
                     .foregroundStyle(MomentsColor.textMuted)
-                    .multilineTextAlignment(.center)
-                if cameraAccess != .unsupported {
-                    Button(action: startScanning) {
-                        Label("Scan QR code", systemImage: "qrcode.viewfinder")
-                    }
-                    .buttonStyle(.momentsPrimary)
-                    .disabled(isRequestingCamera)
-                }
-                TextField(text: $link, prompt: Text("Event link").foregroundStyle(MomentsColor.textMuted)) { Text("Event link") }
-                    .linkInput()
-                    .submitLabel(.go)
-                    .focused($isLinkFocused)
-                    .onSubmit(open)
-                    .onChange(of: link) { isRejected = false }
-                    .momentsField()
-                if isRejected {
-                    Text("That isn't a Moments event link.")
-                        .font(MomentsFont.caption())
-                        .foregroundStyle(MomentsColor.accent)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                // One orange button: Scan when there is one, otherwise this.
-                if cameraAccess == .unsupported {
-                    openButton.buttonStyle(.momentsPrimary)
-                } else {
-                    openButton.buttonStyle(.momentsSecondary)
-                }
-                hostEntry
-            }
-            .padding(Spacing.lg)
-            .padding(.top, Spacing.xl * 3)
-        }
-        .scrollBounceBehavior(.basedOnSize)
-        .scrollDismissesKeyboard(.interactively)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(MomentsColor.background)
-        // Reloads each time home shows, e.g. after joining or leaving an event.
-        .task { await myEvents.load() }
-        .onAppear { cameraAccess = CameraAccess.current }
-        .fullScreenCover(item: $scanSheet) { sheet in
-            switch sheet {
-            case .scanner:
-                QRScannerSheet { text in
-                    guard navigation.handle(text: text) else { return false }
-                    scanSheet = nil
-                    return true
-                } onCancel: {
-                    scanSheet = nil
-                } onUnavailable: {
-                    scanSheet = .denied
-                }
-            case .denied:
-                CameraDeniedSheet { scanSheet = nil } onGranted: { scanSheet = .scanner }
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .refreshable { await myEvents.load() }
-        // The events open once the sign-in sheet has gone (two
-        // presentations can't overlap).
-        .sheet(isPresented: $isShowingSignIn, onDismiss: { isShowingHostEvents = isSignedIn }) {
-            HostSignInView(account: host.account) {
-                isShowingSignIn = false
-            } onCancel: {
-                isShowingSignIn = false
-            }
-        }
-        .fullScreenCover(isPresented: $isShowingHostEvents) {
-            HostEventsView(host: host) { isShowingHostEvents = false }
-        }
-        // Picks up expiry and a keychain that was locked at launch.
-        .onChange(of: scenePhase, initial: true) {
-            if scenePhase == .active { host.account.refresh() }
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Spacing.lg)
+        .padding(.top, Spacing.xl)
+        .padding(.bottom, Spacing.lg)
     }
 
-    private var isSignedIn: Bool {
-        if case .signedIn = host.account.state { true } else { false }
-    }
-
-    /// Hosting sits below the guest actions: most people here are guests.
-    private var hostEntry: some View {
-        Button {
-            host.account.refresh()
-            if isSignedIn { isShowingHostEvents = true } else { isShowingSignIn = true }
-        } label: {
-            if isSignedIn {
-                Label("Your hosted events", systemImage: "person.crop.rectangle.stack")
+    private var joinCard: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("At an event?")
+                .font(MomentsFont.heading())
+                .foregroundStyle(MomentsColor.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(notice ?? String(localized: "Scan the QR code on the table or the invitation, or paste the event's link."))
+                .font(MomentsFont.body())
+                .foregroundStyle(MomentsColor.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            if let onScan {
+                Button(action: onScan) {
+                    Label("Scan QR code", systemImage: "qrcode.viewfinder")
+                }
+                .buttonStyle(.momentsPrimary)
+                .disabled(isScanBusy)
+            }
+            TextField(text: $link, prompt: Text("Event link").foregroundStyle(MomentsColor.textMuted)) { Text("Event link") }
+                .linkInput()
+                .submitLabel(.go)
+                .focused($isLinkFocused)
+                .onSubmit(open)
+                .onChange(of: link) { isRejected = false }
+                .momentsField()
+            if isRejected {
+                Text("That isn't a Moments event link.")
+                    .font(MomentsFont.caption())
+                    .foregroundStyle(MomentsColor.accent)
+            }
+            // One orange button: Scan when there is one, otherwise this.
+            if onScan == nil {
+                openButton.buttonStyle(.momentsPrimary)
             } else {
-                Label("Host sign-in", systemImage: "person.badge.key")
+                openButton.buttonStyle(.momentsSecondary)
             }
         }
-        .font(MomentsFont.body())
-        .foregroundStyle(MomentsColor.textMuted)
-        .frame(minHeight: Radius.minimumTapTarget)
-        .padding(.top, Spacing.lg)
-    }
-
-    private enum ScanSheet: String, Identifiable {
-        case scanner, denied
-        var id: String { rawValue }
-    }
-
-    private func startScanning() {
-        cameraAccess = CameraAccess.current
-        switch cameraAccess {
-        case .unsupported: return
-        case .granted: scanSheet = .scanner
-        case .denied: scanSheet = .denied
-        case .notDetermined:
-            isRequestingCamera = true
-            Task {
-                let isGranted = await AVCaptureDevice.requestAccess(for: .video)
-                isRequestingCamera = false
-                cameraAccess = CameraAccess.current
-                scanSheet = isGranted ? .scanner : .denied
-            }
-        }
+        .padding(Spacing.md)
+        .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.sheet))
+        .overlay(RoundedRectangle(cornerRadius: Radius.sheet).stroke(MomentsColor.border))
     }
 
     private var openButton: some View {
@@ -196,4 +139,3 @@ private extension View {
         #endif
     }
 }
-

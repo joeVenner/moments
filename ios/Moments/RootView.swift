@@ -36,7 +36,7 @@ struct RootView: View {
             } else if OnboardingFlow.shouldShow(completed: hasOnboarded, isShowingEvent: false) {
                 OnboardingView { hasOnboarded = true }
             } else {
-                HomeView(navigation: navigation, myEvents: myEvents, host: HomeView.Host(
+                AppShell(navigation: navigation, myEvents: myEvents, host: HomeView.Host(
                     account: environment.hostAccount, events: environment.hostEvents,
                     service: environment.hostService, mediaFetcher: environment.guest.mediaFetcher
                 ), notice: notice)
