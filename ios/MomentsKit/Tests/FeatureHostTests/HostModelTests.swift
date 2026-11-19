@@ -1032,6 +1032,20 @@ private func plainEvent(_ id: String, mode: Event.AccessMode = .public, close: D
         service.saveResult = .failure(MomentsAPIError.eventNotFound)
         await model.save()
         #expect(model.phase == .failed(.gone) && model.newPIN.isEmpty)
+        model.dismissFailure()
+        #expect(model.phase == .failed(.gone))
+    }
+
+    @Test func aPublicEventNeverSendsAPIN() async {
+        let service = FakeHostService()
+        service.saveResult = .success(detail("e1"))
+        let model = HostEventAccessModel(event: plainEvent("e1", mode: .private), service: service, account: account(service, store: FlakyHostStore(live)))
+        #expect(model.keepsCurrentPIN)
+        model.newPIN = "12"
+        model.mode = .public
+        #expect(model.problems.isEmpty && !model.signsGuestsOut)
+        await model.save()
+        #expect(service.saveCalls == ["access e1 public -"])
     }
 
     @Test func keepsADifferentPINTypedWhileSaving() async {
@@ -1063,6 +1077,7 @@ private func plainEvent(_ id: String, mode: Event.AccessMode = .public, close: D
     @Test func neverPrintsThePIN() {
         let service = FakeHostService()
         let model = HostEventAccessModel(event: plainEvent("e1"), service: service, account: account(service))
+        model.mode = .private
         model.newPIN = "482913"
         #expect(model.signsGuestsOut)
         #expect(!String(describing: model.phase).contains("482913"))
