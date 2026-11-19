@@ -1,0 +1,1324 @@
+{
+  "eyes": [
+    "cute",
+    "wink",
+    "wink2",
+    "plain",
+    "glasses",
+    "closed",
+    "love",
+    "stars",
+    "shades",
+    "closed2"
+  ],
+  "mouth": [
+    "plain",
+    "lilSmile",
+    "shy",
+    "cute",
+    "wideSmile",
+    "shout",
+    "smileTeeth",
+    "smileLol",
+    "tongueOut",
+    "kissHeart"
+  ],
+  "cases": [
+    {
+      "seed": "",
+      "eyes": "closed",
+      "mouth": "shout",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "a",
+      "eyes": "stars",
+      "mouth": "plain",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "0",
+      "eyes": "wink",
+      "mouth": "shy",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "-1",
+      "eyes": "wink2",
+      "mouth": "cute",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "Sara",
+      "eyes": "wink",
+      "mouth": "shy",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "sara",
+      "eyes": "stars",
+      "mouth": "smileLol",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "zzzzzzzz",
+      "eyes": "love",
+      "mouth": "kissHeart",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "00000000",
+      "eyes": "wink2",
+      "mouth": "wideSmile",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "é",
+      "eyes": "glasses",
+      "mouth": "lilSmile",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "Zoë 🎉",
+      "eyes": "closed",
+      "mouth": "tongueOut",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "日本語",
+      "eyes": "closed2",
+      "mouth": "tongueOut",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "👩‍👩‍👧",
+      "eyes": "love",
+      "mouth": "plain",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "eyes": "stars",
+      "mouth": "plain",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbx",
+      "eyes": "plain",
+      "mouth": "shout",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbby",
+      "eyes": "plain",
+      "mouth": "shout",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbzz9",
+      "eyes": "plain",
+      "mouth": "shout",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "6scwgswk",
+      "eyes": "closed2",
+      "mouth": "shout",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "g08s0g8w",
+      "eyes": "shades",
+      "mouth": "shout",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "cwccwcg0",
+      "eyes": "stars",
+      "mouth": "shy",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "00oso44s",
+      "eyes": "cute",
+      "mouth": "smileTeeth",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "8wgcsggc",
+      "eyes": "glasses",
+      "mouth": "plain",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "ok4swokg",
+      "eyes": "glasses",
+      "mouth": "wideSmile",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "0kkgscwk",
+      "eyes": "closed",
+      "mouth": "shy",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "ow8oc4wg",
+      "eyes": "closed",
+      "mouth": "smileLol",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "s04cw4c0",
+      "eyes": "closed",
+      "mouth": "tongueOut",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "cwo4cskc",
+      "eyes": "wink2",
+      "mouth": "shout",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "k4gsckws",
+      "eyes": "glasses",
+      "mouth": "shy",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "coc4scgo",
+      "eyes": "closed2",
+      "mouth": "tongueOut",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "0g4o0gcc",
+      "eyes": "stars",
+      "mouth": "tongueOut",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "8scwsccw",
+      "eyes": "glasses",
+      "mouth": "lilSmile",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "w4kogsss",
+      "eyes": "wink2",
+      "mouth": "shy",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "w4cks4wg",
+      "eyes": "cute",
+      "mouth": "lilSmile",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "cwgwg048",
+      "eyes": "wink2",
+      "mouth": "shy",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "swcw0wk4",
+      "eyes": "closed2",
+      "mouth": "smileTeeth",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "wgc444ow",
+      "eyes": "love",
+      "mouth": "kissHeart",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "ss8kswoc",
+      "eyes": "closed2",
+      "mouth": "shout",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "8g0og444",
+      "eyes": "wink2",
+      "mouth": "kissHeart",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "ck4g8o8w",
+      "eyes": "glasses",
+      "mouth": "smileLol",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "0wckowc8",
+      "eyes": "closed",
+      "mouth": "tongueOut",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "0skk8o8o",
+      "eyes": "closed",
+      "mouth": "tongueOut",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "g4ogc84g",
+      "eyes": "closed",
+      "mouth": "smileLol",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "0s0c80kk",
+      "eyes": "shades",
+      "mouth": "cute",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "gc4w8sww",
+      "eyes": "wink",
+      "mouth": "lilSmile",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "8gwckwks",
+      "eyes": "wink2",
+      "mouth": "tongueOut",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "s0sc4sss",
+      "eyes": "wink",
+      "mouth": "lilSmile",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "0socwg48",
+      "eyes": "closed2",
+      "mouth": "smileTeeth",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "wg0wkowc",
+      "eyes": "closed",
+      "mouth": "shout",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "ww80w8kg",
+      "eyes": "cute",
+      "mouth": "wideSmile",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "oog8csso",
+      "eyes": "wink2",
+      "mouth": "shy",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "gcoo8o4w",
+      "eyes": "stars",
+      "mouth": "cute",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "o444cc80",
+      "eyes": "plain",
+      "mouth": "smileTeeth",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "0kwos08w",
+      "eyes": "stars",
+      "mouth": "cute",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "0kgck8cw",
+      "eyes": "wink2",
+      "mouth": "smileTeeth",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "ckskgsgs",
+      "eyes": "shades",
+      "mouth": "kissHeart",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "0c8808o0",
+      "eyes": "stars",
+      "mouth": "smileTeeth",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "ww0cc8go",
+      "eyes": "plain",
+      "mouth": "smileLol",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "0ksso44k",
+      "eyes": "wink2",
+      "mouth": "lilSmile",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "os0goswc",
+      "eyes": "wink",
+      "mouth": "smileTeeth",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "swwg8cs0",
+      "eyes": "closed",
+      "mouth": "cute",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "4skkc40k",
+      "eyes": "cute",
+      "mouth": "smileLol",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "00gwsc4c",
+      "eyes": "wink2",
+      "mouth": "tongueOut",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "o88w8w4g",
+      "eyes": "stars",
+      "mouth": "shout",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "880c0gok",
+      "eyes": "wink",
+      "mouth": "tongueOut",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "840ck8w0",
+      "eyes": "shades",
+      "mouth": "shout",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "sk8gwskg",
+      "eyes": "glasses",
+      "mouth": "kissHeart",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "ckwogk48",
+      "eyes": "cute",
+      "mouth": "lilSmile",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "8s88gwsw",
+      "eyes": "cute",
+      "mouth": "lilSmile",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "cocc88oo",
+      "eyes": "wink",
+      "mouth": "cute",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "8ws4c0ws",
+      "eyes": "love",
+      "mouth": "shout",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "4s4k0csc",
+      "eyes": "closed2",
+      "mouth": "wideSmile",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "4kk00g0o",
+      "eyes": "wink2",
+      "mouth": "smileLol",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "sk8c4c8o",
+      "eyes": "closed2",
+      "mouth": "plain",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "stw444wk",
+      "eyes": "cute",
+      "mouth": "plain",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "ocs80ogg",
+      "eyes": "love",
+      "mouth": "smileLol",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "kgk8ccsw",
+      "eyes": "closed2",
+      "mouth": "shy",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "cwsc4sos",
+      "eyes": "glasses",
+      "mouth": "shout",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "0ccgsos0",
+      "eyes": "love",
+      "mouth": "tongueOut",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "skgwo80w",
+      "eyes": "stars",
+      "mouth": "shy",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "g0wwwcks",
+      "eyes": "shades",
+      "mouth": "smileTeeth",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "cwc00wcs",
+      "eyes": "wink",
+      "mouth": "tongueOut",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "04sh0wo4",
+      "eyes": "glasses",
+      "mouth": "cute",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "chwwo8w8",
+      "eyes": "wink2",
+      "mouth": "shout",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "wg48ws4o",
+      "eyes": "wink2",
+      "mouth": "shy",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "ckww8w4c",
+      "eyes": "plain",
+      "mouth": "smileTeeth",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "4w8ks40k",
+      "eyes": "plain",
+      "mouth": "lilSmile",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "sk4804gc",
+      "eyes": "wink",
+      "mouth": "shy",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "ko8go84w",
+      "eyes": "wink",
+      "mouth": "shy",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "4gsg8cok",
+      "eyes": "stars",
+      "mouth": "shout",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "040gw8w4",
+      "eyes": "plain",
+      "mouth": "smileTeeth",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "gkok8csw",
+      "eyes": "closed",
+      "mouth": "wideSmile",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "44w8kcso",
+      "eyes": "stars",
+      "mouth": "wideSmile",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "w8so00w4",
+      "eyes": "love",
+      "mouth": "smileTeeth",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "ogkw444g",
+      "eyes": "love",
+      "mouth": "shout",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "4goo0k0s",
+      "eyes": "shades",
+      "mouth": "smileLol",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "okwskck0",
+      "eyes": "glasses",
+      "mouth": "tongueOut",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "0wgc4wk8",
+      "eyes": "closed2",
+      "mouth": "smileTeeth",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "8kgocw80",
+      "eyes": "shades",
+      "mouth": "shout",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "0s48kos8",
+      "eyes": "love",
+      "mouth": "lilSmile",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "8w8kwk84",
+      "eyes": "shades",
+      "mouth": "smileLol",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "wgwwcwwg",
+      "eyes": "closed2",
+      "mouth": "wideSmile",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "4w0kco4c",
+      "eyes": "stars",
+      "mouth": "tongueOut",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "kg0scssk",
+      "eyes": "love",
+      "mouth": "cute",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "www4s8go",
+      "eyes": "shades",
+      "mouth": "wideSmile",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "woo8o0co",
+      "eyes": "glasses",
+      "mouth": "smileLol",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "gk84c4ws",
+      "eyes": "plain",
+      "mouth": "smileTeeth",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "oskggks8",
+      "eyes": "closed2",
+      "mouth": "cute",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "0o8ss4k4",
+      "eyes": "stars",
+      "mouth": "lilSmile",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "o4wkw4sc",
+      "eyes": "plain",
+      "mouth": "wideSmile",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "8c4ccc0w",
+      "eyes": "cute",
+      "mouth": "shout",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "g4gkwkwg",
+      "eyes": "shades",
+      "mouth": "shy",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "sow08kwo",
+      "eyes": "closed2",
+      "mouth": "smileTeeth",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "c040448g",
+      "eyes": "wink",
+      "mouth": "smileTeeth",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "0oc4okck",
+      "eyes": "glasses",
+      "mouth": "smileLol",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "scosc48g",
+      "eyes": "wink",
+      "mouth": "lilSmile",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "gws8ks0k",
+      "eyes": "plain",
+      "mouth": "shy",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "444osos4",
+      "eyes": "wink",
+      "mouth": "shy",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "gkc08g0w",
+      "eyes": "wink2",
+      "mouth": "wideSmile",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "c0s8w0so",
+      "eyes": "stars",
+      "mouth": "wideSmile",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "0sos4gws",
+      "eyes": "shades",
+      "mouth": "lilSmile",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "wc8kg80d",
+      "eyes": "wink",
+      "mouth": "lilSmile",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "oc4ks8k4",
+      "eyes": "stars",
+      "mouth": "cute",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "k0ooogkg",
+      "eyes": "cute",
+      "mouth": "shy",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "cockoks8",
+      "eyes": "wink",
+      "mouth": "smileLol",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "owg0g0o9",
+      "eyes": "glasses",
+      "mouth": "smileLol",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "cg0sgo04",
+      "eyes": "closed",
+      "mouth": "smileTeeth",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "4sw0kg8o",
+      "eyes": "cute",
+      "mouth": "kissHeart",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "8csg8k40",
+      "eyes": "wink2",
+      "mouth": "tongueOut",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "k8csw8wg",
+      "eyes": "glasses",
+      "mouth": "tongueOut",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "0w0owo4s",
+      "eyes": "shades",
+      "mouth": "smileTeeth",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "44kwwooc",
+      "eyes": "cute",
+      "mouth": "smileLol",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "4cso0oow",
+      "eyes": "love",
+      "mouth": "tongueOut",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "wws84404",
+      "eyes": "stars",
+      "mouth": "wideSmile",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "880c4cck",
+      "eyes": "stars",
+      "mouth": "kissHeart",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "swc0gosw",
+      "eyes": "love",
+      "mouth": "shout",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "o4w0koxw",
+      "eyes": "love",
+      "mouth": "kissHeart",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "wsosc8s8",
+      "eyes": "cute",
+      "mouth": "shy",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "o8wk4sw8",
+      "eyes": "cute",
+      "mouth": "plain",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "kgc08sg4",
+      "eyes": "wink",
+      "mouth": "smileTeeth",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "c40owock",
+      "eyes": "closed",
+      "mouth": "kissHeart",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "044844ws",
+      "eyes": "cute",
+      "mouth": "plain",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "8oog8soo",
+      "eyes": "wink2",
+      "mouth": "lilSmile",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "kk0kcw4w",
+      "eyes": "love",
+      "mouth": "kissHeart",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "w480sg48",
+      "eyes": "shades",
+      "mouth": "smileTeeth",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "s80cgcow",
+      "eyes": "cute",
+      "mouth": "wideSmile",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "coc4s4sc",
+      "eyes": "shades",
+      "mouth": "smileTeeth",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "w4o0k0ww",
+      "eyes": "stars",
+      "mouth": "tongueOut",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "g04044ko",
+      "eyes": "plain",
+      "mouth": "kissHeart",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "oso4cs4k",
+      "eyes": "love",
+      "mouth": "kissHeart",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "wcsw0gw4",
+      "eyes": "cute",
+      "mouth": "tongueOut",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "8g4kg0c0",
+      "eyes": "glasses",
+      "mouth": "smileLol",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "4gc0k0cc",
+      "eyes": "plain",
+      "mouth": "cute",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "c8wco8sc",
+      "eyes": "closed",
+      "mouth": "kissHeart",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "0040ogoo",
+      "eyes": "love",
+      "mouth": "plain",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "k0sc4sw8",
+      "eyes": "cute",
+      "mouth": "cute",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "8w4o8ww4",
+      "eyes": "shades",
+      "mouth": "wideSmile",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "kkwog40s",
+      "eyes": "glasses",
+      "mouth": "cute",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "4o48cc0g",
+      "eyes": "glasses",
+      "mouth": "smileLol",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "wsc80g4k",
+      "eyes": "closed2",
+      "mouth": "smileLol",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "gc4sgsco",
+      "eyes": "cute",
+      "mouth": "cute",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "8c0g00sc",
+      "eyes": "glasses",
+      "mouth": "smileTeeth",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "gcssg0g4",
+      "eyes": "closed",
+      "mouth": "kissHeart",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "8cg0swo4",
+      "eyes": "closed2",
+      "mouth": "wideSmile",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "cks4wskg",
+      "eyes": "wink",
+      "mouth": "lilSmile",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "ocsckso8",
+      "eyes": "wink2",
+      "mouth": "kissHeart",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "s88ogws4",
+      "eyes": "wink",
+      "mouth": "smileLol",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "48o88scs",
+      "eyes": "love",
+      "mouth": "tongueOut",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "c4gks04w",
+      "eyes": "stars",
+      "mouth": "plain",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "s0sok48k",
+      "eyes": "shades",
+      "mouth": "smileLol",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "wck400k0",
+      "eyes": "love",
+      "mouth": "shy",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "gckgcows",
+      "eyes": "wink",
+      "mouth": "shy",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "ookg8w8s",
+      "eyes": "stars",
+      "mouth": "smileLol",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "48coc00w",
+      "eyes": "wink2",
+      "mouth": "shy",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "g4w8gc84",
+      "eyes": "wink2",
+      "mouth": "smileTeeth",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "sso8k0sk",
+      "eyes": "wink",
+      "mouth": "smileTeeth",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "ckg8cs48",
+      "eyes": "plain",
+      "mouth": "lilSmile",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "oo4sw0s4",
+      "eyes": "shades",
+      "mouth": "shout",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "kswwssk4",
+      "eyes": "closed",
+      "mouth": "wideSmile",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "w4c0kscg",
+      "eyes": "closed",
+      "mouth": "cute",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "4cw04gw4",
+      "eyes": "plain",
+      "mouth": "wideSmile",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "w84g9ck8",
+      "eyes": "love",
+      "mouth": "shy",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "8k48kw40",
+      "eyes": "shades",
+      "mouth": "shy",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "k0k8wgcw",
+      "eyes": "glasses",
+      "mouth": "tongueOut",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "cg8cwkk0",
+      "eyes": "wink2",
+      "mouth": "tongueOut",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "kw8kw48o",
+      "eyes": "glasses",
+      "mouth": "wideSmile",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "00goscgs",
+      "eyes": "glasses",
+      "mouth": "tongueOut",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "g8ws4ww0",
+      "eyes": "cute",
+      "mouth": "smileLol",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "so4co8s8",
+      "eyes": "love",
+      "mouth": "smileTeeth",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "g0g480wg",
+      "eyes": "stars",
+      "mouth": "tongueOut",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "sww4k0kw",
+      "eyes": "glasses",
+      "mouth": "wideSmile",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "kgk00k4k",
+      "eyes": "cute",
+      "mouth": "plain",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "scgs08ws",
+      "eyes": "glasses",
+      "mouth": "tongueOut",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "gok0wgc8",
+      "eyes": "love",
+      "mouth": "tongueOut",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "c08c0kk4",
+      "eyes": "closed",
+      "mouth": "kissHeart",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "o0cg4w8k",
+      "eyes": "shades",
+      "mouth": "shy",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "4c84kwow",
+      "eyes": "closed",
+      "mouth": "smileTeeth",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "ogkk8cs4",
+      "eyes": "closed",
+      "mouth": "smileLol",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "ck48k08s",
+      "eyes": "glasses",
+      "mouth": "smileLol",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "0owo8g4k",
+      "eyes": "love",
+      "mouth": "lilSmile",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "oko0gc88",
+      "eyes": "stars",
+      "mouth": "lilSmile",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "kgkw4ock",
+      "eyes": "love",
+      "mouth": "lilSmile",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "w44g84cc",
+      "eyes": "closed2",
+      "mouth": "shout",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "o0s8kkg8",
+      "eyes": "closed2",
+      "mouth": "smileLol",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "ckccs008",
+      "eyes": "shades",
+      "mouth": "shy",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "wcww44cg",
+      "eyes": "wink2",
+      "mouth": "wideSmile",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "484csco0",
+      "eyes": "wink",
+      "mouth": "cute",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "go4kwkgc",
+      "eyes": "stars",
+      "mouth": "kissHeart",
+      "background": "#d84be5"
+    },
+    {
+      "seed": "0oog4wkk",
+      "eyes": "closed",
+      "mouth": "smileLol",
+      "background": "#f6d594"
+    },
+    {
+      "seed": "g8kkc8so",
+      "eyes": "plain",
+      "mouth": "shout",
+      "background": "#fcbc34"
+    },
+    {
+      "seed": "oo008k4k",
+      "eyes": "plain",
+      "mouth": "kissHeart",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "wcg0g800",
+      "eyes": "plain",
+      "mouth": "lilSmile",
+      "background": "#059ff2"
+    },
+    {
+      "seed": "ww8cwc4o",
+      "eyes": "cute",
+      "mouth": "plain",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "ocowpwoc",
+      "eyes": "stars",
+      "mouth": "shout",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "cwkgk840",
+      "eyes": "glasses",
+      "mouth": "plain",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "484osww0",
+      "eyes": "closed",
+      "mouth": "shy",
+      "background": "#d9915b"
+    },
+    {
+      "seed": "c4ccw0gk",
+      "eyes": "cute",
+      "mouth": "shy",
+      "background": "#71cf62"
+    },
+    {
+      "seed": "40880c88",
+      "eyes": "cute",
+      "mouth": "smileTeeth",
+      "background": "#d84be5"
+    }
+  ]
+}

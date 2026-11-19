@@ -47,3 +47,35 @@ export function renderAvatarSvg(seed: string): string {
     mouth: [...AVATAR_MOUTH],
   }).toString();
 }
+
+/** What a seed picks: the face parts and the solid background (hex, with #). */
+export interface AvatarParts {
+  eyes: (typeof AVATAR_EYES)[number];
+  mouth: (typeof AVATAR_MOUTH)[number];
+  background: string;
+}
+
+/**
+ * The parts `renderAvatarSvg` draws for a seed. The iOS app picks the same
+ * ones on device (DesignSystem `AvatarParts`), checked against fixtures
+ * made from this function (avatar.fixtures.test.ts).
+ */
+export function avatarParts(seed: string): AvatarParts {
+  const extra = createAvatar(funEmoji, {
+    seed,
+    eyes: [...AVATAR_EYES],
+    mouth: [...AVATAR_MOUTH],
+  }).toJson().extra as Partial<FunEmojiExtra>;
+  // DiceBear's `extra` is untyped; fail loudly if its shape ever changes.
+  if (!extra.eyes || !extra.mouth || !extra.primaryBackgroundColor) {
+    throw new Error("DiceBear funEmoji no longer reports its parts");
+  }
+  return { eyes: extra.eyes, mouth: extra.mouth, background: extra.primaryBackgroundColor };
+}
+
+/** The fields of funEmoji's `toJson().extra` that `avatarParts` reads. */
+interface FunEmojiExtra {
+  eyes: AvatarParts["eyes"];
+  mouth: AvatarParts["mouth"];
+  primaryBackgroundColor: string;
+}

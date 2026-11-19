@@ -68,6 +68,6 @@ let package = Package(
         .target(name: "MediaPipeline"),
         .testTarget(name: "MediaPipelineTests", dependencies: ["MediaPipeline"]),
         .target(name: "DesignSystem"),
-        .testTarget(name: "DesignSystemTests", dependencies: ["DesignSystem"]),
+        .testTarget(name: "DesignSystemTests", dependencies: ["DesignSystem"], resources: [.copy("Fixtures")]),
     ]
 )
