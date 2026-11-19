@@ -216,6 +216,16 @@
         }
       }
     },
+    "A QR code for the tables, one live album for every guest, and every photo and video kept in full quality.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un QR code pour les tables, un album en direct pour tous les invités, et chaque photo et vidéo gardée en pleine qualité."
+          }
+        }
+      }
+    },
     "Access changed": {
       "extractionState": "manual",
       "localizations": {
@@ -286,6 +296,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Toute personne ayant ce lien peut ouvrir l'événement sans son code. Ne le partagez qu'avec vos invités."
+          }
+        }
+      }
+    },
+    "At an event?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À un événement ?"
           }
         }
       }
@@ -1062,12 +1082,32 @@
         }
       }
     },
+    "Host your own event": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Organisez votre événement"
+          }
+        }
+      }
+    },
     "Hosted events": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Événements organisés"
+          }
+        }
+      }
+    },
+    "Hosting": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Organiser"
           }
         }
       }
@@ -1812,12 +1852,22 @@
         }
       }
     },
-    "Scan the event's QR code with your camera, or paste its link here.": {
+    "Scan a QR code": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Scannez le QR code de l'événement avec l'appareil photo, ou collez son lien ici."
+            "value": "Scanner un QR code"
+          }
+        }
+      }
+    },
+    "Scan the QR code on the table or the invitation, or paste the event's link.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scannez le QR code sur la table ou l'invitation, ou collez le lien de l'événement."
           }
         }
       }
@@ -2026,6 +2076,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Se connecter"
+          }
+        }
+      }
+    },
+    "Sign in to host": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se connecter pour organiser"
           }
         }
       }
@@ -3098,16 +3158,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vos événements n'ont pas pu être chargés. Tirez vers le bas pour réessayer."
-          }
-        }
-      }
-    },
-    "Your hosted events": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vos événements organisés"
           }
         }
       }

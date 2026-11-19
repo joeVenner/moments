@@ -8,7 +8,9 @@ import SwiftUI
 /// the top bar; tap an event for its QR code, links and stats.
 struct HostEventsView: View {
     let host: HomeView.Host
-    let onClose: () -> Void
+    /// Leaves the screen; nil inside the Hosting tab, which swaps it out
+    /// itself once signed out.
+    let onClose: (() -> Void)?
 
     private var account: HostAccount { host.account }
     private var model: HostEventsModel { host.events }
@@ -45,7 +47,7 @@ struct HostEventsView: View {
         .onChange(of: account.state, initial: true) {
             guard account.state == .signedOut else { return }
             model.reset()
-            onClose()
+            onClose?()
         }
         .onChange(of: model.phase) {
             if case let .failed(failure) = model.phase {
@@ -81,10 +83,12 @@ struct HostEventsView: View {
 
     var topBar: some View {
         HStack {
-            Button(action: onClose) {
-                Label("Home", systemImage: "chevron.backward")
-                    .frame(minWidth: Radius.minimumTapTarget, minHeight: Radius.minimumTapTarget, alignment: .leading)
-                    .contentShape(Rectangle())
+            if let onClose {
+                Button(action: onClose) {
+                    Label("Home", systemImage: "chevron.backward")
+                        .frame(minWidth: Radius.minimumTapTarget, minHeight: Radius.minimumTapTarget, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
             }
             Spacer()
             // Icon only, so the bar fits at the largest text sizes.
