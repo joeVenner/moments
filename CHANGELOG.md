@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Guest limits: a plan's test event takes 15 guests and a main event its plan's tier plus 10% (55, 165, 330 or 660). A guest who would go over it gets "This event is full" (`guest_cap_reached`, 409) on the web and in the app API; guests already in the event can always rejoin. Events from before plans and the operator's own have no limit.
 - Test events: a host can create their plan's test event in the app (`kind: "test"`). It is open for uploads until one month after the plan was bought and deleted a week later; those dates can't be changed. Hosts now see each event's kind (from before plans, the operator's, main or test); guests don't (migration 0026).
 - Hosts other than the operator need a hosting plan to create events in the app: each new event uses one of the plan's main events (the included one first, then any Extra events). Without a plan that allows new events the answer is `plan_required` (402); with none left, `no_events_left` (409). The operator and the web admin are unchanged.
 - Hosting plans in the database (migration 0025, not wired up yet): the four tiers (50, 150, 300 and 600 guests) and the Extra event, one live plan per host, and the events each plan pays for: a main event with every plan, a test event with a host's first plan, and one main event per Extra event. Two App Store notices handled at once can't overwrite each other's change.
