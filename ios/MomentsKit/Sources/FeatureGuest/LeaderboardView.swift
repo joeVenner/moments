@@ -12,34 +12,33 @@ public struct LeaderboardView: View {
     /// Podium arrivals already celebrated (or skipped); one that lands while
     /// another tab is showing plays when this one comes back.
     @State private var celebrated = 0
-    @State private var isVisible = false
     @ScaledMetric(relativeTo: .body) private var rowAvatarSize: CGFloat = 36
     @ScaledMetric(relativeTo: .body) private var rankWidth: CGFloat = 28
 
-    public init(model: LeaderboardModel) {
+    /// Shown in its event (sections stay alive while hidden): celebrations
+    /// wait for it.
+    let isSelected: Bool
+
+    public init(model: LeaderboardModel, isSelected: Bool = true) {
         self.model = model
+        self.isSelected = isSelected
     }
 
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.md) {
-                Text("Leaderboard")
-                    .font(MomentsFont.display(.title))
-                    .foregroundStyle(MomentsColor.text)
-                    .accessibilityAddTraits(.isHeader)
-                    .padding(.horizontal, Spacing.md)
                 content
             }
             .padding(.vertical, Spacing.md)
         }
         .refreshable { await model.refresh() }
         .background(MomentsColor.background)
-        .onAppear {
-            isVisible = true
+        // Each time the section is shown, like a tab's onAppear.
+        .onChange(of: isSelected, initial: true) {
+            guard isSelected else { return }
             celebrateIfDue()
             Task { await model.loadIfStale() }
         }
-        .onDisappear { isVisible = false }
         #if os(iOS)
         .overlay { ConfettiView(bursts: confettiBursts).allowsHitTesting(false).accessibilityHidden(true) }
         #endif
@@ -47,7 +46,7 @@ public struct LeaderboardView: View {
     }
 
     private func celebrateIfDue() {
-        guard isVisible, model.podiumCelebrations > celebrated else { return }
+        guard isSelected, model.podiumCelebrations > celebrated else { return }
         celebrated = model.podiumCelebrations
         if Motion.shouldCelebrate(reduceMotion: reduceMotion) { confettiBursts += 1 }
     }

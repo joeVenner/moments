@@ -16,8 +16,12 @@ public struct FeedView: View {
     private static let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
     private static let topID = "feed-top"
 
-    public init(model: FeedModel, thumbnails: ThumbnailLoader, viewerImages: ThumbnailLoader) {
+    /// Shown in its event (sections stay alive while hidden): polls only then.
+    let isSelected: Bool
+
+    public init(model: FeedModel, thumbnails: ThumbnailLoader, viewerImages: ThumbnailLoader, isSelected: Bool = true) {
         self.model = model
+        self.isSelected = isSelected
         self.thumbnails = thumbnails
         self.viewerImages = viewerImages
     }
@@ -26,12 +30,9 @@ public struct FeedView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.md) {
-                    Text(verbatim: model.event.title)
-                        .font(MomentsFont.display(.title))
-                        .foregroundStyle(MomentsColor.text)
-                        .accessibilityAddTraits(.isHeader)
-                        .padding(.horizontal, Spacing.md)
-                        .id(Self.topID)
+                    // The event's header sits above the sections; this marks
+                    // the top for "new moments".
+                    Color.clear.frame(height: 0).id(Self.topID)
                     content
                 }
                 .padding(.vertical, Spacing.md)
@@ -58,7 +59,9 @@ public struct FeedView: View {
             if phase == .active { Task { await model.poll() } }
         }
         .background(MomentsColor.background)
-        .task {
+        // Restarts each time the section is shown and stops when it's hidden.
+        .task(id: isSelected) {
+            guard isSelected else { return }
             await model.loadFirstPage()
             await model.pollUntilCancelled()
         }
