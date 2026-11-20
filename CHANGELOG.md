@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS guest app: in My events, an event whose host's plan has ended stays listed and reads "No longer hosted" (English and French).
 - iOS Hosting screen: the plan's test event carries a TEST chip on its row (read as "Test event" by VoiceOver; English and French).
 - iOS guest app: an event whose host's plan has ended now says "This event is no longer hosted" (when opening or joining it, and mid-visit on any tab) instead of a connection error with a retry that can't work (English and French).
 - iOS Hosting screen: a plan card above the events shows the guest limit, whether the plan renews or ends (or that a payment failed / hosting ended, with the download deadline), and how many events can still be created (English and French).
