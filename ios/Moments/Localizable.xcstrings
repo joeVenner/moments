@@ -1785,6 +1785,17 @@
         }
       }
     },
+    "On the big screen, open the event and enter its PIN first": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur le grand écran, ouvrez d'abord l'événement et saisissez son code"
+          }
+        }
+      }
+    },
     "On, ^[%lld heart](inflect: true)": {
       "extractionState": "manual",
       "localizations": {
@@ -1855,6 +1866,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "L'ouvre en plein écran"
+          }
+        }
+      }
+    },
+    "Opens or shares the slideshow": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvre ou partage le diaporama"
           }
         }
       }

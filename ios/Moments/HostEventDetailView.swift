@@ -17,6 +17,7 @@ struct HostEventDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
     @State private var isConfirmingInviteCopy = false
     @State private var didCopyInvite = false
     @State private var editing: HostEventEdit?
@@ -113,7 +114,7 @@ struct HostEventDetailView: View {
             if let detail = model.detail {
                 shareSection(detail.share)
                 HostEventStatsView(analytics: detail.analytics)
-                manageRows
+                manageRows(detail.share)
             } else if model.phase == .loading || model.phase == .idle {
                 ProgressView()
                     .tint(MomentsColor.text)
@@ -129,7 +130,7 @@ struct HostEventDetailView: View {
     private var toReviewCount: Int { model.detail?.summary.toReviewCount ?? summary.toReviewCount }
 
     /// Everything the host can change, one row each, in one card.
-    private var manageRows: some View {
+    private func manageRows(_ share: EventShareLinks) -> some View {
         VStack(spacing: 0) {
             NavigationLink(value: HostModerationRoute(eventID: event.id, title: event.title)) {
                 HostManageRow(
@@ -138,6 +139,21 @@ struct HostEventDetailView: View {
                 )
             }
             rowDivider
+            if let slideshow = Self.slideshowURL(share.eventURL) {
+                // The slideshow is for a big screen's browser: the app's
+                // links leave it out, so Safari opens it rather than this app.
+                Menu {
+                    Button { openURL(slideshow) } label: { Label("Open in Safari", systemImage: "safari") }
+                    ShareLink(item: slideshow) { Label("Share the slideshow link", systemImage: "square.and.arrow.up") }
+                } label: {
+                    HostManageRow(
+                        title: "Slideshow", detail: Self.slideshowLine(event),
+                        systemImage: "play.rectangle", trailingSymbol: "ellipsis"
+                    )
+                }
+                .accessibilityHint(Text("Opens or shares the slideshow"))
+                rowDivider
+            }
             Button { editing = .privacy } label: {
                 HostManageRow(title: "Privacy", detail: Self.privacyLine(event), systemImage: "lock")
             }
@@ -156,6 +172,26 @@ struct HostEventDetailView: View {
 
     private var rowDivider: some View {
         MomentsColor.border.frame(height: 1).padding(.leading, Spacing.md)
+    }
+
+    /// A private event's slideshow needs the event unlocked in that browser
+    /// first (the web page doesn't ask for the PIN itself yet).
+    static func slideshowLine(_ event: Event) -> String {
+        event.accessMode == .private
+            ? String(localized: "On the big screen, open the event and enter its PIN first")
+            : String(localized: "Play moments live on a big screen")
+    }
+
+    /// The event's web slideshow: its link with "/slideshow" added and any
+    /// query or fragment dropped (it never carries an invite).
+    static func slideshowURL(_ eventURL: URL) -> URL? {
+        guard var parts = URLComponents(url: eventURL, resolvingAgainstBaseURL: false) else { return nil }
+        let path = parts.path.hasSuffix("/") ? String(parts.path.dropLast()) : parts.path
+        guard !path.isEmpty else { return nil }
+        parts.path = path + "/slideshow"
+        parts.query = nil
+        parts.fragment = nil
+        return parts.url
     }
 
     static func privacyLine(_ event: Event) -> String {
@@ -275,6 +311,8 @@ struct HostManageRow: View {
     let systemImage: String
     /// Moments waiting for the host; shown only above zero.
     var badge = 0
+    /// A chevron opens a screen; a menu row shows an ellipsis.
+    var trailingSymbol = "chevron.forward"
     @Environment(\.dynamicTypeSize) private var typeSize
 
     /// What VoiceOver reads for the badge: the number alone says nothing.
@@ -313,7 +351,7 @@ struct HostManageRow: View {
                     .fixedSize()
                     .accessibilityLabel(Text(label))
             }
-            Image(systemName: "chevron.forward")
+            Image(systemName: trailingSymbol)
                 .foregroundStyle(MomentsColor.textMuted)
                 .accessibilityHidden(true)
         }
