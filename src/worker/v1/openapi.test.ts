@@ -67,6 +67,7 @@ describe("openapi/v1.json", () => {
       "schemas.AdminMoment.properties.moderation_status",
       "schemas.CreateAdminEventRequest.properties.kind",
       "schemas.Event.properties.access_mode",
+      "schemas.HostPlan.properties.state",
       "schemas.Media.properties.kind",
       "schemas.ModerationRequest.properties.status",
       "schemas.UpdateEventAccessRequest.properties.mode",

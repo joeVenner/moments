@@ -171,3 +171,69 @@ public struct EventDetails: Sendable, Hashable {
         self.startsAt = startsAt
     }
 }
+
+/// The signed-in host's hosting plan, as the server reports it.
+public struct HostPlan: Sendable, Hashable {
+    public enum State: String, Sendable, Hashable {
+        /// Paid and renewing.
+        case active
+        /// Paid until `periodEndsAt`, won't renew.
+        case canceling
+        /// A payment failed; full service while Apple retries.
+        case grace
+        /// Grace is over: guests can only look, the host reads and moderates.
+        case billingRetry = "billing_retry"
+        /// Ended: the host can download until `readonlyUntil`.
+        case lapsed
+        /// Refunded: like lapsed, with a shorter download window.
+        case revoked
+    }
+
+    /// Events the host can create right now, by kind.
+    public struct EventsLeft: Sendable, Hashable {
+        public let main: Int
+        public let test: Int
+
+        public init(main: Int, test: Int) {
+            self.main = main
+            self.test = test
+        }
+    }
+
+    public let state: State
+    /// The tier in force, e.g. `host_150`.
+    public let productID: String
+    /// Guests per main event on this tier.
+    public let guestCap: Int
+    /// A downgrade that applies at the next renewal.
+    public let pendingProductID: String?
+    public let periodEndsAt: Date
+    /// The test event is live until then.
+    public let testWindowEndsAt: Date
+    public let graceEndsAt: Date?
+    /// Once the plan ended: downloads stop and everything is deleted after this.
+    public let readonlyUntil: Date?
+    public let canEdit: Bool
+    public let canModerate: Bool
+    public let canDownload: Bool
+    public let eventsLeft: EventsLeft
+
+    public init(
+        state: State, productID: String, guestCap: Int, pendingProductID: String?,
+        periodEndsAt: Date, testWindowEndsAt: Date, graceEndsAt: Date?, readonlyUntil: Date?,
+        canEdit: Bool, canModerate: Bool, canDownload: Bool, eventsLeft: EventsLeft
+    ) {
+        self.state = state
+        self.productID = productID
+        self.guestCap = guestCap
+        self.pendingProductID = pendingProductID
+        self.periodEndsAt = periodEndsAt
+        self.testWindowEndsAt = testWindowEndsAt
+        self.graceEndsAt = graceEndsAt
+        self.readonlyUntil = readonlyUntil
+        self.canEdit = canEdit
+        self.canModerate = canModerate
+        self.canDownload = canDownload
+        self.eventsLeft = eventsLeft
+    }
+}

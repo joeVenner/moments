@@ -91,6 +91,38 @@ private func adminMoment(id: String = "m1", status: String = "approved", kind: S
         #expect(request.request.headerFields[.authorization] == "Bearer \(hostToken)")
     }
 
+    private func planJSON(state: String = "lapsed", readonlyUntil: String = #""2026-12-20 10:00:00""#) -> String {
+        """
+        {"plan":{"state":"\(state)","product_id":"host_150","guest_cap":150,"pending_product_id":null,
+         "period_ends_at":"2026-11-30 10:00:00","test_window_ends_at":"2026-11-30 10:00:00","grace_ends_at":null,
+         "readonly_until":\(readonlyUntil),"can_edit":false,"can_moderate":false,"can_download":true,
+         "events_left":{"main":0,"test":0}}}
+        """
+    }
+
+    @Test func readsTheHostPlanWithTheBearer() async throws {
+        let stub = StubTransport(json: planJSON())
+        let plan = try #require(try await client(stub).hostPlan(token: hostToken))
+        #expect(plan.state == .lapsed && plan.productID == "host_150" && plan.guestCap == 150)
+        #expect(plan.readonlyUntil == ServerDate.parse("2026-12-20 10:00:00") && plan.graceEndsAt == nil)
+        #expect(!plan.canEdit && !plan.canModerate && plan.canDownload)
+        #expect(plan.eventsLeft == HostPlan.EventsLeft(main: 0, test: 0))
+        let request = try #require(stub.requests.first)
+        #expect(request.request.path == "/admin/plan")
+        #expect(request.request.headerFields[.authorization] == "Bearer \(hostToken)")
+    }
+
+    @Test func noPlanIsNil() async throws {
+        let stub = StubTransport(json: #"{"plan":null}"#)
+        #expect(try await client(stub).hostPlan(token: hostToken) == nil)
+    }
+
+    @Test(arguments: [("purged", #""2026-12-20 10:00:00""#), ("lapsed", #""soon""#)])
+    func aPlanThisBuildCantReadIsAnError(_ state: String, _ readonlyUntil: String) async throws {
+        let stub = StubTransport(json: planJSON(state: state, readonlyUntil: readonlyUntil))
+        await #expect(throws: MomentsAPIError.unexpectedResponse) { _ = try await client(stub).hostPlan(token: hostToken) }
+    }
+
     @Test func aDeadSessionIsHostAuthRequiredNotEventAccess() async throws {
         let stub = StubTransport(status: 401, json: #"{"error":"x","code":"host_auth_required"}"#)
         await #expect(throws: MomentsAPIError.hostAuthRequired) { _ = try await client(stub).adminEvents(token: hostToken) }

@@ -32,6 +32,8 @@ public protocol HostService: Sendable {
     /// The token stops working on the server.
     func signOut(token: String) async throws
     func adminEvents(token: String) async throws -> AdminEventList
+    /// The host's plan, or nil when they have none (the operator never has one).
+    func hostPlan(token: String) async throws -> HostPlan?
     /// `.eventNotFound` when the event is gone.
     func adminEvent(token: String, id: String) async throws -> AdminEventDetail
     /// Newest first, hidden ones included. `.eventNotFound` when the event is gone.
@@ -105,6 +107,19 @@ extension MomentsClient: HostService {
             let output = try await client.signOut()
             switch output {
             case .noContent: return
+            case let .unauthorized(response): throw Self.hostError(401, try? response.body.json.code)
+            case let .upgradeRequired(response): throw Self.hostError(426, try? response.body.json.code)
+            case let .default(status, response): throw Self.hostError(status, try? response.body.json.code)
+            }
+        }
+    }
+
+    public func hostPlan(token: String) async throws -> HostPlan? {
+        try await withHostToken(token) {
+            let output = try await client.getHostPlan()
+            switch output {
+            case let .ok(response):
+                return try (try response.body.json.plan).map { try mapper.hostPlan($0) }
             case let .unauthorized(response): throw Self.hostError(401, try? response.body.json.code)
             case let .upgradeRequired(response): throw Self.hostError(426, try? response.body.json.code)
             case let .default(status, response): throw Self.hostError(status, try? response.body.json.code)
@@ -316,7 +331,7 @@ extension MomentsClient: HostService {
 struct HostAuthMiddleware: ClientMiddleware {
     @TaskLocal static var token: String?
     static let hostOperations: Set<String> = [
-        "getHostSession", "signOut", "listAdminEvents", "getAdminEvent",
+        "getHostSession", "signOut", "getHostPlan", "listAdminEvents", "getAdminEvent",
         "listAdminMoments", "moderateMoment", "deleteMoment",
         "createAdminEvent", "updateAdminEvent", "updateEventAccess", "updateEventLifecycle",
     ]
@@ -338,6 +353,30 @@ struct HostAuthMiddleware: ClientMiddleware {
 }
 
 extension WireMapper {
+    /// Throws for a state or date this build can't read: a plan shown wrong
+    /// (say, "active" for an ended one) is worse than none.
+    func hostPlan(_ wire: Components.Schemas.HostPlan) throws(MomentsAPIError) -> HostPlan {
+        guard let state = HostPlan.State(rawValue: wire.state),
+              let periodEndsAt = ServerDate.parse(wire.periodEndsAt),
+              let testWindowEndsAt = ServerDate.parse(wire.testWindowEndsAt)
+        else { throw .unexpectedResponse }
+        let graceEndsAt = try requiredDateIfPresent(wire.graceEndsAt)
+        let readonlyUntil = try requiredDateIfPresent(wire.readonlyUntil)
+        return HostPlan(
+            state: state, productID: wire.productId, guestCap: wire.guestCap, pendingProductID: wire.pendingProductId,
+            periodEndsAt: periodEndsAt, testWindowEndsAt: testWindowEndsAt, graceEndsAt: graceEndsAt, readonlyUntil: readonlyUntil,
+            canEdit: wire.canEdit, canModerate: wire.canModerate, canDownload: wire.canDownload,
+            eventsLeft: HostPlan.EventsLeft(main: wire.eventsLeft.main, test: wire.eventsLeft.test)
+        )
+    }
+
+    /// Nil stays nil; a date that's present must parse.
+    private func requiredDateIfPresent(_ value: String?) throws(MomentsAPIError) -> Date? {
+        guard let value else { return nil }
+        guard let date = ServerDate.parse(value) else { throw .unexpectedResponse }
+        return date
+    }
+
     func adminEvent(_ wire: Components.Schemas.AdminEvent) throws(MomentsAPIError) -> AdminEvent {
         // AdminEvent = Event (value1) + the two counts (value2).
         AdminEvent(
