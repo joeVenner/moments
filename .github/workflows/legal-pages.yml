@@ -1,0 +1,62 @@
+# Publishes the Terms of Use and Privacy Policy to GitHub Pages. Only these
+# pages are published, never the rest of the repository (docs/ included).
+# The same files are served by moments-hq.com from public/.
+name: Legal pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - public/terms.html
+      - public/privacy.html
+      - public/fr/terms.html
+      - public/fr/privacy.html
+      - .github/pages/**
+      - .github/workflows/legal-pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # Drafts carry bracketed placeholders ([CONTACT EMAIL], ...): nothing
+      # is published until every one is filled in.
+      - name: Refuse unfinished pages
+        run: |
+          if grep -nE "\[[A-ZÀ-Ý][A-ZÀ-Ý '/]+\]" public/terms.html public/privacy.html public/fr/terms.html public/fr/privacy.html; then
+            echo "::error::Fill in the placeholders above before publishing."
+            exit 1
+          fi
+      - name: Collect the legal pages
+        run: |
+          mkdir -p _site/fr
+          cp .github/pages/index.html _site/index.html
+          cp public/terms.html public/privacy.html _site/
+          cp public/fr/terms.html public/fr/privacy.html _site/fr/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
