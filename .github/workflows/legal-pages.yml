@@ -32,9 +32,19 @@ jobs:
       # Drafts carry bracketed placeholders ([CONTACT EMAIL], ...): nothing
       # is published until every one is filled in.
       - name: Refuse unfinished pages
+        env:
+          LC_ALL: C.UTF-8
         run: |
-          if grep -nE "\[[A-ZÀ-Ý][A-ZÀ-Ý '/]+\]" public/terms.html public/privacy.html public/fr/terms.html public/fr/privacy.html; then
+          # grep exits 1 for "no match"; anything else (a bad pattern) fails too.
+          set +e
+          grep -nE "\[[A-Z][A-Z0-9 '/ÀÂÇÈÉÊÎÔÛ]*\]" public/terms.html public/privacy.html public/fr/terms.html public/fr/privacy.html
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
             echo "::error::Fill in the placeholders above before publishing."
+            exit 1
+          elif [ "$status" -ne 1 ]; then
+            echo "::error::The placeholder check failed to run."
             exit 1
           fi
       - name: Collect the legal pages
