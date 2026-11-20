@@ -211,7 +211,8 @@ export interface PlanAccess {
   readonly hostCanDownload: boolean;
 }
 
-const FULL: PlanAccess = Object.freeze({
+/** Everything allowed (also events no plan pays for). */
+export const FULL_ACCESS: PlanAccess = Object.freeze({
   guestsCanShare: true,
   guestsCanView: true,
   hostCanEdit: true,
@@ -233,7 +234,8 @@ const HOST_DOWNLOAD_ONLY: PlanAccess = Object.freeze({
   hostCanModerate: false,
   hostCanDownload: true,
 });
-const NONE: PlanAccess = Object.freeze({
+/** Nothing allowed. */
+export const NO_ACCESS: PlanAccess = Object.freeze({
   guestsCanShare: false,
   guestsCanView: false,
   hostCanEdit: false,
@@ -250,19 +252,19 @@ export function planAccess(plan: Plan, now: Date): PlanAccess {
   switch (plan.state) {
     case "active":
       // A renewal can be confirmed a little after the period ends.
-      return now < addDays(plan.periodEndsAt, RENEWAL_LAG_DAYS) ? FULL : VIEW_ONLY;
+      return now < addDays(plan.periodEndsAt, RENEWAL_LAG_DAYS) ? FULL_ACCESS : VIEW_ONLY;
     case "canceling":
-      return now < plan.periodEndsAt ? FULL : HOST_DOWNLOAD_ONLY;
+      return now < plan.periodEndsAt ? FULL_ACCESS : HOST_DOWNLOAD_ONLY;
     case "grace":
-      return plan.graceEndsAt && now < plan.graceEndsAt ? FULL : VIEW_ONLY;
+      return plan.graceEndsAt && now < plan.graceEndsAt ? FULL_ACCESS : VIEW_ONLY;
     case "billing_retry":
       return VIEW_ONLY;
     case "lapsed":
     case "revoked":
       // The download window can run out before the purge job has caught up.
-      return plan.readonlyUntil && now < plan.readonlyUntil ? HOST_DOWNLOAD_ONLY : NONE;
+      return plan.readonlyUntil && now < plan.readonlyUntil ? HOST_DOWNLOAD_ONLY : NO_ACCESS;
     case "purged":
-      return NONE;
+      return NO_ACCESS;
     default: {
       const unhandled: never = plan.state;
       return unhandled;
