@@ -35,16 +35,17 @@ import Testing
         let clip = try manifest(try #require(clip))
         let app = try manifest(.main)
         #expect(clip["NSPrivacyTracking"] as? Bool == false)
-        // Joining sends a nickname and keeps a guest identity; photos only
-        // once the Clip uploads.
+        // Joining sends a nickname and keeps a guest identity, and the Clip
+        // shares photos: what the app collects.
         #expect(values(clip, "NSPrivacyCollectedDataTypes", "NSPrivacyCollectedDataType") == [
             "NSPrivacyCollectedDataTypeUserID", "NSPrivacyCollectedDataTypeOtherUserContent",
+            "NSPrivacyCollectedDataTypePhotosorVideos",
         ])
-        // The Clip links the app's guest code, so it uses the same
-        // required-reason APIs.
+        // It links the app's guest code, so it uses the same required-reason
+        // APIs; with the same data, the two manifests are the same.
         let apiTypes = "NSPrivacyAccessedAPITypes", apiType = "NSPrivacyAccessedAPIType"
         #expect(!values(app, apiTypes, apiType).isEmpty)
-        #expect(values(clip, apiTypes, apiType) == values(app, apiTypes, apiType))
+        #expect(NSDictionary(dictionary: clip).isEqual(to: app))
     }
 
     @Test func theClipHandsOverInTheAppsGroup() throws {

@@ -4,11 +4,12 @@ import FeatureGuest
 import MomentsDomain
 import StoreKit
 import SwiftUI
+import UploadEngine
 
 /// The App Clip: opened from an event's QR code or link without installing
 /// the app. The guest joins the event here (the app picks the identity up
-/// when installed); sharing from the Clip comes next (foreground uploads
-/// only: App Clips can't use background sessions).
+/// when installed) and shares photos while the Clip is open (App Clips
+/// can't use background sessions).
 @main
 struct MomentsClipApp: App {
     @State private var route: Route?
@@ -43,9 +44,17 @@ struct ClipRootView: View {
     let route: Route?
     @State private var isOfferingApp = false
     @State private var join: JoinModel?
+    @State private var upload: UploadModel?
+    /// The model the sheet shows, kept until it is really dismissed (a
+    /// picker over it mustn't count), when its unshared picks are dropped.
+    @State private var presentedUpload: UploadModel?
+    @State private var progress: UploadProgressModel?
+    @State private var isShowingProgress = false
 
     private static let client = ClipClient.make()
     private static let store = ClipCredentials.store()
+    /// Nil (sharing hidden) if the upload folders can't be set up.
+    private static let uploads = ClipUploads.start(client: client, credentials: store)
 
     private struct EventLink: Equatable {
         let slug: EventSlug
@@ -61,7 +70,7 @@ struct ClipRootView: View {
         Group {
             if let join {
                 if case let .joined(_, participant) = join.phase {
-                    joined(as: participant.nickname)
+                    joined(as: participant.nickname, slug: join.slug)
                 } else {
                     JoinView(model: join)
                 }
@@ -71,11 +80,35 @@ struct ClipRootView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(MomentsColor.background)
-        // The whole link: the same event with another invite starts over.
+        // The whole link: the same event with another invite starts over,
+        // dropping the last event's unshared picks and closing its sheets.
         .onChange(of: eventLink, initial: true) {
+            presentedUpload?.discardAll()
+            presentedUpload = nil
+            upload = nil
+            isShowingProgress = false
             join = eventLink.map { link in
                 JoinModel(slug: link.slug, invite: link.invite, service: Self.client, store: Self.store)
             }
+        }
+        // Follows this event's uploads for the button and the overlay.
+        .task(id: eventLink?.slug) {
+            progress = nil
+            guard let uploads = Self.uploads, let slug = eventLink?.slug else { return }
+            // Any network: the Clip's uploads never wait for Wi-Fi.
+            let model = UploadProgressModel(eventSlug: slug.value, source: uploads.progress, largeVideosOnWiFiOnly: { false })
+            progress = model
+            await model.observe()
+        }
+        // However the sheet closes, unshared picks and files are dropped.
+        .sheet(item: $upload, onDismiss: {
+            presentedUpload?.discardAll()
+            presentedUpload = nil
+        }) { model in
+            UploadView(model: model)
+        }
+        .sheet(isPresented: $isShowingProgress) {
+            if let progress { UploadProgressView(model: progress, showsWiFiChoice: false) }
         }
         // The system banner that installs the full app. Not while joining:
         // it would cover the form's buttons.
@@ -86,7 +119,10 @@ struct ClipRootView: View {
     }
 
     private var shouldOfferApp: Bool {
-        guard let join else { return false }
+        // Not over a sheet (it would cover the share button), nor while
+        // photos are sending: installing the app replaces the Clip, and
+        // what it hasn't sent is lost.
+        guard let join, upload == nil, !isShowingProgress, (progress?.activeCount ?? 0) == 0 else { return false }
         if case .joined = join.phase { return true }
         return false
     }
@@ -108,7 +144,7 @@ struct ClipRootView: View {
         .padding(Spacing.lg)
     }
 
-    private func joined(as nickname: String) -> some View {
+    private func joined(as nickname: String, slug: EventSlug) -> some View {
         VStack(spacing: Spacing.lg) {
             Spacer()
             Text("You're in, \(nickname).")
@@ -116,12 +152,62 @@ struct ClipRootView: View {
                 .foregroundStyle(MomentsColor.text)
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
-            Text("Get the Moments app to share your photos. You'll still be you there.")
-                .font(MomentsFont.body())
-                .foregroundStyle(MomentsColor.textMuted)
-                .multilineTextAlignment(.center)
+            if let uploads = Self.uploads {
+                Text("Keep this open until your photos are sent.")
+                    .font(MomentsFont.body())
+                    .foregroundStyle(MomentsColor.textMuted)
+                    .multilineTextAlignment(.center)
+                shareButton(uploads, slug: slug)
+                if let progress { uploadsButton(progress) }
+            } else {
+                Text("Get the Moments app to share your photos. You'll still be you there.")
+                    .font(MomentsFont.body())
+                    .foregroundStyle(MomentsColor.textMuted)
+                    .multilineTextAlignment(.center)
+            }
             Spacer()
         }
         .padding(Spacing.lg)
+    }
+
+    private func shareButton(_ uploads: ClipUploads.Parts, slug: EventSlug) -> some View {
+        Button {
+            let model = UploadModel(eventSlug: slug.value, staging: uploads.staging, submitter: uploads.submitter)
+            presentedUpload = model
+            upload = model
+        } label: {
+            Label("Share moments", systemImage: "plus")
+                .font(MomentsFont.body().bold())
+                .foregroundStyle(MomentsColor.onAccent)
+                .padding(.horizontal, Spacing.lg)
+                .frame(minHeight: 52)
+                .background(MomentsColor.accent, in: Capsule())
+        }
+        .accessibilityHint(Text("Photos and videos from your library"))
+    }
+
+    /// Shown once something was shared, with a mark when one needs
+    /// attention; VoiceOver hears the counts.
+    @ViewBuilder private func uploadsButton(_ progress: UploadProgressModel) -> some View {
+        if !progress.rows.isEmpty {
+            Button { isShowingProgress = true } label: {
+                Label {
+                    Text("Your uploads")
+                } icon: {
+                    Image(systemName: progress.failedCount > 0 ? "exclamationmark.arrow.circlepath" : "arrow.up.circle")
+                }
+                .font(MomentsFont.body())
+                .foregroundStyle(progress.failedCount > 0 ? MomentsColor.accent : MomentsColor.textMuted)
+                .frame(minHeight: 44)
+            }
+            .accessibilityValue(Text(uploadsSummary(progress)))
+        }
+    }
+
+    private func uploadsSummary(_ progress: UploadProgressModel) -> String {
+        var parts: [String] = []
+        if progress.activeCount > 0 { parts.append(String(localized: "\(progress.activeCount) in progress")) }
+        if progress.failedCount > 0 { parts.append(String(localized: "\(progress.failedCount) need attention")) }
+        return parts.joined(separator: ", ")
     }
 }

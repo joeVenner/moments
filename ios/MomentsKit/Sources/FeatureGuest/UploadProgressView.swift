@@ -7,11 +7,14 @@ public struct UploadProgressView: View {
     let model: UploadProgressModel
     /// The event they go to, named under the title.
     let eventTitle: String?
+    /// Off where uploads ignore it (the App Clip sends over any network).
+    let showsWiFiChoice: Bool
     @Environment(\.dismiss) private var dismiss
 
-    public init(model: UploadProgressModel, eventTitle: String? = nil) {
+    public init(model: UploadProgressModel, eventTitle: String? = nil, showsWiFiChoice: Bool = true) {
         self.model = model
         self.eventTitle = eventTitle
+        self.showsWiFiChoice = showsWiFiChoice
     }
 
     public var body: some View {
@@ -50,7 +53,9 @@ public struct UploadProgressView: View {
             }
             .background(MomentsColor.background)
             // Also with nothing queued, so it can be set before sharing.
-            .safeAreaInset(edge: .bottom) { LargeVideosSetting(onChange: model.refresh) }
+            .safeAreaInset(edge: .bottom) {
+                if showsWiFiChoice { LargeVideosSetting(onChange: model.refresh) }
+            }
             .navigationTitle("Your uploads")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

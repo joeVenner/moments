@@ -162,8 +162,8 @@ public final class UploadProgressModel {
             try await work()
             couldNotRemove = false
         } catch {
-            // Private: file errors can carry staging paths.
-            logger.error("removing uploads failed: \(String(describing: error), privacy: .private)")
+            // The type only: file errors can carry staging paths.
+            logger.error("removing uploads failed: \(String(describing: type(of: error)), privacy: .public)")
             couldNotRemove = true
         }
     }

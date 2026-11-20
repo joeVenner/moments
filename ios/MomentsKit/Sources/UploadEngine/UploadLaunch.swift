@@ -27,4 +27,20 @@ public enum UploadLaunch {
         let swept = try? staging.sweepItemFolders(keeping: owners, createdBefore: launchedAt)
         return Report(loaded: loaded, swept: swept)
     }
+
+    /// Runs `attempt` until the queue loads, waiting `delays` between tries:
+    /// a read that failed in passing (an I/O error) gets another chance
+    /// before sharing reports a failure. The last report either way.
+    public static func retrying(
+        after delays: [Duration] = [.seconds(1), .seconds(3)],
+        sleep: @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) },
+        _ attempt: @Sendable () async -> Report
+    ) async -> Report {
+        var report = await attempt()
+        for delay in delays where report.loaded == nil {
+            await sleep(delay)
+            report = await attempt()
+        }
+        return report
+    }
 }
