@@ -149,6 +149,25 @@ extension HighlightsModel: ReactionHost {
         moments = state.moments
     }
 
+    /// Reports a moment to the host. Errors that end the event go to the
+    /// feed, as for hearts (a dead guest token included: the feed asks to
+    /// join again).
+    public func report(momentID: String) async -> ReportOutcome {
+        do {
+            try await service.reportMoment(
+                slug: slug.value, momentID: momentID, credentials: eventCredentials(store: store, slug: slug)
+            )
+            return .reported
+        } catch {
+            let outcome = ReportOutcome(error)
+            if outcome == .ended {
+                end()
+                onFatalError?(error)
+            }
+            return outcome
+        }
+    }
+
     func reactionDidSettle(momentID: String, state reaction: ReactionState) {
         onReactionSettled?(momentID, reaction)
     }

@@ -31,6 +31,13 @@ struct MomentViewer: View {
     @State private var showsChrome = true
     /// Bumped by every heart tap, for the haptic.
     @State private var heartTaps = 0
+    /// The moment the report question is about, while it's asked.
+    @State private var reportTarget: Moment.ID?
+    @State private var isReporting = false
+    /// Shown briefly after a report.
+    @State private var reportMessage: LocalizedStringResource?
+    @State private var reportMessageTask: Task<Void, Never>?
+    @State private var reportTask: Task<Void, Never>?
 
     init(model: any MomentBrowsing, images: ThumbnailLoader, start: Moment.ID) {
         self.model = model
@@ -74,11 +81,31 @@ struct MomentViewer: View {
                     chrome(moment: moments[index], position: index + 1, total: moments.count, isPlaying: isPlaying)
                         .transition(.opacity)
                 }
+                if let reportMessage {
+                    reportBanner(reportMessage)
+                        .transition(.opacity)
+                }
             }
             // `scrollPosition` alone can open on the first page on iOS 17.
             .onAppear { if let current { proxy.scrollTo(current) } }
         }
         .momentsAnimation(value: showsChrome)
+        .momentsAnimation(value: reportMessage == nil)
+        .confirmationDialog(
+            Text("Report this moment?"),
+            isPresented: Binding { reportTarget != nil } set: { if !$0 { reportTarget = nil } },
+            titleVisibility: .visible,
+            presenting: reportTarget
+        ) { id in
+            Button("Report", role: .destructive) { report(id) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("The host will review it.")
+        }
+        .onDisappear {
+            reportTask?.cancel()
+            reportMessageTask?.cancel()
+        }
         .statusBarHidden(!showsChrome)
         .sensoryFeedback(.impact(weight: .light), trigger: heartTaps)
         .sensoryFeedback(.error, trigger: model.reactionFailureCount)
@@ -107,6 +134,61 @@ struct MomentViewer: View {
     private func toggleReaction(_ moment: Moment) {
         heartTaps += 1
         model.toggleReaction(onMomentID: moment.id)
+    }
+
+    private func report(_ id: Moment.ID) {
+        guard !isReporting else { return }
+        isReporting = true
+        reportTask = Task {
+            let outcome = await model.report(momentID: id)
+            isReporting = false
+            guard let message = outcome.message else { return }
+            show(message)
+        }
+    }
+
+    private func show(_ message: LocalizedStringResource) {
+        reportMessage = message
+        AccessibilityNotification.Announcement(String(localized: message)).post()
+        reportMessageTask?.cancel()
+        reportMessageTask = Task {
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            reportMessage = nil
+        }
+    }
+
+    private func reportBanner(_ message: LocalizedStringResource) -> some View {
+        // Under the Close row, clear of the bottom bar at any text size.
+        VStack {
+            Text(message)
+                .font(MomentsFont.body(.subheadline))
+                .foregroundStyle(MomentsColor.text)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Spacing.md)
+                .padding(.vertical, Spacing.sm)
+                .background(MomentsColor.surface, in: Capsule())
+                .overlay(Capsule().stroke(MomentsColor.border))
+                .padding(.horizontal, Spacing.md)
+                .padding(.top, Radius.minimumTapTarget + Spacing.lg)
+            Spacer()
+        }
+        .allowsHitTesting(false)
+        // Announced when shown.
+        .accessibilityHidden(true)
+    }
+
+    private func reportButton(_ moment: Moment) -> some View {
+        Button { reportTarget = moment.id } label: {
+            Image(systemName: "flag")
+                .font(MomentsFont.body().weight(.semibold))
+                .foregroundStyle(MomentsColor.text)
+                .frame(width: Radius.minimumTapTarget, height: Radius.minimumTapTarget)
+                .background(MomentsColor.surface.opacity(0.85), in: Circle())
+                .overlay(Circle().stroke(MomentsColor.border))
+        }
+        .disabled(isReporting)
+        .accessibilityLabel(Text("Report"))
     }
 
     private func chrome(moment: Moment, position: Int, total: Int, isPlaying: Bool) -> some View {
@@ -143,6 +225,7 @@ struct MomentViewer: View {
                     HStack(spacing: Spacing.sm) {
                         reactionButton(moment)
                         Spacer(minLength: 0)
+                        reportButton(moment)
                         shareButton(moment)
                     }
                 }

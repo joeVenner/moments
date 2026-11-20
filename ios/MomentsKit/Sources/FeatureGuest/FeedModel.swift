@@ -246,6 +246,18 @@ public final class FeedModel {
         reactionSenders.toggle(onMomentID: id)
     }
 
+    /// Reports a moment to the host; see `MomentBrowsing.report(momentID:)`.
+    public func report(momentID: String) async -> ReportOutcome {
+        do {
+            try await service.reportMoment(slug: slug.value, momentID: momentID, credentials: credentials())
+            return .reported
+        } catch {
+            let outcome = ReportOutcome(error)
+            if outcome == .ended { handle(error, isBackground: true) }
+            return outcome
+        }
+    }
+
     /// This device's state learned from another list (e.g. highlights).
     public func applyServerReaction(momentID: String, state: ReactionState) {
         feed.applyServerReaction(forMomentID: momentID, reacted: state.reacted, reactionCount: state.reactionCount)

@@ -65,6 +65,16 @@ final class FakeService: MomentsService, @unchecked Sendable {
         if !reactionsIgnoreCancellation { try Task.checkCancellation() }
         return try result.get()
     }
+    var reportResults: [Result<Void, Error>] = []
+    private(set) var reportCalls: [(momentID: String, credentials: EventCredentials)] = []
+
+    func reportMoment(slug: String, momentID: String, credentials: EventCredentials) async throws {
+        let result = lock.withLock {
+            reportCalls.append((momentID, credentials))
+            return reportResults.isEmpty ? .success(()) : reportResults.removeFirst()
+        }
+        try result.get()
+    }
     /// Runs before a page request answers (to hold it open in race tests).
     var beforePage: (@Sendable (_ before: Int?) async -> Void)?
 

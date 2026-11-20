@@ -111,6 +111,9 @@ public protocol MomentsService: Sendable {
     func setReaction(
         _ reacted: Bool, slug: String, momentID: String, credentials: EventCredentials
     ) async throws -> ReactionState
+    /// Reports a moment to the host (the guest token is required).
+    /// Idempotent: reporting it again changes nothing.
+    func reportMoment(slug: String, momentID: String, credentials: EventCredentials) async throws
     /// Most-hearted visible moments, best first.
     func highlights(slug: String, limit: Int?, credentials: EventCredentials) async throws -> [Moment]
     /// Guests ranked by points, best first.
@@ -375,6 +378,26 @@ public struct MomentsClient: MomentsService {
                 case let .gone(response): throw Self.error(410, try? response.body.json.code)
                 case let .default(status, response): throw Self.error(status, try? response.body.json.code)
                 }
+            }
+        }
+    }
+
+    public func reportMoment(slug: String, momentID: String, credentials: EventCredentials = .init()) async throws {
+        try await perform {
+            let output = try await client.reportMoment(
+                path: .init(slug: slug, id: momentID),
+                headers: .init(xEventAccess: credentials.accessGrant, xGuestToken: credentials.guestToken)
+            )
+            switch output {
+            case .noContent: return
+            case let .badRequest(response): throw Self.error(400, try? response.body.json.code)
+            case let .unauthorized(response): throw Self.error(401, try? response.body.json.code)
+            case let .forbidden(response): throw Self.error(403, try? response.body.json.code)
+            case let .notFound(response): throw Self.error(404, try? response.body.json.code)
+            case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
+            case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+            case let .gone(response): throw Self.error(410, try? response.body.json.code)
+            case let .default(status, response): throw Self.error(status, try? response.body.json.code)
             }
         }
     }

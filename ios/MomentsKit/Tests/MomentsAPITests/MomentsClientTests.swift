@@ -86,6 +86,31 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
         }
     }
 
+    @Test func reportsAMomentAsTheTokensGuest() async throws {
+        let stub = StubTransport(status: 204, json: "")
+        try await client(stub).reportMoment(
+            slug: "party", momentID: "m1", credentials: .init(accessGrant: "grant-1", guestToken: "gt_me")
+        )
+        let request = try #require(stub.requests.first)
+        #expect(request.request.method == .post)
+        #expect(request.request.path == "/events/party/moments/m1/report")
+        #expect(request.request.headerFields[HTTPField.Name("X-Event-Access")!] == "grant-1")
+        #expect(request.request.headerFields[HTTPField.Name("X-Guest-Token")!] == "gt_me")
+    }
+
+    @Test(arguments: [
+        (404, "moment_not_found", MomentsAPIError.momentNotFound),
+        (403, "guest_required", .guestRequired),
+        (429, "rate_limited", .rateLimited),
+        (410, "event_not_hosted", .eventNotHosted),
+    ])
+    func mapsReportErrors(_ status: Int, _ code: String, _ expected: MomentsAPIError) async throws {
+        let stub = StubTransport(status: status, json: #"{"error":"x","code":"\#(code)"}"#)
+        await #expect(throws: expected) {
+            try await client(stub).reportMoment(slug: "party", momentID: "m1")
+        }
+    }
+
     @Test func fetchesHighlightsSkippingUnreadableRows() async throws {
         let stub = StubTransport(json: """
             {"moments":[\(Fixtures.moment(id: "m1")),\(Fixtures.moment(id: "bad", kind: "hologram"))]}
