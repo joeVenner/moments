@@ -665,6 +665,38 @@ private func plan(
         #expect(model.phase == .loaded && model.detail == detail("a") && service.detailCalls.isEmpty)
     }
 
+    @Test func aLoadFromBeforeASaveKeepsTheSavedEvent() async {
+        let gate = Gate()
+        let service = FakeHostService(holding: gate)
+        service.detailResult = .success(detail("a"))
+        let model = HostEventDetailModel(eventID: "a", service: service, account: account(service, store: FlakyHostStore(live)))
+        let loading = Task { await model.load() }
+        while service.detailCalls.isEmpty { await Task.yield() }
+        // The save answers while the older fetch is still out.
+        let saved = AdminEventDetail(
+            summary: event("a"),
+            share: EventShareLinks(eventURL: URL(string: "https://moments.test/e/a")!, inviteURL: URL(string: "https://moments.test/e/a?invite=new")),
+            analytics: detail("a").analytics
+        )
+        model.apply(saved)
+        await gate.open()
+        await loading.value
+        #expect(model.phase == .loaded && model.detail == saved)
+    }
+
+    @Test func aFailedLoadFromBeforeASaveKeepsTheSavedEvent() async {
+        let gate = Gate()
+        let service = FakeHostService(holding: gate)
+        service.detailResult = .failure(MomentsAPIError.transport(.timedOut))
+        let model = HostEventDetailModel(eventID: "a", service: service, account: account(service, store: FlakyHostStore(live)))
+        let loading = Task { await model.load() }
+        while service.detailCalls.isEmpty { await Task.yield() }
+        model.apply(detail("a"))
+        await gate.open()
+        await loading.value
+        #expect(model.phase == .loaded && model.detail == detail("a"))
+    }
+
     @Test func loadsTheEventWithTheStoredToken() async {
         let service = FakeHostService()
         service.detailResult = .success(detail("a"))
