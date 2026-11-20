@@ -1,0 +1,26 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Get the Moments app to join the event and share your photos.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installez l'app Moments pour rejoindre l'événement et partager vos photos."
+          }
+        }
+      }
+    },
+    "Scan an event's QR code to open it.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scannez le QR code d'un événement pour l'ouvrir."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
