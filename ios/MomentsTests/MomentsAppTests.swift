@@ -357,6 +357,40 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(HostModeration.summary(total: 3, hidden: 2) == "3 moments · 2 hidden")
     }
 
+    @Test func bulkModerationActsOnlyOnSelectedMomentsStillShown() {
+        let shown = ["m1", "m2", "m3"].map { id in
+            AdminMoment(
+                id: id, eventID: "e1", uploaderName: "Sara", createdAt: .now, status: .approved,
+                media: Media(kind: .image, url: "https://moments-hq.com/media/\(id).jpg")
+            )
+        }
+        // Grid order, and "gone" (filtered out or deleted) is left alone.
+        #expect(HostModeration.chosen(["m3", "m1", "gone"], in: shown) == ["m1", "m3"])
+        #expect(HostModeration.chosen([], in: shown).isEmpty)
+    }
+
+    @Test func bulkHideSkipsWhatIsHiddenAlready() {
+        let moments = [("m1", AdminMoment.Status.approved), ("m2", .hidden), ("m3", .approved)].map { id, status in
+            AdminMoment(
+                id: id, eventID: "e1", uploaderName: "Sara", createdAt: .now, status: status,
+                media: Media(kind: .image, url: "https://moments-hq.com/media/\(id).jpg")
+            )
+        }
+        #expect(HostModeration.hideable(["m1", "m2", "m3"], in: moments) == ["m1", "m3"])
+        #expect(HostModeration.hideable(["m2"], in: moments).isEmpty)
+    }
+
+    @Test func bulkModerationWordingCountsAndExplainsFailures() {
+        #expect(HostModeration.selectedLine(1) == "1 selected")
+        #expect(HostModeration.bulkHideLabel(1) == "Hide 1 moment")
+        #expect(HostModeration.bulkHideLabel(3) == "Hide 3 moments")
+        #expect(HostModeration.bulkDeleteTitle(1) == "Delete 1 moment?")
+        #expect(HostModeration.bulkDeleteTitle(2) == "Delete 2 moments?")
+        #expect(HostModeration.bulkResult(.init(succeeded: 3, failed: 0), deleted: false) == "3 hidden")
+        #expect(HostModeration.bulkResult(.init(succeeded: 2, failed: 0), deleted: true) == "2 deleted")
+        #expect(HostModeration.bulkResult(.init(succeeded: 2, failed: 1), deleted: true) == "2 deleted, 1 couldn't be changed")
+    }
+
     @Test func moderationLabelsSayWhoAndWhetherHidden() {
         let photo = AdminMoment(
             id: "m1", eventID: "e1", uploaderName: "Sara", createdAt: .now, status: .hidden,

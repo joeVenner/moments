@@ -37,6 +37,7 @@ final class FakeHostService: HostService, @unchecked Sendable {
     private var _moderateCalls: [(id: String, status: AdminMoment.Status)] = []
     private var _deleteCalls: [String] = []
     private var _actionGate: Gate?
+    private var _failingIDs: Set<String> = []
     private var _listGate: Gate?
     private var _listCalls = 0
     private var _saveResult: Result<AdminEventDetail, Error> = .failure(MomentsAPIError.eventNotFound)
@@ -115,6 +116,11 @@ final class FakeHostService: HostService, @unchecked Sendable {
     /// One line per create/edit/access/dates call, e.g. "access e1 private 123456".
     var saveCalls: [String] { lock.withLock { _saveCalls } }
     var moderateCalls: [(id: String, status: AdminMoment.Status)] { lock.withLock { _moderateCalls } }
+    /// Moments whose hide or delete fails (offline), the rest succeed.
+    var failingIDs: Set<String> {
+        get { lock.withLock { _failingIDs } }
+        set { lock.withLock { _failingIDs = newValue } }
+    }
     var deleteCalls: [String] { lock.withLock { _deleteCalls } }
     var signInCalls: Int { lock.withLock { _signInCalls } }
     var signOutTokens: [String] { lock.withLock { _signOutTokens } }
@@ -142,13 +148,19 @@ final class FakeHostService: HostService, @unchecked Sendable {
         return try result.get()
     }
     func moderate(token: String, momentID: String, status: AdminMoment.Status) async throws -> AdminMoment {
-        let (error, gate) = lock.withLock { _moderateCalls.append((momentID, status)); return (_moderateError, _actionGate) }
+        let (error, gate) = lock.withLock {
+            _moderateCalls.append((momentID, status))
+            return (_failingIDs.contains(momentID) ? MomentsAPIError.transport(.notConnectedToInternet) : _moderateError, _actionGate)
+        }
         if let gate { await gate.wait() }
         if let error { throw error }
         return adminMoment(momentID, status: status)
     }
     func deleteMoment(token: String, momentID: String) async throws {
-        let (error, gate) = lock.withLock { _deleteCalls.append(momentID); return (_deleteError, _actionGate) }
+        let (error, gate) = lock.withLock {
+            _deleteCalls.append(momentID)
+            return (_failingIDs.contains(momentID) ? MomentsAPIError.transport(.notConnectedToInternet) : _deleteError, _actionGate)
+        }
         if let gate { await gate.wait() }
         if let error { throw error }
     }
@@ -842,6 +854,50 @@ func adminMoment(_ id: String, status: AdminMoment.Status = .approved, reports: 
         #expect(model.count(for: .reported) == 1)
         await gate.open()
         await hiding.value
+    }
+
+    @Test func hidingSeveralCountsWhatWorkedAndUndoesWhatDidnt() async {
+        let (model, service, _) = await loaded([
+            adminMoment("a"), adminMoment("b"), adminMoment("c"), adminMoment("done", status: .hidden),
+        ])
+        service.failingIDs = ["b"]
+        let result = await model.hide(momentIDs: ["a", "b", "c", "done"])
+        // Already hidden counts as done, without a request.
+        #expect(result == .init(succeeded: 3, failed: 1))
+        #expect(Set(service.moderateCalls.map(\.id)) == ["a", "b", "c"])
+        #expect(model.moments.filter(\.isHidden).map(\.id) == ["a", "c", "done"])
+        #expect(model.actionFailure == .offline && model.pendingIDs.isEmpty)
+    }
+
+    @Test func deletingSeveralRemovesOnlyWhatTheServerDeleted() async {
+        let (model, service, _) = await loaded([adminMoment("a"), adminMoment("b"), adminMoment("c")])
+        service.failingIDs = ["c"]
+        let result = await model.delete(momentIDs: ["a", "c", "missing"])
+        #expect(result == .init(succeeded: 1, failed: 2))
+        #expect(Set(service.deleteCalls) == ["a", "c"])
+        #expect(model.moments.map(\.id) == ["b", "c"])
+    }
+
+    @Test func aBulkActionKeepsTheFirstFailureNoticeWhenLaterOnesWork() async {
+        let (model, service, _) = await loaded((1...6).map { adminMoment("m\($0)") })
+        service.failingIDs = ["m1"]
+        let result = await model.hide(momentIDs: (1...6).map { "m\($0)" })
+        #expect(result == .init(succeeded: 5, failed: 1))
+        #expect(model.actionFailure == .offline)
+    }
+
+    @Test func aBulkActionSendsAFewRequestsAtATime() async {
+        let ids = (1...7).map { "m\($0)" }
+        let (model, service, _) = await loaded(ids.map { adminMoment($0) })
+        let gate = Gate()
+        service.actionGate = gate
+        let hiding = Task { await model.hide(momentIDs: ids) }
+        while service.moderateCalls.count < HostModerationModel.bulkConcurrency { await Task.yield() }
+        for _ in 0..<50 { await Task.yield() }
+        #expect(service.moderateCalls.count == HostModerationModel.bulkConcurrency)
+        await gate.open()
+        #expect(await hiding.value == .init(succeeded: 7, failed: 0))
+        #expect(service.moderateCalls.count == 7)
     }
 
     @Test func loadsTheMomentsAndCountsTheHiddenOnes() async {

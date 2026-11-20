@@ -24,6 +24,10 @@ struct HostModerationView: View {
     /// offering "Hide" for a moment that is hidden already (or gone).
     @State private var selectedID: String?
     @State private var deletingID: String?
+    /// Select mode: nil when off, else the ids ticked so far.
+    @State private var selection: Set<String>?
+    @State private var isConfirmingBulkDelete = false
+    @State private var isRunningBulk = false
 
     init(route: HostModerationRoute, host: HomeView.Host) {
         self.init(route: route, host: host, model: HostModerationModel(eventID: route.eventID, service: host.service, account: host.account))
@@ -42,6 +46,7 @@ struct HostModerationView: View {
             topBar
             ScrollView { content }
                 .refreshable { await model.load() }
+            if let selection { selectionBar(HostModeration.chosen(selection, in: model.visibleMoments)) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(MomentsColor.background.ignoresSafeArea())
@@ -94,6 +99,77 @@ struct HostModerationView: View {
         } message: { _ in
             Text("It's removed for everyone, files included. This can't be undone.")
         }
+        // The selection bar's Delete asks here.
+        .confirmationDialog(
+            Text(HostModeration.bulkDeleteTitle(selectedCount)),
+            isPresented: $isConfirmingBulkDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) { runBulk(delete: true) }
+        } message: {
+            if selectedCount == 1 {
+                Text("It's removed for everyone, files included. This can't be undone.")
+            } else {
+                Text("They're removed for everyone, files included. This can't be undone.")
+            }
+        }
+        // A finished filter or reload can drop selected moments: keep only
+        // the ones still there.
+        .onChange(of: model.moments) {
+            guard let current = selection else { return }
+            let ids = Set(model.moments.map(\.id))
+            selection = current.intersection(ids)
+        }
+    }
+
+    private var selectedCount: Int {
+        selection.map { HostModeration.chosen($0, in: model.visibleMoments).count } ?? 0
+    }
+
+    /// "3 selected", then Hide and Delete for them.
+    private func selectionBar(_ chosen: [String]) -> some View {
+        HStack(spacing: Spacing.md) {
+            Text(HostModeration.selectedLine(chosen.count))
+                .font(MomentsFont.body().weight(.semibold))
+                .foregroundStyle(MomentsColor.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if isRunningBulk {
+                ProgressView().tint(MomentsColor.text)
+            } else {
+                let hideable = HostModeration.hideable(chosen, in: model.visibleMoments)
+                Button("Hide") { runBulk(delete: false) }
+                    .foregroundStyle(MomentsColor.text)
+                    .disabled(hideable.isEmpty)
+                    .accessibilityLabel(Text(HostModeration.bulkHideLabel(hideable.count)))
+                Button("Delete") { isConfirmingBulkDelete = true }
+                    .foregroundStyle(MomentsColor.accent)
+                    .accessibilityLabel(Text(HostModeration.bulkDeleteTitle(chosen.count)))
+            }
+        }
+        .font(MomentsFont.body())
+        .disabled(chosen.isEmpty || isRunningBulk)
+        .frame(minHeight: Radius.minimumTapTarget)
+        .padding(.horizontal, Spacing.lg)
+        .padding(.vertical, Spacing.sm)
+        .background(MomentsColor.surface.ignoresSafeArea(edges: .bottom))
+        .overlay(alignment: .top) { Rectangle().fill(MomentsColor.border).frame(height: 1) }
+    }
+
+    private func runBulk(delete: Bool) {
+        guard let selection, !isRunningBulk else { return }
+        let chosen = HostModeration.chosen(selection, in: model.visibleMoments)
+        // Hiding skips what's hidden already, so the count is what changed.
+        let ids = delete ? chosen : HostModeration.hideable(chosen, in: model.visibleMoments)
+        guard !ids.isEmpty else { return }
+        isRunningBulk = true
+        Task {
+            let result = delete ? await model.delete(momentIDs: ids) : await model.hide(momentIDs: ids)
+            isRunningBulk = false
+            AccessibilityNotification.Announcement(HostModeration.bulkResult(result, deleted: delete)).post()
+            // Keep the ones that didn't work selected, to try again.
+            // (An emptied list, e.g. after a sign-out, ends select mode too.)
+            if result.failed == 0 || model.moments.isEmpty { self.selection = nil }
+        }
     }
 
     var topBar: some View {
@@ -104,6 +180,14 @@ struct HostModerationView: View {
                     .contentShape(Rectangle())
             }
             Spacer()
+            if selection != nil {
+                Button("Cancel") { selection = nil }
+                    .disabled(isRunningBulk)
+                    .frame(minWidth: Radius.minimumTapTarget, minHeight: Radius.minimumTapTarget, alignment: .trailing)
+            } else if !model.moments.isEmpty {
+                Button("Select") { selection = [] }
+                    .frame(minWidth: Radius.minimumTapTarget, minHeight: Radius.minimumTapTarget, alignment: .trailing)
+            }
         }
         .font(MomentsFont.body())
         .foregroundStyle(MomentsColor.text)
@@ -159,9 +243,18 @@ struct HostModerationView: View {
         } else if model.visibleMoments.isEmpty {
             notice(HostModeration.emptyMessage(for: model.filter))
         } else {
-            HostMomentGrid(moments: model.visibleMoments, pendingIDs: model.pendingIDs, thumbnails: thumbnails) { action in
+            HostMomentGrid(
+                moments: model.visibleMoments, pendingIDs: model.pendingIDs,
+                selection: selection, thumbnails: thumbnails
+            ) { action in
                 switch action {
-                case let .choose(moment): selectedID = moment.id
+                case let .choose(moment):
+                    if var current = selection {
+                        if current.remove(moment.id) == nil { current.insert(moment.id) }
+                        selection = current
+                    } else {
+                        selectedID = moment.id
+                    }
                 case let .setHidden(isHidden, moment): setHidden(isHidden, moment)
                 case let .delete(moment): deletingID = moment.id
                 }
@@ -245,6 +338,8 @@ struct HostMomentGrid: View {
 
     let moments: [AdminMoment]
     let pendingIDs: Set<String>
+    /// Select mode: tapping ticks a moment instead of opening its options.
+    var selection: Set<String>?
     let thumbnails: ThumbnailLoader
     let perform: (Action) -> Void
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -257,17 +352,19 @@ struct HostMomentGrid: View {
         LazyVGrid(columns: columns, spacing: Spacing.xxs) {
             ForEach(moments) { moment in
                 let isPending = pendingIDs.contains(moment.id)
+                let isSelected = selection?.contains(moment.id)
                 Button { perform(.choose(moment)) } label: {
-                    HostMomentCell(moment: moment, isPending: isPending, thumbnails: thumbnails)
+                    HostMomentCell(moment: moment, isPending: isPending, isSelected: isSelected, thumbnails: thumbnails)
                 }
                 .buttonStyle(.plain)
                 .disabled(isPending)
                 .accessibilityLabel(Text(HostModeration.label(for: moment)))
                 .accessibilityValue(HostModeration.stateValue(for: moment, isPending: isPending))
-                .accessibilityHint(Text("Shows the hide and delete options."))
+                .accessibilityAddTraits(isSelected == true ? .isSelected : [])
+                .accessibilityHint(selection == nil ? Text("Shows the hide and delete options.") : Text("Selects or deselects this moment."))
                 .accessibilityActions {
-                    // Nothing to offer while a change is on its way.
-                    if !isPending {
+                    // Nothing to offer while a change is on its way, or while selecting.
+                    if !isPending, selection == nil {
                         Button(moment.isHidden ? "Show to guests" : "Hide from guests") {
                             perform(.setHidden(!moment.isHidden, moment))
                         }
@@ -284,6 +381,8 @@ struct HostMomentGrid: View {
 struct HostMomentCell: View {
     let moment: AdminMoment
     let isPending: Bool
+    /// Nil outside select mode; else whether it's ticked.
+    var isSelected: Bool? = nil
     let thumbnails: ThumbnailLoader
     @State private var image: CGImage?
     @State private var failed = false
@@ -315,6 +414,21 @@ struct HostMomentCell: View {
                     if moment.isReported { reportedBadge }
                 }
                 .padding(Spacing.xxs)
+            }
+            .overlay(alignment: .topLeading) {
+                if let isSelected {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .symbolRenderingMode(.palette)
+                        // Tick (or ring) in the text color, filled with the accent when chosen.
+                        .foregroundStyle(MomentsColor.text, isSelected ? MomentsColor.accent : MomentsColor.background.opacity(0.7))
+                        .padding(Spacing.xxs)
+                }
+            }
+            .overlay {
+                if isSelected == true {
+                    Rectangle().stroke(MomentsColor.accent, lineWidth: 3)
+                }
             }
             .overlay {
                 if isPending {
@@ -368,6 +482,37 @@ struct HostMomentCell: View {
 
 /// Pure wording for the moderation screen (tested without views).
 enum HostModeration {
+    /// The selected moments the grid still shows, in grid order: a filter
+    /// change hides the others, so they aren't acted on unseen.
+    static func chosen(_ selection: Set<String>, in visible: [AdminMoment]) -> [String] {
+        visible.map(\.id).filter(selection.contains)
+    }
+
+    /// The chosen moments that aren't hidden yet.
+    static func hideable(_ chosen: [String], in visible: [AdminMoment]) -> [String] {
+        let hidden = Set(visible.filter(\.isHidden).map(\.id))
+        return chosen.filter { !hidden.contains($0) }
+    }
+
+    static func selectedLine(_ count: Int) -> String {
+        String(localized: "\(count) selected")
+    }
+
+    static func bulkHideLabel(_ count: Int) -> String {
+        String(localized: "Hide \(count) moments")
+    }
+
+    static func bulkDeleteTitle(_ count: Int) -> String {
+        String(localized: "Delete \(count) moments?")
+    }
+
+    /// "3 hidden" or "3 deleted", then how many didn't work.
+    static func bulkResult(_ result: HostModerationModel.BulkResult, deleted: Bool) -> String {
+        let done = deleted ? String(localized: "\(result.succeeded) deleted") : String(localized: "\(result.succeeded) hidden")
+        guard result.failed > 0 else { return done }
+        return done + ", " + String(localized: "\(result.failed) couldn't be changed")
+    }
+
     static func summary(total: Int, hidden: Int) -> String {
         let moments = String(localized: "\(total) moments")
         guard hidden > 0 else { return moments }
