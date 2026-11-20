@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Guests stop seeing an event once its plan no longer covers it: the event, its feed, highlights and media answer "This event is no longer hosted." (`event_not_hosted`, 410) on the web and in the app API, and the web page says so (EN/FR). Guests can still leave and delete what they shared. Events from before plans and the operator's are unchanged.
 - Guest sharing follows the host's plan: a plan event takes new uploads only while its plan pays for sharing (`uploads_closed`, 403, on the web and in the app API otherwise), and only from guests who joined it. Events from before plans and the operator's are unchanged.
 - Guest limits: a plan's test event takes 15 guests and a main event its plan's tier plus 10% (55, 165, 330 or 660). A guest who would go over it gets "This event is full" (`guest_cap_reached`, 409) on the web and in the app API; guests already in the event can always rejoin. Events from before plans and the operator's own have no limit.
 - Test events: a host can create their plan's test event in the app (`kind: "test"`). It is open for uploads until one month after the plan was bought and deleted a week later; those dates can't be changed. Hosts now see each event's kind (from before plans, the operator's, main or test); guests don't (migration 0026).
