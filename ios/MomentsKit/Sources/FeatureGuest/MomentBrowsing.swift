@@ -16,6 +16,8 @@ protocol MomentBrowsing: AnyObject {
     /// Reports a moment to the host. An answer that ends the event ends
     /// the screen too (so the viewer closes).
     func report(momentID: String) async -> ReportOutcome
+    /// The viewer closed: moments reported from it leave the list.
+    func viewerDidClose()
 }
 
 extension FeedModel: MomentBrowsing {

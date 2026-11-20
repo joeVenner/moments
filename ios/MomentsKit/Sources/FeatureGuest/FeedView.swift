@@ -62,11 +62,14 @@ public struct FeedView: View {
         // Restarts each time the section is shown and stops when it's hidden.
         .task(id: isSelected) {
             guard isSelected else { return }
+            // Highlights may have had a moment reported meanwhile.
+            model.reloadReports()
             await model.loadFirstPage()
             await model.pollUntilCancelled()
         }
         #if os(iOS)
-        .fullScreenCover(item: $viewing) { request in
+        // Moments reported from the viewer leave the list once it's closed.
+        .fullScreenCover(item: $viewing, onDismiss: { model.viewerDidClose() }) { request in
             MomentViewer(model: model, images: viewerImages, start: request.id)
                 .presentationBackground(.clear)
         }

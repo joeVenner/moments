@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS: a moment a guest reports disappears from their own feed and highlights (on that device) once they close the viewer; the host still sees it.
 - iOS host moderation: Select mode to hide or delete several moments at once ("3 selected · Hide · Delete"), with a spoken summary of what worked.
 - iOS event header shows the guest's avatar and points ("210 pts") top right; tapping it opens the leaderboard.
 - iOS event header shows how many moments and guests the event has, next to when sharing closes ("128 moments · 46 guests · open until …"), refreshed on pull to refresh and when new moments arrive.

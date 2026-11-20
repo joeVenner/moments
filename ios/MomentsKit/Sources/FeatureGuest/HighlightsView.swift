@@ -42,7 +42,8 @@ public struct HighlightsView: View {
             if isSelected { Task { await model.loadIfStale() } }
         }
         #if os(iOS)
-        .fullScreenCover(item: $viewing) { request in
+        // Moments reported from the viewer leave the list once it's closed.
+        .fullScreenCover(item: $viewing, onDismiss: { model.viewerDidClose() }) { request in
             MomentViewer(model: model, images: viewerImages, start: request.id)
                 .presentationBackground(.clear)
         }

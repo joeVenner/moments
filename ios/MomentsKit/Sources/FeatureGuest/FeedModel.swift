@@ -82,6 +82,8 @@ public final class FeedModel {
     /// One sync (first page, refresh, poll) at a time, per FeedState's contract.
     @ObservationIgnored private var isSyncing = false
     @ObservationIgnored private let logger = Logger(subsystem: "moments", category: "feed")
+    /// Moments this guest reported, left out of the grid.
+    @ObservationIgnored private var reportHiding = ReportHiding()
 
     public init(
         event: Event, participant: Participant, slug: EventSlug,
@@ -93,6 +95,7 @@ public final class FeedModel {
         self.service = service
         self.store = store
         grantCache = GrantCache(store: store, slug: slug)
+        _ = reportHiding.reload(store: store, slug: slug, logger: logger)
     }
 
     // MARK: - What the grid shows
@@ -105,16 +108,24 @@ public final class FeedModel {
         grantCache.grant()
     }
 
+    /// Every loaded moment reported: no tile appears to ask for more.
+    private func loadOlderIfEverythingIsHidden() {
+        guard !feed.moments.isEmpty, reportHiding.filter(feed.moments).isEmpty else { return }
+        _ = startLoadingOlder()
+    }
+
     private func updateVisible() {
+        defer { loadOlderIfEverythingIsHidden() }
+        let listed = reportHiding.filter(feed.moments)
         guard let revealedThroughSeq else {
-            moments = feed.moments
+            moments = listed
             newMomentCount = 0
             return
         }
         var shown: [Moment] = []
-        shown.reserveCapacity(feed.moments.count)
+        shown.reserveCapacity(listed.count)
         var hidden = 0
-        for moment in feed.moments {
+        for moment in listed {
             if moment.seq <= revealedThroughSeq { shown.append(moment) } else { hidden += 1 }
         }
         moments = shown
@@ -130,6 +141,7 @@ public final class FeedModel {
         await sync(waitIfBusy: false) { [self] in
             try await replaceWithFirstPage(revealAll: true)
             phase = .loaded
+            loadOlderIfEverythingIsHidden()
         }
         if phase == .loaded { await loadStats() }
     }
@@ -272,12 +284,24 @@ public final class FeedModel {
     public func report(momentID: String) async -> ReportOutcome {
         do {
             try await service.reportMoment(slug: slug.value, momentID: momentID, credentials: credentials())
+            reportHiding.markReported(momentID, store: store, slug: slug, logger: logger)
             return .reported
         } catch {
             let outcome = ReportOutcome(error)
             if outcome == .ended { handle(error, isBackground: true) }
             return outcome
         }
+    }
+
+    /// The viewer closed: moments reported from it (here or in another
+    /// list) leave the grid.
+    public func viewerDidClose() {
+        if reportHiding.applyPending(store: store, slug: slug, logger: logger) { updateVisible() }
+    }
+
+    /// Picks up moments reported from another list (e.g. highlights).
+    public func reloadReports() {
+        if reportHiding.reload(store: store, slug: slug, logger: logger) { updateVisible() }
     }
 
     /// This device's state learned from another list (e.g. highlights).
