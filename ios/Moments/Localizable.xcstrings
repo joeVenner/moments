@@ -32,6 +32,17 @@
         }
       }
     },
+    "%@ · up to %lld guests": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · jusqu'à %lld invités"
+          }
+        }
+      }
+    },
     "%@ · uploads closed": {
       "localizations": {
         "fr": {
@@ -1568,6 +1579,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Souvenirs : %lld · Invités : %lld"
+          }
+        }
+      }
+    },
+    "Moments: %lld · Guests: %lld of %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Souvenirs : %lld · Invités : %lld sur %lld"
           }
         }
       }

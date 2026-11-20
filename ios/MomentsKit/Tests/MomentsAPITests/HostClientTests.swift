@@ -13,13 +13,14 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
 }
 
 private func adminEvent(
-    id: String, slug: String, accessMode: String = "public", kind: String = "main", moments: Int = 3, guests: Int = 2
+    id: String, slug: String, accessMode: String = "public", kind: String = "main", guestCap: String = "150",
+    moments: Int = 3, guests: Int = 2
 ) -> String {
     """
     {"id":"\(id)","slug":"\(slug)","title":"Party","type":"Party","main_characters":null,"description":null,
      "cover_image_url":null,"created_at":"2026-11-17 18:30:00","starts_at":null,"expires_at":null,
      "uploads_close_at":null,"purge_after":null,"archived_at":null,"access_mode":"\(accessMode)",
-     "uploads_open":true,"kind":"\(kind)","moment_count":\(moments),"participant_count":\(guests)}
+     "uploads_open":true,"kind":"\(kind)","guest_cap":\(guestCap),"moment_count":\(moments),"participant_count":\(guests)}
     """
 }
 
@@ -129,6 +130,15 @@ private func adminMoment(id: String = "m1", status: String = "approved", kind: S
     func readsTheEventKind(_ wire: String, _ expected: AdminEvent.Kind) async throws {
         let stub = StubTransport(json: #"{"events":[\#(adminEvent(id: "e1", slug: "party", kind: wire))],"truncated":false}"#)
         #expect(try await client(stub).adminEvents(token: hostToken).events.first?.kind == expected)
+    }
+
+    @Test func readsTheGuestLimit() async throws {
+        let stub = StubTransport(json: """
+        {"events":[\(adminEvent(id: "e1", slug: "a", kind: "test", guestCap: "15")),\(adminEvent(id: "e2", slug: "b", kind: "legacy", guestCap: "null"))],
+         "truncated":false}
+        """)
+        let events = try await client(stub).adminEvents(token: hostToken).events
+        #expect(events.map(\.guestCap) == [15, nil])
     }
 
     @Test func anEventKindThisBuildCantReadShowsAsLegacy() async throws {
