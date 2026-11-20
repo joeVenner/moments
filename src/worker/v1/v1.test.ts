@@ -8,6 +8,7 @@ import {
   AccessResponseSchema,
   ErrorSchema,
   EventSchema,
+  EventStatsSchema,
   FeedChangesSchema,
   FeedPageSchema,
   HighlightsSchema,
@@ -108,6 +109,15 @@ describe("GET /events/{slug}", () => {
     for (const secret of ["access_pin_hash", "access_pin_salt", "invite_token", "access_version"]) {
       expect(body.event).not.toHaveProperty(secret);
     }
+  });
+
+  it("counts the moments guests can see and the guests in the header stats", async () => {
+    addMoment("m1");
+    addMoment("m2");
+    sqlite.raw.prepare("UPDATE moments SET moderation_status = 'hidden' WHERE id = 'm2'").run();
+    sqlite.raw.prepare("INSERT INTO participants (id, event_id, nickname) VALUES ('g1', 'event-1', 'Sara')").run();
+    const body = (await (await call("/events/party")).json()) as { stats: unknown };
+    expect(exact(EventStatsSchema, body.stats)).toEqual({ moment_count: 1, guest_count: 1 });
   });
 
   it("returns a stable 404 for unknown events", async () => {

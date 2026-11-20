@@ -30,6 +30,7 @@ import {
   parseCursor,
   type FeedMoment,
 } from "../feed";
+import { getEventStats } from "../eventStats";
 import { getLeaderboard } from "../leaderboard";
 import { GUEST_TOKEN_HEADER, joinEventAsGuest, resolveGuestSession, toPublicParticipant } from "../guestIdentity";
 import { isJoinLimited, JOIN_RATE_LIMITED, JOIN_RETRY_AFTER_SECONDS } from "../joinLimit";
@@ -83,6 +84,7 @@ import {
   ErrorSchema,
   EventHeadersSchema,
   EventSchema,
+  EventStatsSchema,
   FeedChangesSchema,
   FeedPageSchema,
   FeedQuerySchema,
@@ -167,7 +169,16 @@ const getEventRoute = createRoute({
   tags: ["Guest"],
   request: { params: SlugParamSchema, headers: EventHeadersSchema },
   responses: {
-    200: json(z.object({ event: EventSchema }).openapi("EventResponse"), "The event"),
+    200: json(
+      z
+        .object({
+          event: EventSchema,
+          // Always sent; optional so a newer app still reads an older server.
+          stats: EventStatsSchema.optional(),
+        })
+        .openapi("EventResponse"),
+      "The event and its header counts",
+    ),
     ...commonErrors,
   },
 });
@@ -1091,8 +1102,11 @@ v1.openapi(getEventRoute, async (c) => {
   c.header("Cache-Control", "no-store");
   const event = c.get("event");
   const publicEvent = toPublicEvent(event);
-  const cover = await withGuestMediaGrant(c.env.EVENT_ACCESS_SECRET, event, publicEvent.cover_image_url);
-  return c.json({ event: { ...publicEvent, cover_image_url: cover } }, 200);
+  const [cover, stats] = await Promise.all([
+    withGuestMediaGrant(c.env.EVENT_ACCESS_SECRET, event, publicEvent.cover_image_url),
+    getEventStats(c.env.DB, event.id),
+  ]);
+  return c.json({ event: { ...publicEvent, cover_image_url: cover }, stats }, 200);
 });
 
 v1.openapi(getFeedRoute, async (c) => {

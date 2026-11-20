@@ -47,6 +47,13 @@ export const EventSchema = z
   })
   .openapi("Event");
 
+export const EventStatsSchema = z
+  .object({
+    moment_count: z.number().int().nonnegative().openapi({ description: "Moments guests can see (hidden ones are not counted)" }),
+    guest_count: z.number().int().nonnegative().openapi({ description: "Guests in the event now (those who left are not counted)" }),
+  })
+  .openapi("EventStats");
+
 export const ParticipantSchema = z
   .object({
     id: z.string(),
