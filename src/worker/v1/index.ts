@@ -35,6 +35,7 @@ import { GUEST_TOKEN_HEADER, joinEventAsGuest, resolveGuestSession, toPublicPart
 import { isJoinLimited, JOIN_RATE_LIMITED, JOIN_RETRY_AFTER_SECONDS } from "../joinLimit";
 import { leaveEvent, leaveStorage } from "../guestLeave";
 import { gateReaction, type ReactionState, setReaction, viewerReactorId } from "../reactions";
+import { reportMoment } from "../reports";
 import { signMomentsForEvent, STREAM_SIGNING_UNAVAILABLE, StreamSigningError } from "../streamSigning";
 import { withGuestMediaGrant, withGuestMediaGrants } from "../mediaAccess";
 import type { Env, EventRow } from "../types";
@@ -103,6 +104,7 @@ import {
   UploadSessionSchema,
   UploadStatusSchema,
   ReactionHeadersSchema,
+  ReportHeadersSchema,
   ViewerHeadersSchema,
   ReactionSchema,
   JoinRequestSchema,
@@ -279,6 +281,26 @@ const removeReactionRoute = createRoute({
     headers: ReactionHeadersSchema,
   },
   responses: reactionResponses,
+});
+
+const reportMomentRoute = createRoute({
+  method: "post",
+  path: "/events/{slug}/moments/{id}/report",
+  operationId: "reportMoment",
+  tags: ["Guest"],
+  summary: "Report a moment to the host (idempotent: one report per guest per moment)",
+  request: {
+    params: MomentParamSchema,
+    headers: ReportHeadersSchema,
+  },
+  responses: {
+    204: { description: "Reported (or already reported by this guest)" },
+    400: json(ErrorSchema, "`invalid_request`: a malformed moment id"),
+    403: json(ErrorSchema, "`guest_required`: join the event first: no X-Guest-Token was sent, or it is unknown (the guest left)"),
+    429: json(ErrorSchema, "`rate_limited`: too many reports from this device; slow down"),
+    ...commonErrors,
+    404: json(ErrorSchema, "No live event with this slug, or `moment_not_found` (unknown or hidden)"),
+  },
 });
 
 const uploadErrors = {
@@ -1203,6 +1225,26 @@ v1.openapi(addReactionRoute, async (c) => {
 v1.openapi(removeReactionRoute, async (c) => {
   const outcome = await applyReaction(c, c.req.valid("param").id, false);
   return outcome.ok ? c.json(outcome.state, 200) : c.json(outcome.body, outcome.status);
+});
+
+const REPORT_RATE_LIMITED = { error: "too many reports", code: "rate_limited" } as const;
+v1.openapi(reportMomentRoute, async (c) => {
+  const event = c.get("event");
+  // Reports belong to a joined guest: the token is required, as for hearts.
+  const session = await resolveGuestSession(c.env.DB, event.id, c.req.header(GUEST_TOKEN_HEADER));
+  if (!session) return c.json(GUEST_REQUIRED, 403);
+  // Shares the hearts limiter (same quota, its own key): reports are rarer
+  // than hearts, so a separate binding isn't worth it.
+  if (c.env.REACTION_LIMITER) {
+    const { success } = await c.env.REACTION_LIMITER.limit({ key: `${event.id}:report:guest:${session.sessionId}` });
+    if (!success) return c.json(REPORT_RATE_LIMITED, 429);
+  }
+  const isVisible = await reportMoment(c.env.DB, {
+    eventId: event.id,
+    momentId: c.req.valid("param").id,
+    participantId: session.participant.id,
+  });
+  return isVisible ? c.body(null, 204) : c.json(MOMENT_NOT_FOUND, 404);
 });
 
 // ---------------------------------------------------------------------------

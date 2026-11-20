@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- App API: a guest who joined can report a moment to the host (`POST /api/v1/events/{slug}/moments/{id}/report`). One report per guest per moment; hidden or unknown moments answer 404. Reports are kept in a new `moment_reports` table (migration 0027) and go with their moment, reporter and event.
 - iOS event screen: the Dates row now says both when uploads close (or closed) and when the event is deleted, e.g. "Uploads closed 9 Jun, 21:00 · deleted 15 Jul", in English and French.
 - Host API: each event in `GET /api/v1/admin/events` and its detail carries `guest_cap`, the guest limit the host is told (15 for a test event, the plan's tier for a main event, null for no limit). The iOS Hosting screen shows it as "Guests: 3 of 15" on event rows and "up to N guests" on the live card (English and French).
 - iOS guest app: in My events, an event whose host's plan has ended stays listed and reads "No longer hosted" (English and French).

@@ -227,6 +227,10 @@ export const ReactionHeadersSchema = EventHeadersSchema.extend({
   "x-guest-token": optionalHeader("This device's guest token (required: hearts belong to a joined guest)"),
 });
 
+export const ReportHeadersSchema = EventHeadersSchema.extend({
+  "x-guest-token": optionalHeader("This device's guest token (required: reports belong to a joined guest)"),
+});
+
 export const JoinHeadersSchema = EventHeadersSchema.extend({
   "x-guest-token": optionalHeader("This device's guest token, if it has one for this event"),
 });
