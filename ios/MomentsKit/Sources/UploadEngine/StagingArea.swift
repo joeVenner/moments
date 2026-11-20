@@ -30,7 +30,13 @@ public struct StagingArea: Sendable {
     /// and excluded from backup: it holds photo and video bytes.
     public static func appDefault(fileManager: FileManager = .default) throws -> StagingArea {
         let support = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        var root = support.appending(path: "UploadStaging", directoryHint: .isDirectory)
+        return try prepared(root: support.appending(path: "UploadStaging", directoryHint: .isDirectory), fileManager: fileManager)
+    }
+
+    /// A staging folder at `root`, created if needed, with the same
+    /// protection and backup exclusion as the app's.
+    public static func prepared(root: URL, fileManager: FileManager = .default) throws -> StagingArea {
+        var root = root
         let protection: [FileAttributeKey: Any] = [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
         try fileManager.createDirectory(at: root, withIntermediateDirectories: true, attributes: protection)
         // createDirectory skips attributes for an existing folder.

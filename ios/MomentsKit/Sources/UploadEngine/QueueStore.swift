@@ -225,7 +225,7 @@ public struct QueueStore: Sendable {
     /// Creates the folder if needed and (re)applies its protection class
     /// and backup exclusion, which `createDirectory` skips for an existing
     /// folder.
-    private func prepareDirectory() throws {
+    func prepareDirectory() throws {
         try createDirectory(directory)
         try FileManager.default.setAttributes(
             [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
