@@ -121,6 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Admin privacy controls warn that saving a new PIN signs every guest out and replaces the invitation link.
 
 ### Changed
+- iOS Hosting screen: the plan card loads at the same time as the events instead of after them.
 - The iOS app is now `com.moments-hq.moments` (tests `com.moments-hq.moments.tests`), signed by team 7877JLKPRQ by default; `Local.xcconfig` can still override both.
 - `/api/v1` is token-only: hearts always need the guest token, reads report only that guest's hearts, `reactor_id` is gone, and joins always protect claimed names. The iOS app no longer keeps a reactor secret.
 - Native feed responses report `reacted` as a boolean. The web moment list is unchanged.
