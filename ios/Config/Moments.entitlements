@@ -8,10 +8,13 @@
 		<string>applinks:www.moments-hq.com</string>
 		<string>appclips:moments-hq.com</string>
 	</array>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.$(MOMENTS_BUNDLE_ID_PREFIX).moments</string>
+	</array>
 	<key>keychain-access-groups</key>
 	<array>
 		<string>$(AppIdentifierPrefix)$(MOMENTS_BUNDLE_ID_PREFIX).moments</string>
-		<string>$(AppIdentifierPrefix)$(MOMENTS_BUNDLE_ID_PREFIX).moments.shared</string>
 	</array>
 </dict>
 </plist>

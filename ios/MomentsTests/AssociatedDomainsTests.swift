@@ -35,19 +35,25 @@ import Testing
         #expect(claimed.count == expected.count)
     }
 
-    private func keychainGroups(_ file: String) throws -> [String] {
-        let entitlements = try #require(
-            PropertyListSerialization.propertyList(from: source(file), format: nil) as? [String: Any]
-        )
-        return try #require(entitlements["keychain-access-groups"] as? [String])
+    private func entitlements(_ file: String) throws -> [String: Any] {
+        try #require(PropertyListSerialization.propertyList(from: source(file), format: nil) as? [String: Any])
     }
 
-    @Test func onlyTheSharedKeychainGroupReachesTheClip() throws {
-        let own = "$(AppIdentifierPrefix)$(MOMENTS_BUNDLE_ID_PREFIX).moments"
-        // The app's own group first: items saved without a group (host
-        // sessions) land there, out of the Clip's reach.
-        #expect(try keychainGroups("Config/Moments.entitlements") == [own, own + ".shared"])
-        #expect(try keychainGroups("Config/MomentsClip.entitlements") == [own + ".shared"])
+    @Test func theAppKeepsItsKeychainGroupAndSharesOnlyAnAppGroupWithTheClip() throws {
+        let app = try entitlements("Config/Moments.entitlements")
+        let clip = try entitlements("Config/MomentsClip.entitlements")
+        // One keychain group, the app's: items saved without a group (host
+        // sessions) land there. An App Clip can't hold keychain groups at all
+        // (the system refuses to install it).
+        #expect(app["keychain-access-groups"] as? [String] == ["$(AppIdentifierPrefix)$(MOMENTS_BUNDLE_ID_PREFIX).moments"])
+        #expect(clip["keychain-access-groups"] == nil)
+        // The handover container, the same group on both, named in the app's
+        // Info.plist for the store.
+        let group = "group.$(MOMENTS_BUNDLE_ID_PREFIX).moments"
+        #expect(app["com.apple.security.application-groups"] as? [String] == [group])
+        #expect(clip["com.apple.security.application-groups"] as? [String] == [group])
+        let info = try #require(PropertyListSerialization.propertyList(from: source("Config/Moments-Info.plist"), format: nil) as? [String: Any])
+        #expect(info["MomentsAppGroup"] as? String == group)
     }
 
     @Test func bothAppConfigurationsSignWithTheEntitlements() throws {

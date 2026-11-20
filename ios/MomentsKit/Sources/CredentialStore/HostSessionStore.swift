@@ -47,9 +47,8 @@ public final class InMemoryHostSessionStore: HostSessionStore, @unchecked Sendab
 ///   foreground, so the token is unreadable while the phone is locked, and it
 ///   never goes into a backup restorable on another device.
 /// - Never synchronised to iCloud Keychain. The app passes its own access
-///   group: without one, reads and updates also search the group shared with
-///   the App Clip, so a token there could be loaded, or the real one written
-///   into it.
+///   group, so reads and updates never search any other group it may be
+///   entitled to.
 public final class KeychainHostSessionStore: HostSessionStore, @unchecked Sendable {
     // @unchecked: immutable configuration plus `lock`; SecItem calls are thread-safe.
     public static let defaultService = "moments.host-session"

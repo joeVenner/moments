@@ -1,15 +1,18 @@
 import Foundation
 import MomentsDomain
 
-/// The App Clip keeps a guest's credentials in a keychain group it shares
-/// with the app; the app keeps its own in a group the Clip can't read (host
-/// sessions live there too). On launch, after the fresh-install reset, the
-/// app moves what the Clip left into its own store, so a guest who joined
-/// in the Clip keeps their nickname, uploads and points in the app.
+/// The App Clip keeps a guest's credentials in the App Group container it
+/// shares with the app (`FileEventCredentialStore`: an App Clip can't share
+/// keychain groups); the app keeps its own in its keychain group, which the
+/// Clip can't read (host sessions live there too). On launch, after the
+/// fresh-install reset, the app moves what the Clip left into its own
+/// store, so a guest who joined in the Clip keeps their nickname, uploads
+/// and points in the app.
 public enum CredentialHandoff {
-    /// How long a Clip entry waits for the app. iOS keeps keychain items
-    /// after the Clip and app are deleted, so on a phone that changed hands an
-    /// old entry would otherwise make the next owner that guest.
+    /// How long a Clip entry waits for the app. The container outlives a
+    /// visit (as long as the Clip or the app stays installed), so on a phone
+    /// that changed hands an old entry would otherwise make the next owner
+    /// that guest.
     public static let handoffWindow: TimeInterval = 7 * 24 * 60 * 60
 
     /// A stamp this far ahead of `now` still counts (a clock set back).
