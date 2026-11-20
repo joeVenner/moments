@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `npm run ios:clip:size`: builds the App Clip for Release, strips it like an App Store build and fails if it's over the 15 MB limit for Clips opened from a QR code (`CLIP_SIZE_LIMIT_MB` sets a tighter budget).
 - iOS App Clip: scanning an event's QR code opens the join screen (name, face, and the event's code when it's private). The guest is then welcomed and offered the full app, and is handed over to it so installing keeps them. If the handover can't be saved (a locked phone, a damaged file), the guest still joins in the Clip. The Clip ships its own privacy manifest and French strings.
 - iOS: the App Clip's credential store refreshes the handover time on every change it saves, so the 7-day window counts from the guest's last change in the Clip.
 - iOS: the app only takes over a guest identity the App Clip handed over in the last 7 days (with its event, and without an expired private-event grant); older or unstamped handovers are deleted unread, so a phone that changed hands never inherits an earlier guest.
