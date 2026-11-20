@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS app: uploads left behind by an App Clip guest who left are never sent as someone who joined the event later.
 - iOS app: Download everything keeps going past the 1-2 hour life of its signed links by reloading them.
 - iOS app: VoiceOver announces when uploads start, finish, or fail on an event's screen, as in the App Clip.
 - iOS App Clip: VoiceOver announces when photos start sending, are sent, or couldn't be sent.

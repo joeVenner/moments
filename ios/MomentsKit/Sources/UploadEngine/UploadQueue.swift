@@ -150,6 +150,17 @@ public actor UploadQueue {
         return loaded
     }
 
+    /// `enqueue`, marked with the guest who queued it (`QueuedUpload.owner`),
+    /// so it can't later be sent as someone else.
+    public func enqueueOwned(_ item: QueuedUpload) async throws {
+        let token: String? = if case let .found(credentials) = await lookUpCredentials(item.eventSlug) {
+            credentials.guestToken
+        } else {
+            nil
+        }
+        try enqueue(item.owned(byGuestToken: token))
+    }
+
     /// Adds a prepared upload. Its staged file must exist as recorded, in
     /// the item's own staging folder.
     public func enqueue(_ item: QueuedUpload) throws {

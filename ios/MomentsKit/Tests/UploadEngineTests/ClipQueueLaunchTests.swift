@@ -57,6 +57,37 @@ import Testing
         #expect(!stagedExists(app, stranger.id))
     }
 
+    /// Security audit: an item queued by a guest who left (or was
+    /// replaced) is never sent as the guest holding the event now, even
+    /// while it's recent; the guest's own items and older unmarked ones are.
+    @Test func adoptsOnlyItemsOfTheGuestHoldingTheEventNow() async throws {
+        let mine = try leave(for: "party", createdAt: Self.now).owned(byGuestToken: "gt-now")
+        let theirs = try leave(for: "party", createdAt: Self.now).owned(byGuestToken: "gt-left")
+        let unmarked = try leave(for: "party", createdAt: Self.now)
+        try clip.store.save(mine)
+        try clip.store.save(theirs)
+        let adoption = await UploadLaunch.adoptClipQueue(
+            answering(["party": .found(EventCredentials(guestToken: "gt-now"))]), into: app.store, staging: app.staging
+        )
+        #expect(adoption == .init(moved: .init(adopted: 2), dropped: 1))
+        #expect(Set(try app.store.recordIDs()) == [mine.id, unmarked.id])
+        #expect(try clip.store.recordIDs().isEmpty)
+        #expect(!stagedExists(clip, theirs.id))
+        #expect(!stagedExists(app, theirs.id))
+    }
+
+    /// Security audit: a marked item isn't adopted for a guest with no
+    /// token (who can't be the one who queued it).
+    @Test func aMarkedItemNeedsTheSameGuest() async throws {
+        let marked = try leave(for: "party", createdAt: Self.now).owned(byGuestToken: "gt-left")
+        try clip.store.save(marked)
+        let adoption = await UploadLaunch.adoptClipQueue(
+            answering(["party": .found(EventCredentials(accessGrant: "grant"))]), into: app.store, staging: app.staging
+        )
+        #expect(adoption == .init(moved: .init(), dropped: 1))
+        #expect(try app.store.recordIDs().isEmpty)
+    }
+
     @Test func leavesWhatItCantCheckNow() async throws {
         let item = try leave(for: "party")
         let adoption = await UploadLaunch.adoptClipQueue(answering(["party": .unavailable]), into: app.store, staging: app.staging)

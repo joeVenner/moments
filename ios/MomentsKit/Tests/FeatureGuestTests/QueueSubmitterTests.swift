@@ -14,6 +14,15 @@ struct QueueSubmitterTests {
         return QueuedUpload(id: id, eventSlug: "party", file: file, caption: nil, createdAt: Date(timeIntervalSince1970: 0))
     }
 
+    /// The app and the App Clip both queue through here: every item is
+    /// marked with the guest who queued it (`UploadQueue.enqueueOwned`).
+    @Test func theRealQueueMarksWhoQueuedEachItem() throws {
+        let file = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "Sources/FeatureGuest/QueueSubmitter.swift")
+        let source = try String(contentsOf: file, encoding: .utf8)
+        #expect(source.contains("enqueue = { try await queue.enqueueOwned($0) }"))
+    }
+
     @Test func acceptsWhatTheQueueTakes() async throws {
         let submitter = QueueSubmitter { _ in }
         #expect(await submitter.submit(try Self.upload()) == .accepted)
