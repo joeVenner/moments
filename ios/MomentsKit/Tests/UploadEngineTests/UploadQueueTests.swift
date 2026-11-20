@@ -814,3 +814,59 @@ private let thumbnailBytes = Data([0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3, 0xFF, 0xD9])
         guard case .uploadParts = item.nextAction(now: now) else { Issue.record("expected the parts"); return }
     }
 }
+
+@Suite struct UploadQueueResumeTests {
+    @Test func comingBackTriesAnOfflineUploadAtOnce() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue()
+        let item = try harness.stage("a.jpg")
+        try await queue.enqueue(item)
+        harness.server.failNext = [.transport(.networkConnectionLost)]
+        await queue.step(id: item.id) // the Clip was suspended mid-request
+        #expect(await queue.snapshot().first?.retryAt ?? .distantPast > harness.clock.now)
+        await queue.resume()
+        #expect(await queue.snapshot().first?.retryAt == harness.clock.now)
+        // Saved too, so a relaunch doesn't wait either.
+        #expect(try await harness.unloadedQueueLoadingRetryAt(of: item.id) == harness.clock.now)
+        await queue.step(id: item.id)
+        #expect(harness.server.calls == ["start", "start"])
+    }
+
+    @Test func aRequestCutOffBeforeComingBackStillGoesSoon() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue()
+        let item = try harness.stage("a.jpg")
+        try await queue.enqueue(item)
+        // Back in front first; the cut-off request fails just after.
+        await queue.resume()
+        harness.clock.advance(1)
+        harness.server.failNext = [.transport(.networkConnectionLost)]
+        await queue.step(id: item.id)
+        #expect(await queue.snapshot().first?.retryAt == harness.clock.now.addingTimeInterval(UploadQueue.resumedRetry))
+        // Later, a lost network waits the usual time again.
+        harness.clock.advance(UploadQueue.resumeWindow)
+        harness.server.failNext = [.transport(.networkConnectionLost)]
+        await queue.step(id: item.id)
+        #expect(await queue.snapshot().first?.retryAt == harness.clock.now.addingTimeInterval(QueuedUpload.offlineWait))
+    }
+
+    @Test func comingBackLeavesARealFailuresWait() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue()
+        let item = try harness.stage("a.jpg")
+        try await queue.enqueue(item)
+        harness.server.failNext = [.rateLimited]
+        await queue.step(id: item.id)
+        let wait = await queue.snapshot().first?.retryAt
+        await queue.resume()
+        #expect(await queue.snapshot().first?.retryAt == wait)
+    }
+}
+
+private extension Harness {
+    func unloadedQueueLoadingRetryAt(of id: UUID) async throws -> Date? {
+        let queue = unloadedQueue()
+        try await queue.load()
+        return await queue.snapshot().first { $0.id == id }?.retryAt
+    }
+}
