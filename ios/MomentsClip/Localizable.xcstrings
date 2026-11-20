@@ -2007,6 +2007,16 @@
         }
       }
     },
+    "You've left this event.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous avez quitté cet événement."
+          }
+        }
+      }
+    },
     "Your access to this event has expired. Enter the event PIN again.": {
       "extractionState": "manual",
       "localizations": {

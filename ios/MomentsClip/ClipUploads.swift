@@ -17,6 +17,7 @@ enum ClipUploads {
         let staging: StagingArea
         let submitter: QueueSubmitter
         let progress: UploadQueue
+        let leaving: LeavingUploads
     }
 
     /// Nil (sharing hidden) if the folders can't be set up.
@@ -72,6 +73,13 @@ enum ClipUploads {
             guard await launch.value else { return }
             await queue.run()
         }
-        return Parts(staging: staging, submitter: QueueSubmitter(queue: queue, isReady: { await launch.value }), progress: queue)
+        return Parts(
+            staging: staging, submitter: QueueSubmitter(queue: queue, isReady: { await launch.value }), progress: queue,
+            // As the app: a queue that didn't load holds nothing to remove.
+            leaving: LeavingUploads(
+                begin: { slug in if await launch.value { await queue.beginLeaving(eventSlug: slug) } },
+                end: { slug in await queue.endLeaving(eventSlug: slug) }
+            )
+        )
     }
 }
