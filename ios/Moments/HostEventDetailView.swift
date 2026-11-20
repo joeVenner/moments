@@ -20,6 +20,8 @@ struct HostEventDetailView: View {
     @State private var isConfirmingInviteCopy = false
     @State private var didCopyInvite = false
     @State private var editing: HostEventEdit?
+    /// The first appearance loads through `.task`; later ones reload.
+    @State private var hasAppeared = false
 
     init(summary: AdminEvent, host: HomeView.Host) {
         self.init(summary: summary, host: host, model: HostEventDetailModel(eventID: summary.id, service: host.service, account: host.account))
@@ -42,6 +44,11 @@ struct HostEventDetailView: View {
         .background(MomentsColor.background.ignoresSafeArea())
         .navigationBarHiddenKeepingSwipeBack()
         .task { await model.load() }
+        // Back from moderation: the "to review" count may have changed.
+        .onAppear {
+            if hasAppeared { Task { await model.load() } }
+            hasAppeared = true
+        }
         // The "copied" label is a moment's confirmation, not a lasting state.
         .task(id: didCopyInvite) {
             guard didCopyInvite else { return }
@@ -119,12 +126,16 @@ struct HostEventDetailView: View {
     }
 
     private var event: Event { model.detail?.summary.event ?? summary.event }
+    private var toReviewCount: Int { model.detail?.summary.toReviewCount ?? summary.toReviewCount }
 
     /// Everything the host can change, one row each, in one card.
     private var manageRows: some View {
         VStack(spacing: 0) {
             NavigationLink(value: HostModerationRoute(eventID: event.id, title: event.title)) {
-                HostManageRow(title: "Moderate moments", detail: String(localized: "Hide or delete what shouldn't stay"), systemImage: "square.grid.3x3")
+                HostManageRow(
+                    title: "Moderate moments", detail: String(localized: "Hide or delete what shouldn't stay"),
+                    systemImage: "square.grid.3x3", badge: toReviewCount
+                )
             }
             rowDivider
             Button { editing = .privacy } label: {
@@ -253,7 +264,14 @@ struct HostManageRow: View {
     let title: LocalizedStringKey
     let detail: String
     let systemImage: String
+    /// Moments waiting for the host; shown only above zero.
+    var badge = 0
     @Environment(\.dynamicTypeSize) private var typeSize
+
+    /// What VoiceOver reads for the badge: the number alone says nothing.
+    static func badgeLabel(_ count: Int) -> String? {
+        count > 0 ? String(localized: "\(count) to review") : nil
+    }
 
     var body: some View {
         HStack(spacing: Spacing.sm) {
@@ -275,6 +293,17 @@ struct HostManageRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            if let label = Self.badgeLabel(badge) {
+                Text(badge, format: .number)
+                    .font(MomentsFont.caption().weight(.semibold))
+                    .foregroundStyle(MomentsColor.background)
+                    .padding(.horizontal, Spacing.xs)
+                    .frame(minWidth: 24, minHeight: 24)
+                    .background(MomentsColor.accent, in: Capsule())
+                    // Never squeezed or wrapped by a long title at large sizes.
+                    .fixedSize()
+                    .accessibilityLabel(Text(label))
+            }
             Image(systemName: "chevron.forward")
                 .foregroundStyle(MomentsColor.textMuted)
                 .accessibilityHidden(true)

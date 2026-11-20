@@ -17,11 +17,18 @@ struct HostEventsView: View {
     @State private var isConfirmingSignOut = false
     @State private var isCreatingEvent = false
     @State private var path = NavigationPath()
+    /// The first appearance loads through `.task`; later ones reload.
+    @State private var hasAppeared = false
 
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView { list }
                 .refreshable { await model.load() }
+                // Back from an event: its counts may have changed.
+                .onAppear {
+                    if hasAppeared { Task { await model.load() } }
+                    hasAppeared = true
+                }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(MomentsColor.background.ignoresSafeArea())
             .navigationBarHiddenKeepingSwipeBack()
