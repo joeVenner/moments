@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Host routes on events a plan pays for follow the host's plan: editing, changing access or dates needs a plan that allows editing; hiding or deleting moments needs moderation (still allowed while a payment is retried); reading the event and its moments works until the read-only window after a lapse ends. Otherwise the app API answers `plan_required` (402). The operator and events from before plans are unaffected.
 - Videos of events a host's plan pays for always play through signed, short-lived Stream URLs (when signing is configured), public or private, so playback stops with the plan like photos do. Switching such an event to public keeps its videos signed.
 - Guests stop seeing an event once its plan no longer covers it: the event, its feed, highlights and media answer "This event is no longer hosted." (`event_not_hosted`, 410) on the web and in the app API, and the web page says so (EN/FR). Guests can still leave and delete what they shared. Events from before plans and the operator's are unchanged.
 - Guest sharing follows the host's plan: a plan event takes new uploads only while its plan pays for sharing (`uploads_closed`, 403, on the web and in the app API otherwise), and only from guests who joined it. Events from before plans and the operator's are unchanged.
