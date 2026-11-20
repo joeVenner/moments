@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS: a keychain group shared with the App Clip. The app keeps guest credentials and host sessions in its own group, and each launch moves a guest identity the Clip left in the shared group into the app (so joining in the Clip, then installing the app, keeps the guest). The Clip doesn't write it yet.
 - iOS: event links on moments-hq.com and www.moments-hq.com open the app (Associated Domains: `applinks` for both hosts, `appclips:moments-hq.com`), once the app is registered and the AASA is live.
 - iOS: App Clip target (`com.moments-hq.moments.Clip`), embedded in the app: opened from an event link it shows the event and offers the full app; 916 KB in Release (limit 15 MB). Own privacy manifest (nothing collected) and EN/FR strings. Joining and sharing from the Clip come next.
 - iOS: App Store privacy manifest (`PrivacyInfo.xcprivacy`): no tracking; photos/videos, other user content and user ID collected for app functionality only; required-reason APIs UserDefaults (CA92.1), file timestamps (C617.1), disk space (E174.1), boot time (35F9.1).
@@ -178,6 +179,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Abandoned multipart uploads are now cancelled in R2, so their parts stop costing storage. A daily job sweeps sessions still open after 7 days, or 30 minutes after an event's uploads close (up to 40 per run). Deleting an event (the daily purge or "archive now") now cancels its unfinished uploads before removing their records, which used to leave billed parts behind.
 
 ### Security
+- iOS: host session tokens are pinned to the app's own keychain group, so they can never be read from or written to the group shared with the App Clip.
 - A host session without a user account is now refused instead of being treated as the operator's; a host with such an old session signs in again.
 - Admin logins (the web dashboard's Basic auth and the app's sign-in) share a lockout counted before the password is checked: 10 failures from one client or 100 in all within 15 minutes refuse every login, right or wrong. Before, a limited client could still tell a right guess from a wrong one. Passwords are now compared in constant time. Migration `0022_admin_login_failures`.
 - Media links tell browsers never to sniff or run the files they serve.
