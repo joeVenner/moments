@@ -1,6 +1,6 @@
 import { hashEventPin, MAX_PIN_LENGTH, MIN_PIN_LENGTH, randomAccessToken } from "./eventAccess";
 import { isStreamConfigured } from "./stream";
-import { isStreamSigningConfigured, syncStreamSigning } from "./streamSigning";
+import { isStreamSigningConfigured, needsSignedStream, syncStreamSigning } from "./streamSigning";
 import { normalizeDate } from "./eventWrites";
 import type { Env, EventRow } from "./types";
 
@@ -66,12 +66,14 @@ export async function updateEventAccess(
     .bind(change.mode, hash, salt, inviteToken, accessVersionBump, event.id)
     .run();
   // Re-apply requireSignedURLs to the event's existing Stream videos: on every
-  // private save (backfills older uploads) and when going public.
+  // save that needs signing (backfills older uploads) and when going public.
+  // A plan event stays signed whatever its mode.
   const isModeChange = event.access_mode !== change.mode;
-  if (isStreamConfigured(env) && isStreamSigningConfigured(env) && (change.mode === "private" || isModeChange)) {
+  const requireSigned = needsSignedStream({ access_mode: change.mode, kind: event.kind });
+  if (isStreamConfigured(env) && isStreamSigningConfigured(env) && (requireSigned || isModeChange)) {
     // Per-video failures are logged inside; this catches the sync failing outright.
     waitUntil(
-      syncStreamSigning(env, event.id, change.mode === "private").catch((error: unknown) => {
+      syncStreamSigning(env, event.id, requireSigned).catch((error: unknown) => {
         console.error(
           JSON.stringify({
             scope: "stream",
