@@ -1000,6 +1000,17 @@
         }
       }
     },
+    "Event flyer": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affiche de l'événement"
+          }
+        }
+      }
+    },
     "Event link": {
       "localizations": {
         "fr": {
@@ -2048,6 +2059,17 @@
         }
       }
     },
+    "Print flyer": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imprimer l'affiche"
+          }
+        }
+      }
+    },
     "Privacy": {
       "localizations": {
         "fr": {
@@ -2075,6 +2097,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Événement privé"
+          }
+        }
+      }
+    },
+    "Private event: ask the host for the PIN.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Événement privé : demandez le code de l'événement à l'organisateur."
           }
         }
       }
@@ -2357,6 +2390,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scannez pour rejoindre"
+          }
+        }
+      }
+    },
+    "Scan to share your photos and videos": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scannez pour partager vos photos et vidéos"
           }
         }
       }

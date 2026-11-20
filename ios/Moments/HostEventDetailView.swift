@@ -204,6 +204,15 @@ struct HostEventDetailView: View {
                 Label("Share the event link", systemImage: "square.and.arrow.up")
             }
             .buttonStyle(.momentsPrimary)
+            // Print is in the share sheet; the flyer carries the plain link,
+            // never the invite (it may hang on a wall).
+            ShareLink(
+                item: EventFlyer(event: event, url: share.eventURL),
+                preview: SharePreview(Text("Event flyer"))
+            ) {
+                Label("Print flyer", systemImage: "printer")
+            }
+            .buttonStyle(.momentsSecondary)
             if share.inviteURL != nil {
                 Button { isConfirmingInviteCopy = true } label: {
                     Label(didCopyInvite ? "Invite link copied" : "Copy invite link", systemImage: "key")
