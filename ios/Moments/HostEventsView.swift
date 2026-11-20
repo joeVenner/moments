@@ -329,11 +329,18 @@ struct HostEventChips: View {
         let isTest = item.kind == .test
         let isPrivate = item.event.accessMode == .private
         if isTest || isPrivate {
-            HStack(spacing: Spacing.xxs) {
-                if isTest { HostTestChip() }
-                if isPrivate { HostPrivateChip() }
+            // Side by side when they fit; stacked on a narrow card or at
+            // large text, so neither chip is clipped.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Spacing.xxs) { chips(isTest: isTest, isPrivate: isPrivate) }
+                VStack(alignment: .leading, spacing: Spacing.xxs) { chips(isTest: isTest, isPrivate: isPrivate) }
             }
         }
+    }
+
+    @ViewBuilder private func chips(isTest: Bool, isPrivate: Bool) -> some View {
+        if isTest { HostTestChip() }
+        if isPrivate { HostPrivateChip() }
     }
 }
 
