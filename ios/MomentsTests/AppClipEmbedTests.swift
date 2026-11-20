@@ -97,4 +97,21 @@ import Testing
             #expect(!source.contains(".appDefault("), "\(file.lastPathComponent)")
         }
     }
+
+    /// The app takes the Clip's queue over only once the Clip's guests are
+    /// imported (otherwise every Clip upload would look like a stranger's),
+    /// and keeps strangers for the handover window.
+    @Test func theAppTakesOverTheClipsQueueOnlyAfterItsGuests() throws {
+        let file = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "Moments/AppEnvironment.swift")
+        let source = try String(contentsOf: file, encoding: .utf8)
+        let preparation = try #require(source.range(of: "credentialPreparation = RetryUntilDone"))
+        let ready = try #require(source.range(of: "let credentialsReady = credentialsArePrepared(credentialPreparation)"))
+        #expect(preparation.upperBound < ready.lowerBound)
+        #expect(source.contains("adoptingClipQueue: credentialsReady"))
+        #expect(source.contains("let clipQueue = adoptingClipQueue"))
+        #expect(source.contains("flatMap(UploadFolders.existing(at:))"))
+        #expect(source.contains("adopting: clipQueue)"))
+        #expect(source.contains("strangersKeptFor: CredentialHandoff.handoffWindow"))
+    }
 }
