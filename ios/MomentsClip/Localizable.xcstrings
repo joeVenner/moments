@@ -1536,6 +1536,17 @@
         }
       }
     },
+    "This event has stopped taking photos.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet événement ne reçoit plus de photos."
+          }
+        }
+      }
+    },
     "This event is full: it has as many guests as its host's plan allows.": {
       "extractionState": "manual",
       "localizations": {

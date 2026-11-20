@@ -74,8 +74,8 @@ struct ClipRootView: View {
     var body: some View {
         Group {
             if let join {
-                if case let .joined(_, participant) = join.phase {
-                    joined(as: participant.nickname, slug: join.slug)
+                if case let .joined(event, participant) = join.phase {
+                    joined(as: participant.nickname, event: event, slug: join.slug)
                 } else {
                     JoinView(model: join)
                 }
@@ -163,7 +163,7 @@ struct ClipRootView: View {
         .padding(Spacing.lg)
     }
 
-    private func joined(as nickname: String, slug: EventSlug) -> some View {
+    private func joined(as nickname: String, event: Event, slug: EventSlug) -> some View {
         VStack(spacing: Spacing.lg) {
             Spacer()
             Text("You're in, \(nickname).")
@@ -171,7 +171,15 @@ struct ClipRootView: View {
                 .foregroundStyle(MomentsColor.text)
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
-            if let uploads = Self.uploads {
+            if !event.acceptsUploads {
+                // As loaded on joining; if it closes later, the upload
+                // list says so for anything still sending.
+                Text("This event has stopped taking photos.")
+                    .font(MomentsFont.body())
+                    .foregroundStyle(MomentsColor.textMuted)
+                    .multilineTextAlignment(.center)
+                if let progress { uploadsButton(progress) }
+            } else if let uploads = Self.uploads {
                 Text("Keep this open until your photos are sent.")
                     .font(MomentsFont.body())
                     .foregroundStyle(MomentsColor.textMuted)
