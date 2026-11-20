@@ -12,7 +12,7 @@ private func item(
         startsAt: startsIn.map { now.addingTimeInterval($0) },
         archivedAt: isArchived ? now.addingTimeInterval(-60) : nil, areUploadsOpen: isOpen
     )
-    return AdminEvent(event: event, momentCount: 0, participantCount: 0)
+    return AdminEvent(event: event, kind: .main, momentCount: 0, participantCount: 0)
 }
 
 @Suite struct HostEventGroupsTests {

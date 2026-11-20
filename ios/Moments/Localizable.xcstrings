@@ -2558,6 +2558,28 @@
         }
       }
     },
+    "TEST": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TEST"
+          }
+        }
+      }
+    },
+    "Test event": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Événement test"
+          }
+        }
+      }
+    },
     "That PIN or invitation is not valid.": {
       "extractionState": "manual",
       "localizations": {

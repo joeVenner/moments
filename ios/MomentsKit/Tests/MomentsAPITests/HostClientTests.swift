@@ -12,12 +12,14 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
     try MomentsClient(baseURL: base, identity: identity, transport: transport)
 }
 
-private func adminEvent(id: String, slug: String, accessMode: String = "public", moments: Int = 3, guests: Int = 2) -> String {
+private func adminEvent(
+    id: String, slug: String, accessMode: String = "public", kind: String = "main", moments: Int = 3, guests: Int = 2
+) -> String {
     """
     {"id":"\(id)","slug":"\(slug)","title":"Party","type":"Party","main_characters":null,"description":null,
      "cover_image_url":null,"created_at":"2026-11-17 18:30:00","starts_at":null,"expires_at":null,
      "uploads_close_at":null,"purge_after":null,"archived_at":null,"access_mode":"\(accessMode)",
-     "uploads_open":true,"kind":"main","moment_count":\(moments),"participant_count":\(guests)}
+     "uploads_open":true,"kind":"\(kind)","moment_count":\(moments),"participant_count":\(guests)}
     """
 }
 
@@ -121,6 +123,20 @@ private func adminMoment(id: String = "m1", status: String = "approved", kind: S
     func aPlanThisBuildCantReadIsAnError(_ state: String, _ readonlyUntil: String) async throws {
         let stub = StubTransport(json: planJSON(state: state, readonlyUntil: readonlyUntil))
         await #expect(throws: MomentsAPIError.unexpectedResponse) { _ = try await client(stub).hostPlan(token: hostToken) }
+    }
+
+    @Test(arguments: [("legacy", AdminEvent.Kind.legacy), ("operator", .operatorOwned), ("main", .main), ("test", .test)])
+    func readsTheEventKind(_ wire: String, _ expected: AdminEvent.Kind) async throws {
+        let stub = StubTransport(json: #"{"events":[\#(adminEvent(id: "e1", slug: "party", kind: wire))],"truncated":false}"#)
+        #expect(try await client(stub).adminEvents(token: hostToken).events.first?.kind == expected)
+    }
+
+    @Test func anEventKindThisBuildCantReadShowsAsLegacy() async throws {
+        let stub = StubTransport(json: """
+        {"events":[\(adminEvent(id: "e1", slug: "party", kind: "trial")),\(adminEvent(id: "e2", slug: "odd"))],"truncated":false}
+        """)
+        let events = try await client(stub).adminEvents(token: hostToken).events
+        #expect(events.map(\.id) == ["e1", "e2"] && events.first?.kind == .legacy)
     }
 
     @Test func aDeadSessionIsHostAuthRequiredNotEventAccess() async throws {
