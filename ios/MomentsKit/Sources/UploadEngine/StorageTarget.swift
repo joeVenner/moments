@@ -23,6 +23,15 @@ public struct StorageHostPolicy: Sendable {
         return StorageHostPolicy(domains: ["\(id).r2.cloudflarestorage.com"])
     }
 
+    /// Moments' own R2 account, the only storage the app and the App Clip
+    /// send to; one definition so the two can't drift apart.
+    public static let moments: StorageHostPolicy = {
+        guard let policy = r2Account("30062218f6ae591808563f1afd8c479a") else {
+            fatalError("the storage account id must be a valid R2 account id")
+        }
+        return policy
+    }()
+
     func allows(_ host: String) -> Bool {
         domains.contains { host == $0 || host.hasSuffix("." + $0) }
     }

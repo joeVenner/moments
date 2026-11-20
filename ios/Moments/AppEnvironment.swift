@@ -137,17 +137,13 @@ struct AppEnvironment {
 
     /// The background URLSession's identifier; one per app, never reused.
     static let uploadSessionIdentifier = "com.moments-hq.moments.uploads"
-    /// Our R2 account: the only storage host part URLs may name.
-    static let storageAccountID = "30062218f6ae591808563f1afd8c479a"
 
     /// Builds the upload queue on the app's one background session, then
     /// loads it, sweeps prepared files nothing owns, and runs it for the
     /// app's life. Nil (uploads hidden) if the folders can't be set up.
     private static func startUploads(client: MomentsClient, credentials: any EventCredentialStore) -> UploadDependencies? {
         let log = Logger(subsystem: "moments", category: "uploads")
-        guard let hosts = StorageHostPolicy.r2Account(storageAccountID) else {
-            fatalError("the storage account id must be a valid R2 account id")
-        }
+        let hosts = StorageHostPolicy.moments
         let staging: StagingArea
         let store: QueueStore
         do {
