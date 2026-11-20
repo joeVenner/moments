@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS: App Clip target (`com.moments-hq.moments.Clip`), embedded in the app: opened from an event link it shows the event and offers the full app; 916 KB in Release (limit 15 MB). Own privacy manifest (nothing collected) and EN/FR strings. Joining and sharing from the Clip come next.
 - iOS: App Store privacy manifest (`PrivacyInfo.xcprivacy`): no tracking; photos/videos, other user content and user ID collected for app functionality only; required-reason APIs UserDefaults (CA92.1), file timestamps (C617.1), disk space (E174.1), boot time (35F9.1).
 - iOS: guests can mute another guest from a moment's Report dialog ("Mute <name>"); that guest's moments leave the feed and highlights on this phone when the viewer closes. "Muted guests" in the event menu lists them with Unmute. Stored per event (capped at 200), forgotten on leave; the server isn't told.
 - App API: guest feed, changes and highlights moments carry an optional `uploader_id` (the sharer's participant id; null for older moments), so the app can let a guest mute another guest.
