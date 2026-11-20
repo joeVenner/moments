@@ -22,8 +22,13 @@ public struct StoredEventCredentials: Sendable, Hashable, Codable, CustomStringC
     /// device. Not secrets; optional so older entries still decode.
     public var reportedMomentIDs: [String]?
 
+    /// Guests whose moments this guest chose not to see on this device.
+    /// Not secrets; optional so older entries still decode.
+    public var mutedParticipantIDs: [String]?
+
     /// Enough for any one guest; the oldest are forgotten past it.
     public static let reportedMomentLimit = 200
+    public static let mutedParticipantLimit = 200
 
     public init(
         eventID: String? = nil, accessGrant: String? = nil, accessGrantExpiresAt: Date? = nil,
@@ -46,6 +51,21 @@ public struct StoredEventCredentials: Sendable, Hashable, Codable, CustomStringC
         ids.append(momentID)
         if ids.count > Self.reportedMomentLimit { ids.removeFirst(ids.count - Self.reportedMomentLimit) }
         reportedMomentIDs = ids
+    }
+
+    /// Mutes a guest (once), keeping at most `mutedParticipantLimit`.
+    public mutating func mute(participantID: String) {
+        var ids = mutedParticipantIDs ?? []
+        guard !ids.contains(participantID) else { return }
+        ids.append(participantID)
+        if ids.count > Self.mutedParticipantLimit { ids.removeFirst(ids.count - Self.mutedParticipantLimit) }
+        mutedParticipantIDs = ids
+    }
+
+    public mutating func unmute(participantID: String) {
+        guard var ids = mutedParticipantIDs else { return }
+        ids.removeAll { $0 == participantID }
+        mutedParticipantIDs = ids.isEmpty ? nil : ids
     }
 
     /// The grant if it is still valid at `now` (with a minute's margin for clock skew).

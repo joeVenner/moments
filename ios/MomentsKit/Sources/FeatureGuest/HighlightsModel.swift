@@ -36,13 +36,15 @@ public final class HighlightsModel {
     @ObservationIgnored private let slug: EventSlug
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let logger = Logger(subsystem: "moments", category: "highlights")
-    /// Moments this guest reported, left out of the list.
-    @ObservationIgnored private var reportHiding = ReportHiding()
+    /// Moments this guest reported or muted, left out of the list.
+    @ObservationIgnored private var hiddenMoments: HiddenMoments
 
     public init(
-        slug: EventSlug, service: any MomentsService, store: any EventCredentialStore,
+        slug: EventSlug, participantID: String? = nil, service: any MomentsService, store: any EventCredentialStore,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
+        // Without it, this guest's id is read from the store on reload.
+        hiddenMoments = HiddenMoments(ownParticipantID: participantID)
         self.slug = slug
         self.service = service
         self.store = store
@@ -51,8 +53,8 @@ public final class HighlightsModel {
 
     /// When the tab appears: loads unless it loaded moments ago.
     public func loadIfStale() async {
-        // Another list may have had a moment reported meanwhile.
-        if reportHiding.reload(store: store, slug: slug, logger: logger) { publish() }
+        // Another screen may have reported, muted or unmuted meanwhile.
+        reloadHidden()
         guard throttle.isStale(at: now()) else { return }
         await load()
     }
@@ -153,14 +155,29 @@ extension HighlightsModel: ReactionHost {
         publish()
     }
 
-    /// The viewer closed: moments reported from it leave the list.
+    /// The viewer closed: moments reported or muted from it leave the list.
     public func viewerDidClose() {
-        if reportHiding.applyPending(store: store, slug: slug, logger: logger) { publish() }
+        if hiddenMoments.applyPending(store: store, slug: slug, logger: logger) { publish() }
     }
 
-    /// The list without the moments this guest reported.
+    /// Picks up reports, mutes and unmutes made elsewhere.
+    public func reloadHidden() {
+        if hiddenMoments.reload(store: store, slug: slug, logger: logger) { publish() }
+    }
+
+    /// Whether this guest may mute the moment's sharer.
+    public func canMute(_ moment: Moment) -> Bool {
+        hiddenMoments.canMute(moment)
+    }
+
+    /// Mutes the moment's sharer on this device; applies when the viewer closes.
+    public func mute(participantID: String) {
+        hiddenMoments.markMuted(participantID, store: store, slug: slug, logger: logger)
+    }
+
+    /// The list without the moments this guest reported or muted.
     private func publish() {
-        let shown = reportHiding.filter(state.moments)
+        let shown = hiddenMoments.filter(state.moments)
         if shown != moments { moments = shown }
     }
 
@@ -172,7 +189,7 @@ extension HighlightsModel: ReactionHost {
             try await service.reportMoment(
                 slug: slug.value, momentID: momentID, credentials: eventCredentials(store: store, slug: slug)
             )
-            reportHiding.markReported(momentID, store: store, slug: slug, logger: logger)
+            hiddenMoments.markReported(momentID, store: store, slug: slug, logger: logger)
             return .reported
         } catch {
             let outcome = ReportOutcome(error)

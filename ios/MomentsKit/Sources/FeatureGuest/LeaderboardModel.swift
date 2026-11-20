@@ -18,6 +18,8 @@ public final class LeaderboardModel {
     /// Bumped when this guest reaches the podium (on the first load too), for
     /// a celebration. Not bumped by reloads that keep them there.
     public private(set) var podiumCelebrations = 0
+    /// Guests this guest muted on this device, oldest first.
+    public private(set) var mutedParticipantIDs: [String] = []
 
     @ObservationIgnored public var onFatalError: (@MainActor (any Error) -> Void)?
 
@@ -49,6 +51,30 @@ public final class LeaderboardModel {
     /// This guest's points; 0 until they're on the board.
     public var myPoints: Int { entries.first { $0.participantID == participantID }?.totalPoints ?? 0 }
     public var myEntry: LeaderboardEntry? { entries.first { $0.participantID == participantID } }
+
+    /// The muted guests, named from the board when they're on it.
+    public var mutedGuests: [MutedGuest] {
+        mutedParticipantIDs.map { id in MutedGuest(id: id, entry: entries.first { $0.participantID == id }) }
+    }
+
+    /// Re-reads the mutes (the viewer may have added one).
+    public func reloadMuted() {
+        do {
+            mutedParticipantIDs = try store.credentials(for: slug)?.mutedParticipantIDs ?? []
+        } catch {
+            logger.error("reading mutes failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Their moments come back once the lists reload.
+    public func unmute(participantID: String) {
+        do {
+            try store.update(for: slug) { $0.unmute(participantID: participantID) }
+        } catch {
+            logger.error("saving an unmute failed: \(String(describing: error), privacy: .public)")
+        }
+        reloadMuted()
+    }
 
     public func loadIfStale() async {
         guard throttle.isStale(at: now()) else { return }
@@ -103,4 +129,11 @@ public final class LeaderboardModel {
             if phase != .loaded { phase = .failed }
         }
     }
+}
+
+/// A guest this guest muted; `entry` is nil when they're not on the board
+/// (e.g. they left).
+public struct MutedGuest: Identifiable, Hashable, Sendable {
+    public let id: String
+    public let entry: LeaderboardEntry?
 }

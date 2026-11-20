@@ -16,7 +16,12 @@ protocol MomentBrowsing: AnyObject {
     /// Reports a moment to the host. An answer that ends the event ends
     /// the screen too (so the viewer closes).
     func report(momentID: String) async -> ReportOutcome
-    /// The viewer closed: moments reported from it leave the list.
+    /// Whether this guest may mute the moment's sharer (not themselves,
+    /// and only moments that name one).
+    func canMute(_ moment: Moment) -> Bool
+    /// Hides the guest's moments on this device, from when the viewer closes.
+    func mute(participantID: String)
+    /// The viewer closed: moments reported or muted from it leave the list.
     func viewerDidClose()
 }
 

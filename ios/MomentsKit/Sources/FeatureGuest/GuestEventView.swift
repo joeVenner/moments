@@ -19,6 +19,7 @@ public struct GuestEventView: View {
     @State private var progress: UploadProgressModel?
     @State private var isShowingProgress = false
     @State private var isConfirmingLeave = false
+    @State private var isShowingMutedGuests = false
     @State private var feed: FeedModel?
     @State private var highlights: HighlightsModel?
     @State private var leaderboard: LeaderboardModel?
@@ -143,7 +144,7 @@ public struct GuestEventView: View {
                 maxBytes: MediaFetcher.maxBytes, maxConcurrentLoads: 2
             )
             let highlightsModel = HighlightsModel(
-                slug: join.slug,
+                slug: join.slug, participantID: participant.id,
                 service: dependencies.service, store: dependencies.store
             )
             let leaderboardModel = LeaderboardModel(
@@ -190,7 +191,7 @@ public struct GuestEventView: View {
             if let onHome { homeButton(onHome) }
             Spacer()
             if let progress { uploadsButton(progress) }
-            if let leave { eventMenu(leave) }
+            if let leave, let leaderboard { eventMenu(leave, leaderboard: leaderboard) }
         }
         .padding(.horizontal, Spacing.sm)
     }
@@ -235,9 +236,10 @@ public struct GuestEventView: View {
         return parts.joined(separator: ", ")
     }
 
-    private func eventMenu(_ leave: LeaveModel) -> some View {
+    private func eventMenu(_ leave: LeaveModel, leaderboard: LeaderboardModel) -> some View {
         HStack {
             Menu {
+                Button("Muted guests", systemImage: "speaker.slash") { isShowingMutedGuests = true }
                 Button("Leave event…", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
                     isConfirmingLeave = true
                 }
@@ -249,6 +251,13 @@ public struct GuestEventView: View {
             }
             .accessibilityLabel(Text("Event options"))
             .disabled(leave.phase == .leaving)
+        }
+        // Unmuted guests' moments come back right away.
+        .sheet(isPresented: $isShowingMutedGuests, onDismiss: {
+            feed?.reloadHidden()
+            highlights?.reloadHidden()
+        }) {
+            MutedGuestsView(model: leaderboard)
         }
         .confirmationDialog("Leave this event?", isPresented: $isConfirmingLeave, titleVisibility: .visible) {
             Button("Leave and delete", role: .destructive) { Task { await leave.leave() } }

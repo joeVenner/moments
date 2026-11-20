@@ -619,6 +619,17 @@
         }
       }
     },
+    "A guest": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un invité"
+          }
+        }
+      }
+    },
     "A test event's dates come from your plan, so they can't be changed.": {
       "extractionState": "manual",
       "localizations": {
@@ -1567,6 +1578,17 @@
         }
       }
     },
+    "Guests you mute from a moment show up here.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les invités que vous masquez depuis un souvenir apparaissent ici."
+          }
+        }
+      }
+    },
     "Heart": {
       "extractionState": "manual",
       "localizations": {
@@ -2151,6 +2173,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Souvenirs : %lld · Invités : %lld sur %lld"
+          }
+        }
+      }
+    },
+    "Mute %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer %@"
+          }
+        }
+      }
+    },
+    "Muted guests": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invités masqués"
           }
         }
       }
@@ -2830,6 +2874,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Signaler"
+          }
+        }
+      }
+    },
+    "Report or mute": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signaler ou masquer"
           }
         }
       }
@@ -3684,6 +3739,17 @@
         }
       }
     },
+    "The host will review a report. Muting hides %@'s moments on this phone.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'hôte vérifiera un signalement. Masquer cache les souvenirs de %@ sur ce téléphone."
+          }
+        }
+      }
+    },
     "The host will review it.": {
       "extractionState": "manual",
       "localizations": {
@@ -3785,6 +3851,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "L'envoi n'est pas arrivé intact."
+          }
+        }
+      }
+    },
+    "Their moments are hidden on this phone only. They aren't told.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leurs souvenirs sont masqués sur ce téléphone uniquement. Ils n'en sont pas informés."
           }
         }
       }
@@ -4169,6 +4246,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Déverrouillez votre téléphone et réessayez."
+          }
+        }
+      }
+    },
+    "Unmute": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ne plus masquer"
+          }
+        }
+      }
+    },
+    "Unmute %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ne plus masquer %@"
           }
         }
       }
@@ -4628,6 +4727,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Il vous faut une offre d'hébergement pour créer des événements."
+          }
+        }
+      }
+    },
+    "You won't see %@'s moments on this phone. Unmute them from the event menu.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous ne verrez plus les souvenirs de %@ sur ce téléphone. Vous pouvez annuler depuis le menu de l'événement."
           }
         }
       }

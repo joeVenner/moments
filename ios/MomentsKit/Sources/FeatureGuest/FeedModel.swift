@@ -82,8 +82,8 @@ public final class FeedModel {
     /// One sync (first page, refresh, poll) at a time, per FeedState's contract.
     @ObservationIgnored private var isSyncing = false
     @ObservationIgnored private let logger = Logger(subsystem: "moments", category: "feed")
-    /// Moments this guest reported, left out of the grid.
-    @ObservationIgnored private var reportHiding = ReportHiding()
+    /// Moments this guest reported or muted, left out of the grid.
+    @ObservationIgnored private var hiddenMoments: HiddenMoments
 
     public init(
         event: Event, participant: Participant, slug: EventSlug,
@@ -95,7 +95,8 @@ public final class FeedModel {
         self.service = service
         self.store = store
         grantCache = GrantCache(store: store, slug: slug)
-        _ = reportHiding.reload(store: store, slug: slug, logger: logger)
+        hiddenMoments = HiddenMoments(ownParticipantID: participant.id)
+        _ = hiddenMoments.reload(store: store, slug: slug, logger: logger)
     }
 
     // MARK: - What the grid shows
@@ -108,15 +109,15 @@ public final class FeedModel {
         grantCache.grant()
     }
 
-    /// Every loaded moment reported: no tile appears to ask for more.
+    /// Every loaded moment hidden: no tile appears to ask for more.
     private func loadOlderIfEverythingIsHidden() {
-        guard !feed.moments.isEmpty, reportHiding.filter(feed.moments).isEmpty else { return }
+        guard !feed.moments.isEmpty, hiddenMoments.filter(feed.moments).isEmpty else { return }
         _ = startLoadingOlder()
     }
 
     private func updateVisible() {
         defer { loadOlderIfEverythingIsHidden() }
-        let listed = reportHiding.filter(feed.moments)
+        let listed = hiddenMoments.filter(feed.moments)
         guard let revealedThroughSeq else {
             moments = listed
             newMomentCount = 0
@@ -284,7 +285,7 @@ public final class FeedModel {
     public func report(momentID: String) async -> ReportOutcome {
         do {
             try await service.reportMoment(slug: slug.value, momentID: momentID, credentials: credentials())
-            reportHiding.markReported(momentID, store: store, slug: slug, logger: logger)
+            hiddenMoments.markReported(momentID, store: store, slug: slug, logger: logger)
             return .reported
         } catch {
             let outcome = ReportOutcome(error)
@@ -293,15 +294,26 @@ public final class FeedModel {
         }
     }
 
-    /// The viewer closed: moments reported from it (here or in another
-    /// list) leave the grid.
-    public func viewerDidClose() {
-        if reportHiding.applyPending(store: store, slug: slug, logger: logger) { updateVisible() }
+    /// Whether this guest may mute the moment's sharer.
+    public func canMute(_ moment: Moment) -> Bool {
+        hiddenMoments.canMute(moment)
     }
 
-    /// Picks up moments reported from another list (e.g. highlights).
-    public func reloadReports() {
-        if reportHiding.reload(store: store, slug: slug, logger: logger) { updateVisible() }
+    /// Mutes the moment's sharer on this device; applies when the viewer closes.
+    public func mute(participantID: String) {
+        hiddenMoments.markMuted(participantID, store: store, slug: slug, logger: logger)
+    }
+
+    /// The viewer closed: moments reported or muted from it (here or in
+    /// another list) leave the grid.
+    public func viewerDidClose() {
+        if hiddenMoments.applyPending(store: store, slug: slug, logger: logger) { updateVisible() }
+    }
+
+    /// Picks up reports, mutes and unmutes made elsewhere (highlights, the
+    /// muted guests list).
+    public func reloadHidden() {
+        if hiddenMoments.reload(store: store, slug: slug, logger: logger) { updateVisible() }
     }
 
     /// This device's state learned from another list (e.g. highlights).
