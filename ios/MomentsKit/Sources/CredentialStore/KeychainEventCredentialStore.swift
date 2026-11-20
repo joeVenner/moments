@@ -12,8 +12,9 @@ import Security
 /// - Never synchronised to iCloud Keychain.
 /// - All operations go through one lock, so `update` is atomic in-process.
 ///   The app passes its own `accessGroup` (without one, queries span every
-///   entitled group, the one shared with the App Clip included); the Clip's
-///   entries reach it through `CredentialHandoff`, never a shared store.
+///   entitled group). The App Clip's entries reach it through
+///   `CredentialHandoff` from a `FileEventCredentialStore`: an App Clip
+///   can't share keychain groups.
 public final class KeychainEventCredentialStore: EventCredentialStore, @unchecked Sendable {
     // @unchecked: immutable configuration plus `lock`; SecItem calls are thread-safe.
     /// Kept for existing callers; shared with the host session store.
