@@ -14,6 +14,13 @@ public enum HostSaveFailure: Error, Equatable, Sendable {
     case refused
     /// The event was deleted meanwhile.
     case gone
+    /// The host's plan doesn't allow this (creating, or changing an event it
+    /// pays for): resubscribing brings it back.
+    case planRequired
+    /// Creating: every event the plan includes is used.
+    case noEventsLeft
+    /// A test event's dates come from the plan.
+    case datesFixed
     case failed
 }
 
@@ -325,6 +332,10 @@ private func saveHostEvent(
             return .failure(.rateLimited)
         } catch MomentsAPIError.invalidRequest {
             return .failure(.refused)
+        } catch MomentsAPIError.noEventsLeft {
+            return .failure(.noEventsLeft)
+        } catch MomentsAPIError.testEventDatesFixed {
+            return .failure(.datesFixed)
         }
     }
     switch outcome {
@@ -337,6 +348,7 @@ private func saveHostEvent(
         switch failure {
         case .offline: return .failed(.offline)
         case .appTooOld: return .failed(.appTooOld)
+        case .planRequired: return .failed(.planRequired)
         case .failed: return .failed(.failed)
         }
     }

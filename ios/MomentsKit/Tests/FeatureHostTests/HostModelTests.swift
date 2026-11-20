@@ -553,6 +553,14 @@ private func detail(_ id: String) -> AdminEventDetail {
         #expect(model.phase == .gone && model.detail == nil)
     }
 
+    @Test func anEventThePlanNoLongerCoversSaysSo() async {
+        let service = FakeHostService()
+        service.detailResult = .failure(MomentsAPIError.planRequired)
+        let model = HostEventDetailModel(eventID: "a", service: service, account: account(service, store: FlakyHostStore(live)))
+        await model.load()
+        #expect(model.phase == .failed(.planRequired))
+    }
+
     @Test func aFailureKeepsTheLastDetail() async {
         let service = FakeHostService()
         service.detailResult = .success(detail("a"))
@@ -722,6 +730,13 @@ func adminMoment(_ id: String, status: AdminMoment.Status = .approved) -> AdminM
         service.deleteError = MomentsAPIError.mediaDeleteFailed
         await model.delete(momentID: "m1")
         #expect(model.moments.count == 2 && model.actionFailure == .mediaKept)
+    }
+
+    @Test func aPlanThatNoLongerAllowsModeratingKeepsTheMoment() async {
+        let (model, service, _) = await loaded()
+        service.deleteError = MomentsAPIError.planRequired
+        await model.delete(momentID: "m1")
+        #expect(model.moments.count == 2 && model.actionFailure == .planRequired)
     }
 
     @Test func anAlreadyDeletedMomentLeavesTheList() async {
@@ -910,6 +925,8 @@ private func plainEvent(_ id: String, mode: Event.AccessMode = .public, close: D
         (.eventNotFound, .gone),
         (.transport(.notConnectedToInternet), .offline),
         (.upgradeRequired, .appTooOld),
+        (.planRequired, .planRequired),
+        (.testEventDatesFixed, .datesFixed),
         (.server(status: 500, code: nil), .failed),
     ])
     func showsWhySavingFailed(_ error: MomentsAPIError, _ expected: HostSaveFailure) async {
@@ -963,6 +980,17 @@ private func plainEvent(_ id: String, mode: Event.AccessMode = .public, close: D
         service.saveResult = .failure(MomentsAPIError.rateLimited)
         await refused.save(now: start)
         #expect(refused.phase == .failed(.rateLimited) && !refused.mayHaveCreated)
+    }
+
+    @Test(arguments: [(MomentsAPIError.planRequired, HostSaveFailure.planRequired), (.noEventsLeft, .noEventsLeft)])
+    func aPlanRefusalOnCreateSaysNothingWasCreated(_ error: MomentsAPIError, _ expected: HostSaveFailure) async {
+        let service = FakeHostService()
+        service.saveResult = .failure(error)
+        let model = HostEventFormModel(service: service, account: account(service, store: FlakyHostStore(live)))
+        model.form.title = "Party"
+        model.form.type = "Party"
+        await model.save(now: start)
+        #expect(model.phase == .failed(expected) && !model.mayHaveCreated)
     }
 
     @Test func aDeadSessionSignsOut() async {

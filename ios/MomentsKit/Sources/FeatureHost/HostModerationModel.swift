@@ -22,6 +22,8 @@ public final class HostModerationModel {
         case appTooOld
         /// The moment's files couldn't be removed, so it was kept.
         case mediaKept
+        /// The host's plan no longer allows moderating this event.
+        case planRequired
         case failed
     }
 
@@ -200,6 +202,7 @@ extension HostModerationModel.ActionFailure {
         switch failure {
         case .offline: self = .offline
         case .appTooOld: self = .appTooOld
+        case .planRequired: self = .planRequired
         case .failed: self = .failed
         }
     }

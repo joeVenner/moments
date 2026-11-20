@@ -236,6 +236,17 @@
         }
       }
     },
+    "A test event's dates come from your plan, so they can't be changed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les dates d'un événement test viennent de votre offre, elles ne peuvent donc pas être modifiées."
+          }
+        }
+      }
+    },
     "Access changed": {
       "extractionState": "manual",
       "localizations": {
@@ -3387,6 +3398,17 @@
         }
       }
     },
+    "You need a hosting plan to create events.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il vous faut une offre d'hébergement pour créer des événements."
+          }
+        }
+      }
+    },
     "You're invited": {
       "localizations": {
         "fr": {
@@ -3499,6 +3521,17 @@
         }
       }
     },
+    "Your hosting plan doesn't allow this right now. Resubscribe to bring everything back.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre offre d'hébergement ne permet pas cela pour le moment. Réabonnez-vous pour tout retrouver."
+          }
+        }
+      }
+    },
     "Your name": {
       "extractionState": "manual",
       "localizations": {
@@ -3517,6 +3550,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Votre téléphone n'a plus d'espace."
+          }
+        }
+      }
+    },
+    "Your plan has no events left. An Extra event adds one.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre offre n'a plus d'événement disponible. Un Événement supplémentaire en ajoute un."
           }
         }
       }

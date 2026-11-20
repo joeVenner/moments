@@ -194,6 +194,7 @@ struct HostEventsView: View {
         switch failure {
         case .offline: String(localized: "You're offline. Pull down to try again.")
         case .appTooOld: String(localized: "Update Moments to see your events.")
+        case .planRequired: String(localized: "Your hosting plan doesn't allow this right now. Resubscribe to bring everything back.")
         case .failed: String(localized: "Your events couldn't be loaded. Pull down to try again.")
         }
     }
