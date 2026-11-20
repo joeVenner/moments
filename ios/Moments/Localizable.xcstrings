@@ -1785,17 +1785,6 @@
         }
       }
     },
-    "On the big screen, open the event and enter its PIN first": {
-      "extractionState": "manual",
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sur le grand écran, ouvrez d'abord l'événement et saisissez son code"
-          }
-        }
-      }
-    },
     "On, ^[%lld heart](inflect: true)": {
       "extractionState": "manual",
       "localizations": {
@@ -2056,6 +2045,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Diffusez les souvenirs en direct sur grand écran"
+          }
+        }
+      }
+    },
+    "Play moments live on a big screen. It asks for the event's PIN.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diffusez les souvenirs en direct sur grand écran. Le code de l'événement vous sera demandé."
           }
         }
       }

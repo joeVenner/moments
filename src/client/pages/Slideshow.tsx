@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { BrandMark } from "../components/BrandMark";
+import { EventAccessGate } from "../components/EventAccessGate";
 import { getEvent, listMoments } from "../lib/api";
 import { useI18n } from "../lib/i18n";
+import { slideshowLoadFailure } from "../lib/slideshowLoad";
 import type { MomentData } from "../lib/types";
 import waitingIllustration from "../assets/illustrations/live-gallery-waiting.webp";
 
@@ -20,6 +22,10 @@ export default function Slideshow() {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  // A private event this browser hasn't unlocked: show the PIN form, and
+  // load again (bumping accessVersion) once it's open.
+  const [accessRequired, setAccessRequired] = useState(false);
+  const [accessVersion, setAccessVersion] = useState(0);
 
   useEffect(() => {
     if (!slug) return;
@@ -33,17 +39,24 @@ export default function Slideshow() {
         if (disposed) return;
         setMoments(momentsResponse.moments);
         setIndex((current) => Math.min(current, Math.max(0, momentsResponse.moments.length - 1)));
-      } catch {
-        if (!disposed) setNotFound(true);
+      } catch (error) {
+        if (disposed) return;
+        if (slideshowLoadFailure(error) === "access_required") {
+          // No point polling until the PIN is entered.
+          window.clearInterval(timer);
+          setAccessRequired(true);
+        } else {
+          setNotFound(true);
+        }
       }
     };
-    void refresh();
     const timer = window.setInterval(() => void refresh(), REFRESH_MS);
+    void refresh();
     return () => {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [slug]);
+  }, [slug, accessVersion]);
 
   useEffect(() => {
     if (paused || moments.length < 2) return;
@@ -73,6 +86,13 @@ export default function Slideshow() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [moments.length]);
+
+  if (accessRequired && slug) {
+    return <EventAccessGate slug={slug} onUnlocked={() => {
+      setAccessRequired(false);
+      setAccessVersion((value) => value + 1);
+    }} />;
+  }
 
   if (notFound) {
     return <div className="flex min-h-screen items-center justify-center">{t("eventNotFound")}</div>;
