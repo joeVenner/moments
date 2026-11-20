@@ -182,6 +182,34 @@ func exerciseListing(_ store: some EventCredentialStore) throws {
         #expect(try store.credentials(for: party) == sampleCredentials)
     }
 
+    @Test(.enabled(if: isKeychainAvailable)) func aPartialChangeNeverDeletesAnUnreadableItem() throws {
+        let service = "moments.tests.\(UUID().uuidString)"
+        let store = KeychainEventCredentialStore(service: service)
+        defer { try? store.removeAll() }
+        // E.g. a newer format after a downgrade, still holding a guest token.
+        let newer = Data(#"{"schemaVersion":99,"guestToken":"gt_newer"}"#.utf8)
+        let add: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+            kSecAttrAccount as String: "party", kSecValueData as String: newer,
+        ]
+        #expect(SecItemAdd(add as CFDictionary, nil) == errSecSuccess)
+        // A report or mute alone would leave an empty value: refused.
+        #expect(throws: KeychainError.unreadableItem) { try store.update(for: party) { $0.mute(participantID: "p2") } }
+        #expect(throws: KeychainError.unreadableItem) { try store.update(for: party) { $0.rememberReport(of: "m1") } }
+        var query = add
+        query.removeValue(forKey: kSecValueData as String)
+        query[kSecReturnData as String] = true
+        var result: CFTypeRef?
+        #expect(SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess)
+        #expect(result as? Data == newer)
+        // A join (a usable entry) still replaces it.
+        try store.update(for: party) { $0.guestToken = "gt_new"; $0.participantID = "p1" }
+        #expect(try store.credentials(for: party)?.guestToken == "gt_new")
+        // Once readable, a change that empties the entry deletes it as before.
+        try store.update(for: party) { $0.guestToken = nil; $0.participantID = nil }
+        #expect(try store.credentials(for: party) == nil)
+    }
+
     @Test(.enabled(if: isKeychainAvailable)) func keychainServicesAreIsolated() throws {
         let first = KeychainEventCredentialStore(service: "moments.tests.\(UUID().uuidString)")
         let second = KeychainEventCredentialStore(service: "moments.tests.\(UUID().uuidString)")
