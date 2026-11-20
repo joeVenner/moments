@@ -174,11 +174,10 @@ struct HostEventDetailView: View {
         MomentsColor.border.frame(height: 1).padding(.leading, Spacing.md)
     }
 
-    /// A private event's slideshow needs the event unlocked in that browser
-    /// first (the web page doesn't ask for the PIN itself yet).
+    /// On a private event the web slideshow asks for the PIN itself.
     static func slideshowLine(_ event: Event) -> String {
         event.accessMode == .private
-            ? String(localized: "On the big screen, open the event and enter its PIN first")
+            ? String(localized: "Play moments live on a big screen. It asks for the event's PIN.")
             : String(localized: "Play moments live on a big screen")
     }
 
