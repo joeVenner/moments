@@ -1848,6 +1848,17 @@
         }
       }
     },
+    "Open in Safari": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir dans Safari"
+          }
+        }
+      }
+    },
     "Open the event link again, then try again.": {
       "extractionState": "manual",
       "localizations": {
@@ -2034,6 +2045,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Offre pour %lld invités"
+          }
+        }
+      }
+    },
+    "Play moments live on a big screen": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diffusez les souvenirs en direct sur grand écran"
           }
         }
       }
@@ -2511,6 +2533,17 @@
         }
       }
     },
+    "Share the slideshow link": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partager le lien du diaporama"
+          }
+        }
+      }
+    },
     "Share your photos and videos, heart your favourites, and climb the leaderboard.": {
       "localizations": {
         "fr": {
@@ -2700,6 +2733,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Passer"
+          }
+        }
+      }
+    },
+    "Slideshow": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diaporama"
           }
         }
       }
