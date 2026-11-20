@@ -1,515 +1,335 @@
-import { useEffect, useRef, useState } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { useI18n } from "../lib/i18n";
-import { prefersReducedMotion, safeConfetti } from "../lib/motion";
+import { useI18n, type Lang } from "../lib/i18n";
+import { appStoreUrl, EXTRA_EVENT_USD, formatUsd, HOSTING_TIERS, POPULAR_TIER_ID } from "../lib/pricing";
 import firstDance from "../assets/moments/first-dance.jpg";
 import toast from "../assets/moments/toast.jpg";
 import cake from "../assets/moments/cake.jpg";
 import danceFloor from "../assets/moments/dance-floor.jpg";
 import goldenHour from "../assets/moments/golden-hour.jpg";
 import speeches from "../assets/moments/speeches.jpg";
-import { DotField } from "../components/DotField";
 
-const MOMENTS_COUNTER_TARGET = 12482;
-
-// Generated dark-theme preview "photos" for the landing moments marquee (PLAN
-// P1.3). Real illustrated thumbnails (gpt-image-2, dark-native) replace the
-// earlier emoji placeholders so the strip looks like an actual live feed.
-const SAMPLE_MOMENTS = [
-  { img: firstDance, captionKey: "momentCaptionFirstDance", name: "Léa" },
-  { img: toast, captionKey: "momentCaptionToast", name: "Marco" },
-  { img: cake, captionKey: "momentCaptionCake", name: "Aïsha" },
-  { img: danceFloor, captionKey: "momentCaptionDanceFloor", name: "Sam" },
-  { img: goldenHour, captionKey: "momentCaptionGoldenHour", name: "Priya" },
-  { img: speeches, captionKey: "momentCaptionSpeeches", name: "Tom" },
-] as const;
-
-// Each marquee group holds 3× the moments so one group (~3.4kpx at sm tile width)
-// is wider than any realistic viewport. The track = 2 identical groups and
-// translates -50% (exactly one group) for a seamless loop; if a group were
-// narrower than the viewport, the -50% end would run past the last tile into
-// empty space (the "nothing after the last card" gap on wide screens).
-const MARQUEE_TILES = [...SAMPLE_MOMENTS, ...SAMPLE_MOMENTS, ...SAMPLE_MOMENTS];
-
-// Crisp inline SVG feature icons (accent-colored, scalable) — replace the old
-// baked-white PNG icons that read as bright squares on the dark cards (P0.4).
-function CameraIcon({ className = "h-9 w-9" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z" />
-      <circle cx="12" cy="13" r="3.2" />
-    </svg>
-  );
-}
-
-function SlideshowIcon({ className = "h-9 w-9" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <rect x="3" y="4" width="18" height="13" rx="2" />
-      <path d="m10 8 5 2.5-5 2.5V8ZM8 21h8M12 17v4" />
-    </svg>
-  );
-}
-
-function LockIcon({ className = "h-9 w-9" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <rect x="4" y="10" width="16" height="11" rx="2" />
-      <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3" />
-    </svg>
-  );
-}
-
-function UploadIcon({ className = "h-9 w-9" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" />
-      <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
-    </svg>
-  );
-}
-
-function HeartIcon({ className = "h-9 w-9" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M20.8 5.7a5.4 5.4 0 0 0-7.6 0L12 6.9l-1.2-1.2a5.4 5.4 0 1 0-7.6 7.6L12 22l8.8-8.7a5.4 5.4 0 0 0 0-7.6Z" />
-    </svg>
-  );
-}
-
-function DownloadIcon({ className = "h-9 w-9" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
-    </svg>
-  );
-}
-
-function AnalyticsIcon({ className = "h-9 w-9" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
-    </svg>
-  );
-}
-
-function WhatsAppIcon({ className = "h-5 w-5" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
-      <path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.4-4.7A8.5 8.5 0 1 1 20.5 11.7Z" />
-      <path d="M8.2 7.7c.3 3.8 2.4 5.9 6.2 6.3l1.2-1.5-2.4-1.1-.9 1c-1.4-.6-2.4-1.6-3-3l1-.8-1.1-2.4-1 .5Z" />
-    </svg>
-  );
-}
-
+/**
+ * The public landing at `/` (approved design, Landing board). Departures
+ * from the design, until subscriptions are sold in the app:
+ * - hosts are pointed to WhatsApp, how events are set up today, unless an
+ *   App Store id is configured (`VITE_APP_STORE_ID`);
+ * - guests keep the event-code box the previous home had.
+ */
 const WHATSAPP_URL =
   "https://wa.me/212708080301?text=Bonjour%20Moments%2C%20j%27ai%20un%20%C3%A9v%C3%A9nement%20%C3%A0%20venir%20et%20je%20souhaite%20cr%C3%A9er%20mon%20espace.";
 
-const FAQ_ITEMS = [
-  ["faqWhatQuestion", "faqWhatAnswer"],
-  ["faqAppQuestion", "faqAppAnswer"],
-  ["faqPrivateQuestion", "faqPrivateAnswer"],
-  ["faqUploadQuestion", "faqUploadAnswer"],
-  ["faqDownloadQuestion", "faqDownloadAnswer"],
-] as const;
+const APP_STORE_URL = appStoreUrl(import.meta.env.VITE_APP_STORE_ID);
+/** Where hosts go: the App Store once listed, WhatsApp until then. */
+const HOST_HREF = APP_STORE_URL ?? WHATSAPP_URL;
 
-function useCountUp(target: number, durationMs = 1400) {
-  // Reduced motion → snap to the final value (no animated ramp).
-  const [value, setValue] = useState(() => (prefersReducedMotion() ? target : 0));
+const PHONE_TILES = [firstDance, toast, cake, danceFloor, goldenHour, speeches, cake, firstDance, speeches];
 
-  useEffect(() => {
-    if (prefersReducedMotion()) {
-      setValue(target);
-      return;
-    }
+const STEPS = [1, 2, 3] as const;
+const FEATURES = [1, 2, 3, 4, 5, 6] as const;
+const FAQS = [1, 2, 3, 4] as const;
+const INCLUDES = [1, 2, 3, 4] as const;
+const LANGS: readonly Lang[] = ["en", "fr"];
 
-    let frameId: number;
-    const start = performance.now();
+const sectionTitle = "m-0 max-w-2xl font-display text-[clamp(32px,4vw,48px)] font-semibold leading-[1.1]";
 
-    function tick(now: number) {
-      const progress = Math.min((now - start) / durationMs, 1);
-      // Ease-out cubic — fast start, gentle settle, feels less mechanical than linear.
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setValue(Math.round(eased * target));
-      if (progress < 1) frameId = requestAnimationFrame(tick);
-    }
+const FOCUS_RING = "outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)]";
 
-    frameId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frameId);
-  }, [target, durationMs]);
-
-  return value;
-}
-
-function useScrollParallax(factor = 0.15) {
-  // Damped translateY driven by scroll position; reduced motion → stays at 0.
-  const [offset, setOffset] = useState(0);
-
-  useEffect(() => {
-    if (prefersReducedMotion()) return;
-
-    let frameId = 0;
-    function update() {
-      frameId = 0;
-      setOffset(window.scrollY * factor);
-    }
-    function onScroll() {
-      // Coalesce bursts of scroll events into one rAF-aligned update — no thrash.
-      if (frameId === 0) frameId = requestAnimationFrame(update);
-    }
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    update(); // seed for a non-zero initial scroll (e.g. refresh mid-page)
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      if (frameId) cancelAnimationFrame(frameId);
-    };
-  }, [factor]);
-
-  return offset;
-}
-
-function FeatureCard({
-  icon,
-  title,
-  body,
-  delayMs,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  body: string;
-  delayMs: number;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  // Reduced motion → start already revealed so no reveal transition ever fires.
-  const [visible, setVisible] = useState(() => prefersReducedMotion());
-
-  useEffect(() => {
-    if (prefersReducedMotion()) return;
-    const el = ref.current;
-    if (!el) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.2 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
+function ExternalLink({ href, className, label, children }: { href: string; className: string; label?: string; children: ReactNode }) {
+  const { t } = useI18n();
   return (
-    <div
-      ref={ref}
-      style={{ transitionDelay: visible ? `${delayMs}ms` : "0ms" }}
-      className={`group rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-6 text-center shadow-sm transition-all duration-700 hover:border-[var(--color-accent)] ${
-        visible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
-      }`}
-    >
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-accent)] transition-transform duration-300 group-hover:scale-110">
-        {icon}
-      </div>
-      <h3 className="mt-4 text-lg font-semibold text-[var(--color-text)]">{title}</h3>
-      <p className="mt-2 text-sm text-[var(--color-text-muted)]">{body}</p>
-    </div>
+    <a href={href} target="_blank" rel="noopener noreferrer" className={`${className} ${FOCUS_RING}`}>
+      {label ? <span className="sr-only">{label}</span> : null}
+      <span aria-hidden={label ? true : undefined}>{children}</span>
+      <span className="sr-only"> {t("landingNewTab")}</span>
+    </a>
   );
 }
 
-// Asymmetric hero visual (PLAN landing-wow): a scattered pile of REAL moment
-// polaroids — dark-native frames, random tilt, hover lifts a card out of the
-// pile. Per-card `depth` multiplies one shared scroll offset for parallax depth
-// (foreground drifts more than the back field). The wrapper owns translateY so
-// it never fights the figure's Tailwind `translate`/`rotate`/`scale` (independent
-// CSS properties in Tailwind v4). `rotate` comes from a per-card CSS var so the
-// literal `rotate-[var(--card-rot)]` class is JIT-detectable; `hover:rotate-0`
-// overrides it on hover. All hover transforms gated on `motion-safe`.
-const POLAROIDS = [
-  { img: goldenHour, name: "Priya", note: "Lumière dorée parfaite ✨", top: "2%", left: "0%", w: "42%", rot: -7, depth: 0.45, z: "z-10", delay: 0 },
-  { img: toast, name: "Marco", note: "Portez vos verres ! 🥂", top: "4%", left: "55%", w: "40%", rot: 6, depth: 0.45, z: "z-10", delay: 70 },
-  { img: firstDance, name: "Léa", note: "Quelle belle bride !", top: "26%", left: "22%", w: "48%", rot: -3, depth: 1.3, z: "z-30", delay: 140 },
-  { img: danceFloor, name: "Sam", note: "La piste explose 🔥", top: "42%", left: "62%", w: "38%", rot: 8, depth: 0.85, z: "z-20", delay: 210 },
-  { img: cake, name: "Aïsha", note: "Le gâteau ! 🎂", top: "48%", left: "0%", w: "40%", rot: 4, depth: 0.7, z: "z-20", delay: 280 },
-] as const;
-
-function PolaroidCluster({ parallax, visible }: { parallax: number; visible: boolean }) {
+function Check() {
   return (
-    <div className="relative mx-auto aspect-[4/5] w-full max-w-sm">
-      {POLAROIDS.map((p, i) => (
-        <div
-          key={i}
-          className={`absolute ${p.z} motion-safe:hover:z-40`}
-          style={{ top: p.top, left: p.left, width: p.w, transform: `translateY(${parallax * p.depth}px)` }}
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden className="mt-0.5 shrink-0 text-[var(--color-accent)]">
+      <path d="M5 12l5 5 9-10" />
+    </svg>
+  );
+}
+
+function LanguageToggle() {
+  const { lang, setLang, t } = useI18n();
+  return (
+    <div role="group" aria-label={t("landingLanguage")} className="flex rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-[3px]">
+      {LANGS.map((option) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => setLang(option)}
+          aria-pressed={lang === option}
+          className={`h-[34px] min-w-11 rounded-[9px] text-[13px] font-semibold text-[var(--color-text)] ${FOCUS_RING} ${
+            lang === option ? "bg-[var(--color-border)]" : "bg-transparent"
+          }`}
         >
-          <figure
-            style={{ "--card-rot": `${p.rot}deg`, transitionDelay: visible ? `${p.delay}ms` : "0ms" } as React.CSSProperties}
-            className={`rotate-[var(--card-rot)] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-1.5 pb-8 shadow-xl shadow-black/40 transition-all duration-700 motion-safe:hover:rotate-0 motion-safe:hover:scale-105 ${
-              visible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
-            }`}
-          >
-            <img src={p.img} alt="" loading="lazy" className="aspect-[3/4] w-full rounded-sm object-cover" />
-            {/* Polaroid caption: guest name (mono, muted) over a short handwritten-style note. */}
-            <figcaption className="mt-1.5 px-1 text-center">
-              <p className="font-mono text-[10px] text-[var(--color-text-muted)]">{p.name}</p>
-              <p className="mt-0.5 text-[11px] italic leading-tight text-[var(--color-text)]">{p.note}</p>
-            </figcaption>
-          </figure>
-        </div>
+          {option.toUpperCase()}
+        </button>
       ))}
     </div>
   );
 }
 
-export default function Home() {
+function JoinForm() {
   const { t } = useI18n();
   const navigate = useNavigate();
-  // Reduced motion → render the hero at rest, skipping the mount transition.
-  const [heroVisible, setHeroVisible] = useState(() => prefersReducedMotion());
-  const [eventCode, setEventCode] = useState("");
-  const momentsCaptured = useCountUp(MOMENTS_COUNTER_TARGET);
-  // Smaller base factor — per-card depth multipliers in PolaroidCluster amplify it.
-  const heroParallax = useScrollParallax(0.08);
+  const [code, setCode] = useState("");
 
-  useEffect(() => {
-    if (prefersReducedMotion()) return;
-    // Defer to next frame so the initial (opacity-0) state paints first,
-    // guaranteeing the transition actually animates rather than snapping in.
-    const id = requestAnimationFrame(() => setHeroVisible(true));
-    return () => cancelAnimationFrame(id);
-  }, []);
-
-  function fireConfetti() {
-    safeConfetti({
-      particleCount: 80,
-      spread: 65,
-      origin: { y: 0.7 },
-    });
-  }
-
-  function handleJoinSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const code = eventCode.trim();
-    if (!code) return;
-    fireConfetti();
-    navigate(`/e/${encodeURIComponent(code)}`);
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    navigate(`/e/${encodeURIComponent(trimmed)}`);
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
-      {/* Hero — asymmetric split (PLAN landing-wow): copy + join left, scattered
-          real-moment polaroid pile right. Replaces the single centered AI image. */}
-      <section className="relative overflow-hidden px-6 pt-20 pb-16 sm:pt-28 sm:pb-24">
-        <DotField className="absolute inset-0" />
-        {/* Animated warm-orange glow backdrop (PLAN P2.2), frozen under reduced motion. */}
-        <div aria-hidden className="hero-glow pointer-events-none absolute inset-0" />
+    <form id="join" onSubmit={handleSubmit} className="flex w-full max-w-md flex-col gap-2">
+      <label htmlFor="event-code" className="text-sm text-[var(--color-text-muted)]">
+        {t("landingJoinLabel")}
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="event-code"
+          value={code}
+          onChange={(event) => setCode(event.target.value)}
+          placeholder={t("landingJoinPlaceholder")}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          className={`h-12 min-w-0 flex-1 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-bg-alt)] px-4 text-base text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] ${FOCUS_RING}`}
+        />
+        <button
+          type="submit"
+          disabled={!code.trim()}
+          className={`h-12 rounded-[14px] border border-[var(--color-border)] px-5 text-[15px] font-semibold text-[var(--color-text)] transition-colors hover:border-[var(--color-accent)] disabled:opacity-50 ${FOCUS_RING}`}
+        >
+          {t("landingJoinButton")}
+        </button>
+      </div>
+    </form>
+  );
+}
 
-        <div className="relative z-10 mx-auto flex max-w-6xl flex-col items-center gap-12 sm:flex-row sm:items-center sm:justify-center sm:gap-12">
-          {/* Copy + join form */}
-          <div
-            className={`flex w-full max-w-md flex-col items-center gap-5 text-center transition-all duration-700 sm:w-[28rem] sm:flex-shrink-0 sm:items-start sm:text-left ${
-              heroVisible ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
-            }`}
-          >
-            <h1 className="max-w-2xl bg-gradient-to-br from-[var(--color-text)] via-[var(--color-text)] to-[var(--color-accent)] bg-clip-text text-4xl font-semibold leading-[1.1] text-transparent sm:text-5xl">
-              {t("heroHeadline")}
+function PhoneMock() {
+  const { t } = useI18n();
+  return (
+    <div
+      role="img"
+      aria-label={t("landingPhoneLabel")}
+      className="relative mx-auto h-[650px] w-[320px] max-w-full shrink-0 overflow-hidden rounded-[52px] border-[10px] border-[var(--color-bg-alt)] bg-[var(--color-bg)] shadow-phone"
+    >
+      <div className="flex flex-col gap-2.5 px-3.5 pt-11">
+        <span className="font-display text-[21px] font-semibold">Sara &amp; Omar</span>
+        <span className="text-[11px] text-[var(--color-text-muted)]">{t("landingPhoneStats")}</span>
+        <div className="-mx-3.5 mt-1 grid grid-cols-3 gap-0.5">
+          {[...PHONE_TILES, ...PHONE_TILES].map((tile, index) => (
+            <img key={index} src={tile} alt="" loading="lazy" className="aspect-square w-full object-cover" />
+          ))}
+        </div>
+      </div>
+      <span className="absolute top-[250px] left-3.5 flex h-[30px] items-center gap-1.5 rounded-[15px] bg-[var(--color-text)] px-3 text-xs font-semibold text-[var(--color-bg)]">
+        <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden>
+          <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="currentColor" className="text-[var(--color-accent)]" />
+        </svg>
+        {t("landingPhoneToast")}
+      </span>
+      <span className="absolute right-3.5 bottom-[22px] flex h-[42px] items-center rounded-[21px] bg-[var(--color-accent)] px-4 text-[13px] font-semibold text-[var(--color-bg)]">
+        {t("landingPhoneShare")}
+      </span>
+    </div>
+  );
+}
+
+export default function Home() {
+  const { t, lang } = useI18n();
+  const legalBase = lang === "fr" ? "/fr" : "";
+  const hostLabel = APP_STORE_URL ? t("landingAppStore") : t("landingHostCta");
+
+  return (
+    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)]">
+      <nav aria-label="Main" className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-7 gap-y-4 px-4 py-5 sm:px-6">
+        <a href="#top" className="mr-auto font-display text-[26px] font-bold text-[var(--color-text)]">
+          Moments
+        </a>
+        <div className="hidden flex-wrap gap-x-6 gap-y-1 text-[15px] md:flex">
+          <a href="#how" className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]">{t("landingNavHow")}</a>
+          <a href="#features" className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]">{t("landingNavFeatures")}</a>
+          <a href="#pricing" className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]">{t("landingNavPricing")}</a>
+          <a href="#faq" className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]">{t("landingNavFaq")}</a>
+        </div>
+        <LanguageToggle />
+        <ExternalLink
+          href={HOST_HREF}
+          className="flex h-11 items-center rounded-xl bg-[var(--color-accent)] px-[18px] text-[15px] font-semibold text-[var(--color-bg)] hover:bg-[var(--color-accent-dark)]"
+        >
+          {APP_STORE_URL ? t("landingGetApp") : t("landingHostCta")}
+        </ExternalLink>
+      </nav>
+
+      <header id="top" className="relative overflow-hidden">
+        <div aria-hidden className="pointer-events-none absolute -top-[260px] -right-[220px] h-[900px] w-[900px] rounded-full border border-[var(--color-ring)]" />
+        <div aria-hidden className="pointer-events-none absolute -top-[120px] -right-20 h-[620px] w-[620px] rounded-full border border-[var(--color-ring-strong)]" />
+        <div aria-hidden className="absolute top-[120px] left-[8%] h-2.5 w-2.5 rounded-full bg-[var(--color-accent)]" />
+        <div aria-hidden className="absolute top-[70px] left-[46%] h-1.5 w-1.5 rounded-full bg-[var(--color-text)]" />
+
+        <div className="relative mx-auto flex max-w-[1200px] flex-wrap items-center gap-14 px-4 pt-14 pb-24 sm:px-6">
+          <div className="flex min-w-0 flex-[1_1_480px] flex-col gap-6">
+            <span className="flex h-8 items-center gap-2 self-start rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] px-3.5 text-sm text-[var(--color-text-muted)]">
+              <span className="h-2 w-2 rounded-full bg-[var(--color-accent)]" />
+              {t("landingEyebrow")}
+            </span>
+            <h1 className="m-0 font-display text-[clamp(44px,6vw,76px)] leading-[1.02] font-semibold tracking-[-1.5px]">
+              {t("landingHeroTitle1")}
+              <br />
+              <span className="text-[var(--color-accent)]">{t("landingHeroTitle2")}</span>
             </h1>
-            <p className="max-w-md text-base text-[var(--color-text-muted)] sm:text-lg">{t("heroSubhead")}</p>
-
-            <form
-              onSubmit={handleJoinSubmit}
-              className="mt-2 flex w-full max-w-sm flex-col gap-2 sm:flex-row"
+            <p className="m-0 max-w-[540px] text-[19px] leading-[29px] text-[var(--color-text-muted)]">{t("landingHeroSub")}</p>
+            <ExternalLink
+              href={HOST_HREF}
+              className="flex h-14 items-center gap-2.5 self-start rounded-2xl bg-[var(--color-text)] px-[22px] text-base font-semibold text-[var(--color-bg)] hover:opacity-90"
             >
-              <input
-                value={eventCode}
-                onChange={(e) => setEventCode(e.target.value)}
-                placeholder={t("eventCodePlaceholder")}
-                className="flex-1 rounded-full border border-[var(--color-border)] bg-[var(--color-bg-alt)] px-4 py-2 text-center text-sm outline-none focus:border-[var(--color-accent)] sm:text-left"
-              />
-              <button
-                type="submit"
-                data-spark
-                disabled={!eventCode.trim()}
-                className="inline-flex items-center justify-center gap-1.5 rounded-full bg-[var(--color-accent)] px-4 py-2 font-mono text-sm font-medium text-white shadow-lg shadow-[var(--color-accent)]/20 transition hover:bg-[var(--color-accent-dark)] disabled:opacity-50"
-              >
-                {t("joinEvent")}
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-4 w-4"
-                  aria-hidden
+              {hostLabel}
+            </ExternalLink>
+            <JoinForm />
+            <span className="text-sm text-[var(--color-text-muted)]">{t("landingHeroNote")}</span>
+          </div>
+          <PhoneMock />
+        </div>
+      </header>
+
+      <section id="how" aria-labelledby="how-title" className="border-t border-[var(--color-border)]">
+        <div className="mx-auto flex max-w-[1200px] flex-col gap-12 px-4 py-24 sm:px-6">
+          <h2 id="how-title" className={sectionTitle}>{t("landingHowTitle")}</h2>
+          <ol className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-5 p-0">
+            {STEPS.map((step) => (
+              <li key={step} className="flex flex-col gap-3.5 rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] p-7">
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--color-accent)] font-display text-[22px] font-bold text-[var(--color-bg)]">
+                  {step}
+                </span>
+                <span className="text-[21px] font-semibold">{t(`landingStep${step}Title`)}</span>
+                <span className="text-base leading-6 text-[var(--color-text-muted)]">{t(`landingStep${step}Body`)}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      <section id="features" aria-labelledby="features-title" className="border-y border-[var(--color-border)] bg-[var(--color-bg-deep)]">
+        <div className="mx-auto flex max-w-[1200px] flex-col gap-12 px-4 py-24 sm:px-6">
+          <h2 id="features-title" className={sectionTitle}>{t("landingFeaturesTitle")}</h2>
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(300px,100%),1fr))] gap-x-8 gap-y-10">
+            {FEATURES.map((feature) => (
+              <div key={feature} className="flex flex-col gap-2.5 border-t border-[var(--color-border)] pt-5">
+                <span className="text-[19px] font-semibold">{t(`landingFeature${feature}Title`)}</span>
+                <span className="text-base leading-6 text-[var(--color-text-muted)]">{t(`landingFeature${feature}Body`)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="pricing" aria-labelledby="pricing-title">
+        <div className="mx-auto flex max-w-[1200px] flex-col gap-10 px-4 py-24 sm:px-6">
+          <div className="flex max-w-[680px] flex-col gap-3.5">
+            <h2 id="pricing-title" className={sectionTitle}>{t("landingPricingTitle")}</h2>
+            <p className="m-0 text-lg leading-[27px] text-[var(--color-text-muted)]">{t("landingPricingSub")}</p>
+          </div>
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-4">
+            {HOSTING_TIERS.map((tier, index) => {
+              const isPopular = tier.productId === POPULAR_TIER_ID;
+              return (
+                <div
+                  key={tier.productId}
+                  className={`relative flex flex-col gap-4 rounded-3xl bg-[var(--color-bg-alt)] p-[26px] ${
+                    isPopular ? "border-2 border-[var(--color-accent)]" : "border border-[var(--color-border)]"
+                  }`}
                 >
-                  <path d="M5 12h14M13 6l6 6-6 6" />
-                </svg>
-              </button>
-            </form>
-
-            <a
-              href={WHATSAPP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 font-mono text-xs text-[var(--color-text-muted)] underline decoration-[var(--color-border)] underline-offset-4 transition hover:text-[var(--color-accent)]"
-            >
-              <WhatsAppIcon className="h-4 w-4" />
-              {t("contactUsShort")}
-            </a>
-
-            {/* Live-count stat chip — big number over a two-line label with an
-                icon, so it reads as a graphic element instead of a plain text line. */}
-            <div className="mt-1 inline-flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] px-4 py-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--color-bg)] text-[var(--color-accent)]">
-                <CameraIcon className="h-5 w-5" />
-              </span>
-              <div className="text-left leading-tight">
-                <div className="font-mono text-xl font-semibold text-[var(--color-text)]">
-                  {momentsCaptured.toLocaleString()}
-                </div>
-                <div className="text-[11px] text-[var(--color-text-muted)]">
-                  {t("momentsCapturedLabel")}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Scattered polaroid pile — asymmetric, multi-element, real assets. */}
-          <div className="w-full max-w-sm flex-shrink-0 sm:w-[24rem]">
-            <PolaroidCluster parallax={heroParallax} visible={heroVisible} />
-          </div>
-        </div>
-      </section>
-
-      {/* Moments marquee — a continuously scrolling peek at a live feed. The track
-          holds TWO identical groups and slides left by exactly one group width
-          (-50%), so the loop is seamless and never "reaches an end." Each group is
-          its own flex (gap inside only) so the seam spacing matches the internal
-          gaps. Hover pauses; reduced-motion freezes (CSS in index.css). */}
-      <section className="pb-16">
-        <h2 className="mx-auto max-w-lg px-6 text-center text-2xl font-semibold text-[var(--color-text)] sm:text-3xl">
-          {t("marqueeHeading")}
-        </h2>
-        <div className="marquee-mask mt-8 overflow-hidden">
-          <div className="animate-marquee flex">
-            {[0, 1].map((copy) => (
-              <div key={copy} aria-hidden={copy === 1} className="flex shrink-0 gap-4 px-2">
-                {MARQUEE_TILES.map((m, i) => (
-                  <figure
-                    key={`${m.captionKey}-${copy}-${i}`}
-                    className="relative aspect-[3/4] w-40 shrink-0 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-alt)] sm:w-44"
+                  {isPopular && (
+                    <span className="absolute -top-[13px] left-6 flex h-[26px] items-center rounded-[13px] bg-[var(--color-accent)] px-3 text-xs font-bold text-[var(--color-bg)]">
+                      {t("landingPopular")}
+                    </span>
+                  )}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[15px] text-[var(--color-text-muted)]">{t(`landingFit${index + 1}`)}</span>
+                    <span className="font-display text-[34px] font-semibold">{t("landingGuests", { count: tier.guestCap })}</span>
+                  </div>
+                  <span className="text-lg font-semibold">
+                    {formatUsd(tier.monthlyUsd, lang)}
+                    <span className="text-sm font-normal text-[var(--color-text-muted)]">{t("landingPerMonth")}</span>
+                  </span>
+                  <ExternalLink
+                    href={HOST_HREF}
+                    label={t("landingChoosePlan", { count: tier.guestCap })}
+                    className={`flex h-12 items-center justify-center rounded-[14px] border text-[15px] font-semibold ${
+                      isPopular
+                        ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-[var(--color-bg)] hover:bg-[var(--color-accent-dark)]"
+                        : "border-[var(--color-border)] text-[var(--color-text)] hover:border-[var(--color-accent)]"
+                    }`}
                   >
-                    <img
-                      src={m.img}
-                      alt=""
-                      loading="lazy"
-                      className="h-full w-full object-cover"
-                    />
-                    <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-3 text-left">
-                      <p className="text-sm font-medium text-[var(--color-text)]">{t(m.captionKey)}</p>
-                      <p className="font-mono text-xs text-[var(--color-text-muted)]">{m.name}</p>
-                    </figcaption>
-                  </figure>
-                ))}
-              </div>
-            ))}
+                    {t("landingChoose")}
+                  </ExternalLink>
+                </div>
+              );
+            })}
           </div>
+          <div className="flex flex-wrap items-start gap-x-10 gap-y-5 rounded-3xl border border-[var(--color-border)] p-[26px]">
+            <span className="flex-none text-[17px] font-semibold">{t("landingIncludesTitle")}</span>
+            <ul className="m-0 grid flex-[1_1_520px] list-none grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-x-6 gap-y-3 p-0">
+              {INCLUDES.map((item) => (
+                <li key={item} className="flex gap-2.5 text-[15px] leading-[21px]">
+                  <Check />
+                  {t(`landingInclude${item}`, { price: formatUsd(EXTRA_EVENT_USD, lang) })}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <p className="m-0 text-sm text-[var(--color-text-muted)]">{t("landingPricingNote")}</p>
         </div>
       </section>
 
-      {/* Product feature showcase — capabilities available in production. */}
-      <section className="px-6 pb-24">
-        <div className="mx-auto max-w-3xl text-center">
-          <p className="font-mono text-xs uppercase tracking-[0.22em] text-[var(--color-accent)]">{t("featuresEyebrow")}</p>
-          <h2 className="mt-3 text-3xl font-semibold text-[var(--color-text)] sm:text-4xl">
-          {t("featuresHeading")}
+      <section id="faq" aria-labelledby="faq-title" className="border-t border-[var(--color-border)]">
+        <div className="mx-auto flex max-w-[860px] flex-col gap-7 px-4 py-24 sm:px-6">
+          <h2 id="faq-title" className={sectionTitle}>{t("landingFaqTitle")}</h2>
+          {FAQS.map((faq) => (
+            <details key={faq} className="border-b border-[var(--color-border)] py-[22px]">
+              <summary className="cursor-pointer text-[19px] font-semibold">{t(`landingFaq${faq}Question`)}</summary>
+              <p className="mt-3 mb-0 text-base leading-[25px] text-[var(--color-text-muted)]">{t(`landingFaq${faq}Answer`)}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <section aria-labelledby="cta-title" className="px-4 pb-24 sm:px-6">
+        <div className="mx-auto flex max-w-[1152px] flex-col items-center gap-[18px] rounded-[32px] bg-[var(--color-accent)] px-8 py-[72px] text-center text-[var(--color-bg)]">
+          <h2 id="cta-title" className="m-0 max-w-[760px] font-display text-[clamp(32px,4.5vw,54px)] leading-[1.08] font-semibold">
+            {t("landingCtaTitle")}
           </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-[var(--color-text-muted)]">{t("featuresIntro")}</p>
-        </div>
-
-        <div className="mx-auto mt-10 grid max-w-5xl gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          <FeatureCard
-            icon={<SlideshowIcon />}
-            title={t("featureSlideshowTitle")}
-            body={t("featureSlideshowBody")}
-            delayMs={0}
-          />
-          <FeatureCard
-            icon={<LockIcon />}
-            title={t("featurePrivacyTitle")}
-            body={t("featurePrivacyBody")}
-            delayMs={80}
-          />
-          <FeatureCard
-            icon={<UploadIcon />}
-            title={t("featureResumableTitle")}
-            body={t("featureResumableBody")}
-            delayMs={160}
-          />
-          <FeatureCard
-            icon={<HeartIcon />}
-            title={t("featureHighlightsTitle")}
-            body={t("featureHighlightsBody")}
-            delayMs={0}
-          />
-          <FeatureCard
-            icon={<DownloadIcon />}
-            title={t("featureExportTitle")}
-            body={t("featureExportBody")}
-            delayMs={80}
-          />
-          <FeatureCard
-            icon={<AnalyticsIcon />}
-            title={t("featureControlTitle")}
-            body={t("featureControlBody")}
-            delayMs={160}
-          />
+          <p className="m-0 text-lg">{t("landingCtaSub")}</p>
+          <ExternalLink
+            href={HOST_HREF}
+            className="flex h-14 items-center rounded-2xl bg-[var(--color-bg)] px-[26px] text-base font-semibold text-[var(--color-text)] hover:opacity-90"
+          >
+            {hostLabel}
+          </ExternalLink>
         </div>
       </section>
 
-      <section className="px-6 pb-24">
-        <div className="mx-auto max-w-3xl">
-          <p className="text-center font-mono text-xs uppercase tracking-[0.22em] text-[var(--color-accent)]">{t("faqEyebrow")}</p>
-          <h2 className="mt-3 text-center text-3xl font-semibold text-[var(--color-text)] sm:text-4xl">{t("faqHeading")}</h2>
-          <p className="mx-auto mt-4 max-w-2xl text-center text-[var(--color-text-muted)]">{t("faqIntro")}</p>
-          <div className="mt-8 divide-y divide-[var(--color-border)] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-alt)]">
-            {FAQ_ITEMS.map(([question, answer]) => (
-              <details key={question} className="group px-5 py-4 open:bg-black/10 sm:px-6">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium text-[var(--color-text)]">
-                  {t(question)}
-                  <span aria-hidden className="text-xl text-[var(--color-accent)] transition-transform group-open:rotate-45">+</span>
-                </summary>
-                <p className="mt-3 max-w-2xl pr-8 text-sm leading-6 text-[var(--color-text-muted)]">{t(answer)}</p>
-              </details>
-            ))}
-          </div>
+      <footer className="border-t border-[var(--color-border)]">
+        <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-7 gap-y-3 px-4 pt-7 pb-10 text-sm text-[var(--color-text-muted)] sm:px-6">
+          <span className="mr-auto font-display text-lg font-semibold text-[var(--color-text)]">Moments</span>
+          <a href={`${legalBase}/privacy`} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]">{t("footerPrivacy")}</a>
+          <a href={`${legalBase}/terms`} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]">{t("footerTerms")}</a>
+          <ExternalLink href={WHATSAPP_URL} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+            {t("landingContact")}
+          </ExternalLink>
+          <span>© 2026 Moments</span>
         </div>
-      </section>
-
-      <section className="px-6 pb-24">
-        <div className="contact-cta relative mx-auto max-w-5xl overflow-hidden rounded-[2rem] border border-[var(--color-border)] bg-[var(--color-bg-alt)] px-6 py-12 text-center sm:px-12 sm:py-16">
-          <div aria-hidden className="contact-cta__orb contact-cta__orb--one" />
-          <div aria-hidden className="contact-cta__orb contact-cta__orb--two" />
-          <div className="relative z-10 mx-auto max-w-2xl">
-            <p className="font-mono text-xs uppercase tracking-[0.22em] text-[var(--color-accent)]">{t("contactEyebrow")}</p>
-            <h2 className="mt-3 text-3xl font-semibold text-[var(--color-text)] sm:text-4xl">{t("contactTitle")}</h2>
-            <p className="mx-auto mt-4 max-w-xl text-[var(--color-text-muted)]">{t("contactBody")}</p>
-            <a
-              href={WHATSAPP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-spark
-              className="mt-7 inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 font-mono text-sm font-semibold text-[#07150b] shadow-lg shadow-[#25D366]/15 transition hover:-translate-y-0.5 hover:bg-[#31e675]"
-            >
-              <WhatsAppIcon />
-              {t("contactWhatsApp")}
-            </a>
-          </div>
-        </div>
-      </section>
+      </footer>
     </div>
   );
 }
