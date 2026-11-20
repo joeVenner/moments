@@ -1,4 +1,8 @@
 import type { HostSession } from "./hostSessions";
+import type { EventRow } from "./types";
+
+/** What the plan check needs about an event the host may act on. */
+export type HostEventRef = Pick<EventRow, "kind" | "owner_user_id">;
 
 /**
  * Which events a signed-in host may see and change. The operator sees every
@@ -11,33 +15,29 @@ export function ownerScope(session: Pick<HostSession, "role" | "userId">): strin
   return session.role === "operator" ? null : session.userId;
 }
 
-/** True when the host may act on this event; false also when it doesn't exist. */
-export async function hostCanAccessEvent(
+/** The event when the host may act on it; null when they may not or it doesn't exist. */
+export async function findHostEvent(
   db: D1Database,
   session: Pick<HostSession, "role" | "userId">,
   eventId: string
-): Promise<boolean> {
-  const owner = ownerScope(session);
-  const row = await db
-    .prepare("SELECT 1 AS found FROM events WHERE id = ?1 AND (?2 IS NULL OR owner_user_id = ?2)")
-    .bind(eventId, owner)
-    .first<{ found: number }>();
-  return row !== null;
+): Promise<HostEventRef | null> {
+  return db
+    .prepare("SELECT kind, owner_user_id FROM events WHERE id = ?1 AND (?2 IS NULL OR owner_user_id = ?2)")
+    .bind(eventId, ownerScope(session))
+    .first<HostEventRef>();
 }
 
-/** True when the host may act on this moment (through its event's owner). */
-export async function hostCanAccessMoment(
+/** The moment's event when the host may act on the moment; null otherwise. */
+export async function findHostMomentEvent(
   db: D1Database,
   session: Pick<HostSession, "role" | "userId">,
   momentId: string
-): Promise<boolean> {
-  const owner = ownerScope(session);
-  const row = await db
+): Promise<HostEventRef | null> {
+  return db
     .prepare(
-      `SELECT 1 AS found FROM moments m JOIN events e ON e.id = m.event_id
+      `SELECT e.kind, e.owner_user_id FROM moments m JOIN events e ON e.id = m.event_id
        WHERE m.id = ?1 AND (?2 IS NULL OR e.owner_user_id = ?2)`
     )
-    .bind(momentId, owner)
-    .first<{ found: number }>();
-  return row !== null;
+    .bind(momentId, ownerScope(session))
+    .first<HostEventRef>();
 }

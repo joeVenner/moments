@@ -48,7 +48,7 @@ import {
 } from "../hostSessions";
 import { ADMIN_RETRY_AFTER_SECONDS, attemptAdminLogin } from "../adminLogin";
 import { getAdminEventDetail, listAdminEvents } from "../adminEvents";
-import { hostCanAccessEvent, hostCanAccessMoment, ownerScope } from "../eventOwnership";
+import { findHostEvent, findHostMomentEvent, ownerScope, type HostEventRef } from "../eventOwnership";
 import {
   insertEvent,
   insertPlanEvent,
@@ -60,7 +60,7 @@ import {
 } from "../eventWrites";
 import { planAccess, testEventDates } from "../plans";
 import { loadLivePlan } from "../plansRepo";
-import { canGuestsShare, canGuestsView, EVENT_NOT_HOSTED } from "../eventPlanAccess";
+import { canGuestsShare, canGuestsView, EVENT_NOT_HOSTED, eventPlanAccess } from "../eventPlanAccess";
 import { lifecycleChangeFrom, type SettingsResult, updateEventAccess, updateEventLifecycle } from "../eventSettings";
 import { deleteAdminMoment, listAdminMoments, setMomentModeration } from "../adminModeration";
 import {
@@ -498,6 +498,14 @@ const listAdminEventsRoute = createRoute({
   },
 });
 
+/** On every host route that takes an event or moment id (see ownerGate). */
+const planGated = {
+  402: json(
+    ErrorSchema,
+    "`plan_required`: on an event a plan pays for, the host's plan no longer allows this (editing, moderating, or downloading after the read-only window)"
+  ),
+};
+
 const getAdminEventRoute = createRoute({
   method: "get",
   path: "/admin/events/{id}",
@@ -510,6 +518,7 @@ const getAdminEventRoute = createRoute({
     200: json(AdminEventDetailSchema, "The event"),
     401: json(ErrorSchema, "`host_auth_required`: sign in again"),
     404: json(ErrorSchema, "`event_not_found`"),
+    ...planGated,
     426: json(ErrorSchema, "This app build is too old; show the update screen"),
     default: json(ErrorSchema, "Any other error"),
   },
@@ -532,6 +541,7 @@ const listAdminMomentsRoute = createRoute({
   responses: {
     200: json(AdminMomentListSchema, "The moments"),
     404: json(ErrorSchema, "`event_not_found`"),
+    ...planGated,
     ...hostErrors,
   },
 });
@@ -547,6 +557,7 @@ const moderateMomentRoute = createRoute({
   responses: {
     200: json(z.object({ moment: AdminMomentSchema }).openapi("AdminMomentResponse"), "The moment as it is now"),
     404: json(ErrorSchema, "`moment_not_found`"),
+    ...planGated,
     ...hostErrors,
   },
 });
@@ -562,6 +573,7 @@ const deleteMomentRoute = createRoute({
   responses: {
     204: { description: "Deleted" },
     404: json(ErrorSchema, "`moment_not_found`"),
+    ...planGated,
     502: json(ErrorSchema, "`media_delete_failed`: the files couldn't be removed; nothing was deleted, try again"),
     ...hostErrors,
   },
@@ -600,6 +612,7 @@ const updateAdminEventRoute = createRoute({
     200: json(AdminEventDetailSchema, "The event as it is now"),
     400: json(ErrorSchema, "`invalid_request`: nothing to change, an empty title or type, a field too long, or a bad date"),
     404: json(ErrorSchema, "`event_not_found`"),
+    ...planGated,
     ...hostErrors,
   },
 });
@@ -619,6 +632,7 @@ const updateEventAccessRoute = createRoute({
     200: json(AdminEventDetailSchema, "The event as it is now (with the new invite link when the PIN changed)"),
     400: json(ErrorSchema, "`invalid_request`: an unknown mode, a PIN of the wrong length, or private with no PIN"),
     404: json(ErrorSchema, "`event_not_found`"),
+    ...planGated,
     ...hostErrors,
   },
 });
@@ -638,6 +652,7 @@ const updateEventLifecycleRoute = createRoute({
     200: json(AdminEventDetailSchema, "The event as it is now"),
     400: json(ErrorSchema, "`invalid_request`: nothing to change, a bad date, a deletion date in the past, or uploads closing after deletion"),
     404: json(ErrorSchema, "`event_not_found`"),
+    ...planGated,
     409: json(ErrorSchema, "`test_event_dates_fixed`: a test event's dates come from the plan"),
     ...hostErrors,
   },
@@ -683,25 +698,47 @@ const hostGate: MiddlewareHandler<V1Env> = async (c, next) => {
 const EVENT_NOT_FOUND = { error: "Event not found.", code: "event_not_found" } as const;
 const MOMENT_NOT_FOUND = { error: "Moment not found.", code: "moment_not_found" } as const;
 
+/** A host route on a plan event that the host's plan no longer covers. */
+const HOST_PLAN_REQUIRED = { error: "Your hosting plan doesn't cover this any more.", code: "plan_required" } as const;
+
+/** Which of the plan's host rights a request needs. */
+type HostRight = "hostCanEdit" | "hostCanModerate" | "hostCanDownload";
+
 /**
  * Another host's event or moment answers exactly like a missing one (404),
- * so ids can't be probed. The operator passes for every event.
+ * so ids can't be probed. Then, on an event a plan pays for, the host's plan
+ * must still allow what the request does (402 otherwise): a lapsed host can
+ * download until the read-only window ends but no longer edit. The operator
+ * passes for every event.
  */
 function ownerGate(
-  canAccess: (db: D1Database, session: HostSession, id: string) => Promise<boolean>,
-  notFound: typeof EVENT_NOT_FOUND | typeof MOMENT_NOT_FOUND
+  find: (db: D1Database, session: HostSession, id: string) => Promise<HostEventRef | null>,
+  notFound: typeof EVENT_NOT_FOUND | typeof MOMENT_NOT_FOUND,
+  rightFor: (method: string) => HostRight
 ): MiddlewareHandler<V1Env> {
   return async (c, next) => {
     const id = c.req.param("id") ?? "";
     // A malformed id reaches no query: the route's validator answers 400.
     if (id.length === 0 || id.length > 100) return next();
-    if (!(await canAccess(c.env.DB, c.get("hostSession"), id))) return c.json(notFound, 404);
+    const session = c.get("hostSession");
+    const event = await find(c.env.DB, session, id);
+    if (!event) return c.json(notFound, 404);
+    if (session.role !== "operator" && !(await eventPlanAccess(c.env.DB, event))[rightFor(c.req.method)]) {
+      return c.json(HOST_PLAN_REQUIRED, 402);
+    }
     return next();
   };
 }
 
-const eventOwnerGate = ownerGate(hostCanAccessEvent, EVENT_NOT_FOUND);
-const momentOwnerGate = ownerGate(hostCanAccessMoment, MOMENT_NOT_FOUND);
+// Rights follow the HTTP method: reading an event or its moments is
+// downloading, any other method changes it. A future read that isn't a GET
+// would need the edit right: it fails closed, never open.
+const READ_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD", "OPTIONS"]);
+const eventOwnerGate = ownerGate(findHostEvent, EVENT_NOT_FOUND, (method) =>
+  READ_METHODS.has(method) ? "hostCanDownload" : "hostCanEdit"
+);
+// Moment routes hide, show or delete: moderation.
+const momentOwnerGate = ownerGate(findHostMomentEvent, MOMENT_NOT_FOUND, () => "hostCanModerate");
 
 /** Rejects iOS builds below MIN_IOS_BUILD with 426 so the app can force an update. */
 const clientVersionGate: MiddlewareHandler<V1Env> = async (c, next) => {
