@@ -128,6 +128,16 @@ import Testing
         #expect(uploads.contains("await queue.endLeaving(eventSlug: slug)"))
     }
 
+    /// VoiceOver hears the sending line change, except while leaving.
+    @Test func theClipAnnouncesSending() throws {
+        let file = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "MomentsClip/MomentsClipApp.swift")
+        let source = try String(contentsOf: file, encoding: .utf8)
+        #expect(source.contains(".onChange(of: progress?.sendingSnapshot)"))
+        #expect(source.contains("!hasLeft, (leave?.phase ?? .idle) == .idle"))
+        #expect(source.contains("AccessibilityNotification.Announcement(Self.message(for: announcement)).post()"))
+    }
+
     /// The app takes the Clip's queue over only once the Clip's guests are
     /// imported (otherwise every Clip upload would look like a stranger's),
     /// and keeps strangers for the handover window.
