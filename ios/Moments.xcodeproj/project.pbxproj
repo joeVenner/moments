@@ -366,6 +366,7 @@
 				CODE_SIGN_ENTITLEMENTS = Config/Moments.entitlements;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Moments-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Moments;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Moments uses the camera to scan event QR codes.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Moments saves the photos you choose to your library.";
@@ -390,6 +391,7 @@
 				CODE_SIGN_ENTITLEMENTS = Config/Moments.entitlements;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Moments-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Moments;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Moments uses the camera to scan event QR codes.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Moments saves the photos you choose to your library.";

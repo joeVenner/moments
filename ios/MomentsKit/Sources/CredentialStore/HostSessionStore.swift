@@ -46,18 +46,22 @@ public final class InMemoryHostSessionStore: HostSessionStore, @unchecked Sendab
 /// - Accessibility `WhenUnlockedThisDeviceOnly`: host screens only run in the
 ///   foreground, so the token is unreadable while the phone is locked, and it
 ///   never goes into a backup restorable on another device.
-/// - Never synchronised to iCloud Keychain; no access group (not shared with
-///   the App Clip).
+/// - Never synchronised to iCloud Keychain. The app passes its own access
+///   group: without one, reads and updates also search the group shared with
+///   the App Clip, so a token there could be loaded, or the real one written
+///   into it.
 public final class KeychainHostSessionStore: HostSessionStore, @unchecked Sendable {
     // @unchecked: immutable configuration plus `lock`; SecItem calls are thread-safe.
     public static let defaultService = "moments.host-session"
     static let account = "host"
 
     private let service: String
+    private let accessGroup: String?
     private let lock = NSLock()
 
-    public init(service: String = KeychainHostSessionStore.defaultService) {
+    public init(service: String = KeychainHostSessionStore.defaultService, accessGroup: String? = nil) {
         self.service = service
+        self.accessGroup = accessGroup
     }
 
     public func load() throws -> StoredHostSession? {
@@ -89,12 +93,14 @@ public final class KeychainHostSessionStore: HostSessionStore, @unchecked Sendab
     }
 
     private func baseQuery() -> [String: Any] {
-        [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: Self.account,
             kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
         ]
+        if let accessGroup { query[kSecAttrAccessGroup as String] = accessGroup }
+        return query
     }
 
     private static let encoder: JSONEncoder = {

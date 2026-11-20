@@ -41,13 +41,10 @@ struct AppEnvironment {
     private static let shared: AppEnvironment = build()
 
     private static func build() -> AppEnvironment {
-        let credentials = KeychainEventCredentialStore()
-        do {
-            try CredentialLifecycle.resetIfFreshInstall(credentials)
-        } catch {
-            // Status only; never the item contents.
-            Logger(subsystem: "moments", category: "credentials").error("fresh-install reset failed: \(String(describing: error), privacy: .public)")
-        }
+        let stores = credentialStores()
+        prepareCredentials(own: stores.own, shared: stores.shared)
+        let credentials = stores.own
+        let hostSessions = stores.host
         // Before any screen can open the photo picker: picked originals
         // (with their location data) left by an earlier run go.
         GuestUploadsLaunch.clearLeftovers()
@@ -57,7 +54,49 @@ struct AppEnvironment {
         let uploads = isHostingTests ? nil : startUploads(client: client, credentials: credentials)
         // No queue to hand session events to: release the system at once.
         if uploads == nil { BackgroundUploadEvents.connect { systemCompletion in systemCompletion() } }
-        return make(client: client, credentials: credentials, hostSessions: KeychainHostSessionStore(), uploads: uploads)
+        return make(client: client, credentials: credentials, hostSessions: hostSessions, uploads: uploads)
+    }
+
+    /// The app's keychain stores, all in its own group: the fresh-install
+    /// reset can't reach what the App Clip left in the shared group, and host
+    /// sessions stay out of the Clip's reach. Without its own group (a build
+    /// that didn't set it) a store would span every entitled group, so there
+    /// is then no handoff at all.
+    static func credentialStores(
+        service: String = KeychainEventCredentialStore.defaultService,
+        hostService: String = KeychainHostSessionStore.defaultService,
+        own ownGroup: String? = KeychainGroups.own, shared sharedGroup: String? = KeychainGroups.shared
+    ) -> (own: KeychainEventCredentialStore, shared: KeychainEventCredentialStore?, host: KeychainHostSessionStore) {
+        let shared = ownGroup == nil ? nil : sharedGroup.map { KeychainEventCredentialStore(service: service, accessGroup: $0) }
+        return (
+            KeychainEventCredentialStore(service: service, accessGroup: ownGroup),
+            shared,
+            KeychainHostSessionStore(service: hostService, accessGroup: ownGroup)
+        )
+    }
+
+    /// At launch: a fresh install starts clean, then a guest who joined in
+    /// the App Clip keeps their identity. Failures are logged (status only,
+    /// never item contents); a failed import leaves the Clip's copy for the
+    /// next launch.
+    static func prepareCredentials(
+        own: KeychainEventCredentialStore, shared: KeychainEventCredentialStore?, defaults: UserDefaults = .standard
+    ) {
+        let log = Logger(subsystem: "moments", category: "credentials")
+        do {
+            try CredentialLifecycle.resetIfFreshInstall(own, defaults: defaults)
+        } catch {
+            // Retried next launch; importing now would keep stale entries
+            // that win over the Clip's.
+            log.error("fresh-install reset failed: \(String(describing: error), privacy: .public)")
+            return
+        }
+        guard let shared else { return }
+        do {
+            try CredentialHandoff.importFromClip(shared, into: own)
+        } catch {
+            log.error("App Clip handoff failed: \(String(describing: error), privacy: .public)")
+        }
     }
 
     /// For tests and previews: no keychain, no network calls until used.
