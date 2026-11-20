@@ -235,13 +235,15 @@ struct HostLiveEventCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 HostEventChips(item: item)
             }
-            // Large text: tiles stack so their labels never truncate.
-            let tiles = typeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(spacing: Spacing.xs))
-                : AnyLayout(HStackLayout(spacing: Spacing.xs))
-            tiles {
-                HostStatTile(value: item.momentCount, label: "Moments")
-                HostStatTile(value: item.participantCount, label: "Guests")
+            // Side by side when the three labels fit, stacked otherwise
+            // (large text, or a longer language), so none truncates.
+            if typeSize.isAccessibilitySize {
+                VStack(spacing: Spacing.xs) { statTiles }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Spacing.xs) { statTiles }
+                    VStack(spacing: Spacing.xs) { statTiles }
+                }
             }
         }
         .padding(Spacing.md)
@@ -249,6 +251,12 @@ struct HostLiveEventCard: View {
         .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.sheet))
         .overlay(RoundedRectangle(cornerRadius: Radius.sheet).stroke(MomentsColor.accent.opacity(0.6)))
         .accessibilityElement(children: .combine)
+    }
+    @ViewBuilder private var statTiles: some View {
+        HostStatTile(value: item.momentCount, label: "Moments")
+        HostStatTile(value: item.participantCount, label: "Guests")
+        // Orange only when something waits, like the design.
+        HostStatTile(value: item.toReviewCount, label: "To review", isHighlighted: item.toReviewCount > 0)
     }
 }
 
@@ -302,12 +310,13 @@ private extension HostPlanStatus {
 struct HostStatTile: View {
     let value: Int
     let label: LocalizedStringKey
+    var isHighlighted = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
             Text(value, format: .number)
                 .font(MomentsFont.number(.title2))
-                .foregroundStyle(MomentsColor.text)
+                .foregroundStyle(isHighlighted ? MomentsColor.accent : MomentsColor.text)
             Text(label)
                 .font(MomentsFont.caption())
                 .foregroundStyle(MomentsColor.textMuted)

@@ -71,6 +71,41 @@ describe("GET /api/v1/admin/events", () => {
     expect(AdminEventListSchema.parse(await response.json()).events[0].moment_count).toBe(1);
   });
 
+  it("counts reported moments still shown to guests as to review, once each", async () => {
+    insertEvent("e", "2026-01-01 10:00:00");
+    insertEvent("other", "2026-02-01 10:00:00");
+    const addMoment = (id: string, eventId: string, status: string) =>
+      sqlite.raw
+        .prepare("INSERT INTO moments (id, event_id, uploader_name, media_url, moderation_status) VALUES (?, ?, 'Sara', ?, ?)")
+        .run(id, eventId, `/media/${id}`, status);
+    const report = (momentId: string, eventId: string, participantId: string) =>
+      sqlite.raw
+        .prepare("INSERT INTO moment_reports (id, event_id, moment_id, participant_id) VALUES (?, ?, ?, ?)")
+        .run(`r-${momentId}-${participantId}`, eventId, momentId, participantId);
+    for (const [id, eventId] of [["p1", "e"], ["p2", "e"], ["p3", "other"]]) {
+      sqlite.raw.prepare("INSERT INTO participants (id, event_id, nickname) VALUES (?, ?, ?)").run(id, eventId, id);
+    }
+    addMoment("twice", "e", "approved");
+    addMoment("once", "e", "approved");
+    addMoment("dealt-with", "e", "hidden");
+    addMoment("calm", "e", "approved");
+    addMoment("elsewhere", "other", "approved");
+    report("twice", "e", "p1");
+    report("twice", "e", "p2");
+    report("once", "e", "p1");
+    report("dealt-with", "e", "p2");
+    report("elsewhere", "other", "p3");
+
+    const response = await call("/admin/events", { headers: { Authorization: `Bearer ${await token()}` } });
+    const { events } = AdminEventListSchema.parse(await response.json());
+    expect(events.map((event) => [event.id, event.to_review_count])).toEqual([
+      ["other", 1],
+      ["e", 2],
+    ]);
+    const detail = await call("/admin/events/e", { headers: { Authorization: `Bearer ${await token()}` } });
+    expect(AdminEventDetailSchema.parse(await detail.json()).event.to_review_count).toBe(2);
+  });
+
   it("lists every event newest first with counts, and no secrets", async () => {
     insertEvent("old", "2026-01-01 10:00:00");
     insertEvent("new", "2026-06-01 10:00:00");

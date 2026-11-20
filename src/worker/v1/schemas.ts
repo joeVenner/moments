@@ -401,6 +401,9 @@ export const AdminEventSchema = EventSchema.extend({
   }),
   moment_count: z.number().int().openapi({ description: "All moments, hidden ones included" }),
   participant_count: z.number().int().openapi({ description: "Guests currently in the event (those who left are not counted)" }),
+  to_review_count: z.number().int().nonnegative().openapi({
+    description: "Moments still shown to guests that at least one guest reported (hiding one takes it off)",
+  }),
 }).openapi("AdminEvent");
 
 export const AdminEventListSchema = z

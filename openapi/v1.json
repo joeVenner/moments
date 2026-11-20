@@ -262,13 +262,19 @@
               "participant_count": {
                 "type": "integer",
                 "description": "Guests currently in the event (those who left are not counted)"
+              },
+              "to_review_count": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Moments still shown to guests that at least one guest reported (hiding one takes it off)"
               }
             },
             "required": [
               "kind",
               "guest_cap",
               "moment_count",
-              "participant_count"
+              "participant_count",
+              "to_review_count"
             ]
           }
         ]

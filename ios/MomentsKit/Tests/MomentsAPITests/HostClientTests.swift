@@ -14,13 +14,13 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
 
 private func adminEvent(
     id: String, slug: String, accessMode: String = "public", kind: String = "main", guestCap: String = "150",
-    moments: Int = 3, guests: Int = 2
+    moments: Int = 3, guests: Int = 2, toReview: Int = 1
 ) -> String {
     """
     {"id":"\(id)","slug":"\(slug)","title":"Party","type":"Party","main_characters":null,"description":null,
      "cover_image_url":null,"created_at":"2026-11-17 18:30:00","starts_at":null,"expires_at":null,
      "uploads_close_at":null,"purge_after":null,"archived_at":null,"access_mode":"\(accessMode)",
-     "uploads_open":true,"kind":"\(kind)","guest_cap":\(guestCap),"moment_count":\(moments),"participant_count":\(guests)}
+     "uploads_open":true,"kind":"\(kind)","guest_cap":\(guestCap),"moment_count":\(moments),"participant_count":\(guests),"to_review_count":\(toReview)}
     """
 }
 
@@ -88,6 +88,7 @@ private func adminMoment(id: String = "m1", status: String = "approved", kind: S
         #expect(list.isTruncated)
         #expect(list.events.map(\.id) == ["e1"])
         #expect(list.events.first?.momentCount == 3 && list.events.first?.participantCount == 2)
+        #expect(list.events.first?.toReviewCount == 1)
         #expect(list.events.first?.event.accessMode == .private)
         let request = try #require(stub.requests.first)
         #expect(request.request.path == "/admin/events")

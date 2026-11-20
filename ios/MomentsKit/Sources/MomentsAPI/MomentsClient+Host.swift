@@ -378,7 +378,7 @@ extension WireMapper {
     }
 
     func adminEvent(_ wire: Components.Schemas.AdminEvent) throws(MomentsAPIError) -> AdminEvent {
-        // AdminEvent = Event (value1) + kind and the two counts (value2).
+        // AdminEvent = Event (value1) + kind and the counts (value2).
         // The spec carries no enums. A kind a newer server adds only drives
         // labels here, so it reads as legacy (no chip) rather than hiding
         // the host's event.
@@ -387,7 +387,8 @@ extension WireMapper {
             kind: AdminEvent.Kind(rawValue: wire.value2.kind) ?? .legacy,
             guestCap: wire.value2.guestCap.map { max(0, $0) },
             momentCount: max(0, wire.value2.momentCount),
-            participantCount: max(0, wire.value2.participantCount)
+            participantCount: max(0, wire.value2.participantCount),
+            toReviewCount: max(0, wire.value2.toReviewCount)
         )
     }
 

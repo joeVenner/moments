@@ -3182,6 +3182,17 @@
         }
       }
     },
+    "To review": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À vérifier"
+          }
+        }
+      }
+    },
     "Too long or too large (up to 10 minutes).": {
       "extractionState": "manual",
       "localizations": {
