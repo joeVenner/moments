@@ -41,13 +41,17 @@ export default function Slideshow() {
         setIndex((current) => Math.min(current, Math.max(0, momentsResponse.moments.length - 1)));
       } catch (error) {
         if (disposed) return;
-        if (slideshowLoadFailure(error) === "access_required") {
+        const failure = slideshowLoadFailure(error);
+        if (failure === "access_required") {
           // No point polling until the PIN is entered.
           window.clearInterval(timer);
           setAccessRequired(true);
-        } else {
+        } else if (failure === "not_found") {
+          window.clearInterval(timer);
           setNotFound(true);
         }
+        // Transient (offline, a server hiccup): keep showing what we have;
+        // the next poll tries again.
       }
     };
     const timer = window.setInterval(() => void refresh(), REFRESH_MS);

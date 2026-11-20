@@ -9,14 +9,21 @@ export class UnauthorizedError extends Error {}
 export class AccessRequiredError extends Error {}
 /** The host's plan no longer covers this event. */
 export class EventNotHostedError extends Error {}
+/** The server answered 404: the thing asked for doesn't exist. */
+export class NotFoundError extends Error {}
 
 async function asJson<T>(res: Response): Promise<T> {
-  const body = await res.json();
+  // An error page may not be JSON (an edge or HTML 404): judge it by status.
+  const body = await res.json().catch((error: unknown) => {
+    if (res.ok) throw error;
+    return {};
+  });
   if (res.status === 401) {
     if (body.access_required) throw new AccessRequiredError("Event access required");
     throw new UnauthorizedError(body.error || "Unauthorized");
   }
   if (res.status === 410 && body.code === "event_not_hosted") throw new EventNotHostedError(body.error);
+  if (res.status === 404) throw new NotFoundError(body.error || "request failed");
   if (!res.ok) throw new Error(body.error || "request failed");
   return body as T;
 }
