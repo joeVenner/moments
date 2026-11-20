@@ -80,4 +80,21 @@ import Testing
             }
         }
     }
+
+    /// The Clip's uploads live in the App Group, where the app adopts them
+    /// when it replaces the Clip; nothing in the Clip uses the app's own
+    /// queue folders.
+    @Test func theClipQueuesUploadsInTheAppGroup() throws {
+        let folder = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "MomentsClip")
+        let uploads = try String(contentsOf: folder.appending(path: "ClipUploads.swift"), encoding: .utf8)
+        #expect(uploads.contains("UploadFolders.clip(appGroup: appGroup)"))
+        #expect(uploads.contains("appGroup: String? = ClipCredentials.appGroup"))
+        let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "swift" }
+        for file in files {
+            let source = try String(contentsOf: file, encoding: .utf8)
+            #expect(!source.contains(".appDefault("), "\(file.lastPathComponent)")
+        }
+    }
 }
