@@ -20,7 +20,7 @@ public struct HostEventGroups: Sendable, Equatable {
         var past: [AdminEvent] = []
         for item in events {
             let event = item.event
-            if event.archivedAt != nil || !event.areUploadsOpen {
+            if !event.acceptsUploads {
                 past.append(item)
             } else if let startsAt = event.startsAt, startsAt > now {
                 upcoming.append((startsAt, item))

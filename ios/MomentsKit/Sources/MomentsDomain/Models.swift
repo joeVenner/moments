@@ -29,6 +29,10 @@ public struct Event: Sendable, Hashable, Identifiable {
     /// Server-computed at response time; prefer it over comparing dates locally.
     public let areUploadsOpen: Bool
 
+    /// Guests can share into it: the server says uploads are open and the
+    /// host hasn't archived it.
+    public var acceptsUploads: Bool { areUploadsOpen && archivedAt == nil }
+
     /// When new uploads stop, after applying the server's expires_at fallback.
     public var effectiveUploadsCloseAt: Date? { uploadsCloseAt ?? expiresAt }
     /// When the event and its media are deleted, after the same fallback.

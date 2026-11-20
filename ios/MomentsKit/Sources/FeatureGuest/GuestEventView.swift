@@ -295,9 +295,9 @@ public struct GuestEventView: View {
     }
 
     /// Shown under Moments and Highlights (insetting their content) when
-    /// uploads are available and the event is open.
+    /// uploads are available and the event takes them.
     @ViewBuilder private func shareButton(_ feed: FeedModel) -> some View {
-        if let uploads = dependencies.uploads, !feed.hasEnded {
+        if let uploads = dependencies.uploads, !feed.hasEnded, feed.event.acceptsUploads {
             shareButton(uploads)
         }
     }
@@ -471,7 +471,7 @@ struct GuestEventHeader: View {
 
     /// When sharing closes, formatted; nil once closed or with no end.
     private static func openUntil(_ event: Event) -> String? {
-        guard event.areUploadsOpen, event.archivedAt == nil, let closesAt = event.effectiveUploadsCloseAt else { return nil }
+        guard event.acceptsUploads, let closesAt = event.effectiveUploadsCloseAt else { return nil }
         return closesAt.formatted(date: .abbreviated, time: .shortened)
     }
 }
