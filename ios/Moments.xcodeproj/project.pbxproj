@@ -22,6 +22,9 @@
 		A1C11B000000000000000012 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = A1C11B00000000000000000F /* DesignSystem */; };
 		A1C11B000000000000000013 /* MomentsDomain in Frameworks */ = {isa = PBXBuildFile; productRef = A1C11B000000000000000010 /* MomentsDomain */; };
 		A1C11B000000000000000008 /* MomentsClip.app in Embed App Clips */ = {isa = PBXBuildFile; fileRef = A1C11B000000000000000001 /* MomentsClip.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A1C11B000000000000000014 /* MomentsAPI in Frameworks */ = {isa = PBXBuildFile; productRef = A1C11B000000000000000017 /* MomentsAPI */; };
+		A1C11B000000000000000015 /* CredentialStore in Frameworks */ = {isa = PBXBuildFile; productRef = A1C11B000000000000000018 /* CredentialStore */; };
+		A1C11B000000000000000016 /* FeatureGuest in Frameworks */ = {isa = PBXBuildFile; productRef = A1C11B000000000000000019 /* FeatureGuest */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -113,6 +116,9 @@
 				A1C11B000000000000000011 /* AppRouting in Frameworks */,
 				A1C11B000000000000000012 /* DesignSystem in Frameworks */,
 				A1C11B000000000000000013 /* MomentsDomain in Frameworks */,
+				A1C11B000000000000000014 /* MomentsAPI in Frameworks */,
+				A1C11B000000000000000015 /* CredentialStore in Frameworks */,
+				A1C11B000000000000000016 /* FeatureGuest in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -229,6 +235,9 @@
 				A1C11B00000000000000000E /* AppRouting */,
 				A1C11B00000000000000000F /* DesignSystem */,
 				A1C11B000000000000000010 /* MomentsDomain */,
+				A1C11B000000000000000017 /* MomentsAPI */,
+				A1C11B000000000000000018 /* CredentialStore */,
+				A1C11B000000000000000019 /* FeatureGuest */,
 			);
 			productName = MomentsClip;
 			productReference = A1C11B000000000000000001 /* MomentsClip.app */;
@@ -583,6 +592,18 @@
 		A1C11B000000000000000010 /* MomentsDomain */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MomentsDomain;
+		};
+		A1C11B000000000000000017 /* MomentsAPI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MomentsAPI;
+		};
+		A1C11B000000000000000018 /* CredentialStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CredentialStore;
+		};
+		A1C11B000000000000000019 /* FeatureGuest */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FeatureGuest;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
