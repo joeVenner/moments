@@ -41,13 +41,17 @@ export default function Slideshow() {
         setIndex((current) => Math.min(current, Math.max(0, momentsResponse.moments.length - 1)));
       } catch (error) {
         if (disposed) return;
-        if (slideshowLoadFailure(error) === "access_required") {
+        const failure = slideshowLoadFailure(error);
+        if (failure === "access_required") {
           // No point polling until the PIN is entered.
           window.clearInterval(timer);
           setAccessRequired(true);
-        } else {
+        } else if (failure === "not_found") {
+          window.clearInterval(timer);
           setNotFound(true);
         }
+        // Transient (offline, a server hiccup): keep showing what we have;
+        // the next poll tries again.
       }
     };
     const timer = window.setInterval(() => void refresh(), REFRESH_MS);
@@ -99,9 +103,9 @@ export default function Slideshow() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-black text-white">
+    <main className="relative min-h-screen overflow-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
       <div aria-hidden className="absolute inset-0 bg-[radial-gradient(circle_at_top,#d9775730,transparent_50%)]" />
-      <header className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 bg-gradient-to-b from-black/80 to-transparent p-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:p-6">
+      <header className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 bg-gradient-to-b from-[var(--color-bg)]/80 to-transparent p-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:p-6">
         <div className="flex shrink-0 items-center gap-1.5" aria-label="Moments">
           <BrandMark className="h-6 w-6 shrink-0" />
           <span className="font-display text-sm font-semibold">Moments</span>
@@ -110,11 +114,11 @@ export default function Slideshow() {
           <button
             type="button"
             onClick={() => setPaused((value) => !value)}
-            className="rounded-full border border-white/20 bg-black/30 px-3 py-2 font-mono text-xs backdrop-blur"
+            className="rounded-full border border-[var(--color-border)] bg-[var(--color-bg)]/30 px-3 py-2 font-mono text-xs backdrop-blur"
           >
             {paused ? t("resumeSlideshow") : t("pauseSlideshow")}
           </button>
-          <Link to={`/e/${encodeURIComponent(slug ?? "")}`} className="rounded-full border border-white/20 bg-black/30 px-3 py-2 font-mono text-xs backdrop-blur">
+          <Link to={`/e/${encodeURIComponent(slug ?? "")}`} className="rounded-full border border-[var(--color-border)] bg-[var(--color-bg)]/30 px-3 py-2 font-mono text-xs backdrop-blur">
             {t("closeSlideshow")}
           </Link>
         </div>
@@ -126,29 +130,29 @@ export default function Slideshow() {
             <img
               src={waitingIllustration}
               alt=""
-              className="mx-auto aspect-[3/2] w-full rounded-3xl border border-white/10 object-cover shadow-2xl shadow-orange-950/30"
+              className="mx-auto aspect-[3/2] w-full rounded-3xl border border-[var(--color-border)] object-cover shadow-2xl shadow-orange-950/30"
             />
-            <p className="mt-5 text-lg text-white/70">{t("slideshowWaiting")}</p>
+            <p className="mt-5 text-lg text-[var(--color-text-muted)]">{t("slideshowWaiting")}</p>
           </div>
         ) : (
           <figure key={active.id} className="animate-hero-rise flex max-h-[75vh] max-w-6xl flex-col items-center">
             {mediaKind === "stream" ? (
-              <iframe src={active.media_url} allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture" allowFullScreen className="aspect-video max-h-[68vh] w-[min(90vw,1100px)] rounded-2xl border border-white/10 bg-black shadow-2xl" title={active.caption ?? t("videoMoment")} />
+              <iframe src={active.media_url} allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture" allowFullScreen className="aspect-video max-h-[68vh] w-[min(90vw,1100px)] rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] shadow-2xl" title={active.caption ?? t("videoMoment")} />
             ) : mediaKind === "video" ? (
-              <video src={active.media_url} autoPlay muted loop playsInline controls className="max-h-[68vh] max-w-[92vw] rounded-2xl border border-white/10 bg-black object-contain shadow-2xl" />
+              <video src={active.media_url} autoPlay muted loop playsInline controls className="max-h-[68vh] max-w-[92vw] rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] object-contain shadow-2xl" />
             ) : (
-              <img src={active.media_url} alt={active.caption ?? ""} className="max-h-[68vh] max-w-[92vw] rounded-2xl border border-white/10 object-contain shadow-2xl" />
+              <img src={active.media_url} alt={active.caption ?? ""} className="max-h-[68vh] max-w-[92vw] rounded-2xl border border-[var(--color-border)] object-contain shadow-2xl" />
             )}
             <figcaption className="mt-5 max-w-2xl text-center">
               {active.caption && <p className="text-lg sm:text-xl">{active.caption}</p>}
-              <p className="mt-1 font-mono text-xs text-white/55">{t("sharedBy", { name: active.uploader_name })}</p>
+              <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">{t("sharedBy", { name: active.uploader_name })}</p>
             </figcaption>
           </figure>
         )}
       </div>
 
       {moments.length > 0 && (
-        <footer className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-3 bg-gradient-to-t from-black/80 to-transparent p-5 font-mono text-xs text-white/60">
+        <footer className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-3 bg-gradient-to-t from-[var(--color-bg)]/80 to-transparent p-5 font-mono text-xs text-[var(--color-text-muted)]">
           <button type="button" onClick={() => setIndex((value) => (value - 1 + moments.length) % moments.length)} aria-label={t("previousMoment")}>←</button>
           <span>{index + 1} / {moments.length}</span>
           <button type="button" onClick={() => setIndex((value) => (value + 1) % moments.length)} aria-label={t("nextMoment")}>→</button>
