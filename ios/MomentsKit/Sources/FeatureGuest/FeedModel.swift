@@ -56,6 +56,8 @@ public final class FeedModel {
     public private(set) var moments: [Moment] = []
     /// Arrived since the guest last looked; shown on the "new moments" pill.
     public private(set) var newMomentCount = 0
+    /// The header counts; nil until loaded (or from an older server).
+    public private(set) var stats: EventStats?
     /// Bumped when a reaction is refused and rolled back (for an error haptic).
     public private(set) var reactionFailureCount = 0
     /// Called when the server confirms a heart, so other lists can follow.
@@ -68,6 +70,8 @@ public final class FeedModel {
     /// belongs to a window that no longer exists and is dropped.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var olderTask: Task<Void, Never>?
+    /// Bumped per counts request: an older answer never replaces a newer one.
+    @ObservationIgnored private var statsGeneration = 0
     @ObservationIgnored private var currentSync: Task<Bool, Never>?
     @ObservationIgnored private lazy var reactionSenders = ReactionSenders(host: self)
     @ObservationIgnored private let grantCache: GrantCache
@@ -127,6 +131,7 @@ public final class FeedModel {
             try await replaceWithFirstPage(revealAll: true)
             phase = .loaded
         }
+        if phase == .loaded { await loadStats() }
     }
 
     /// Pull to refresh: reloads from the top and shows everything.
@@ -138,12 +143,27 @@ public final class FeedModel {
         // Waits for a running poll instead of silently doing nothing.
         let succeeded = await sync(waitIfBusy: true) { [self] in try await replaceWithFirstPage(revealAll: true) }
         refreshFailed = !succeeded && phase == .loaded && !Task.isCancelled
+        if succeeded { await loadStats() }
+    }
+
+    /// The header counts, best effort: a failure keeps the last ones (the
+    /// feed itself reports lost access or a deleted event).
+    private func loadStats() async {
+        statsGeneration += 1
+        let generation = statsGeneration
+        do {
+            let fresh = try await service.eventStats(slug: slug.value, credentials: credentials())
+            if let fresh, generation == statsGeneration { stats = fresh }
+        } catch {
+            logger.notice("event stats not loaded: \(String(describing: type(of: error)), privacy: .public)")
+        }
     }
 
     /// Fetches changes since the last sync. Silent on network trouble (the
     /// next poll tries again).
     public func poll() async {
         guard phase == .loaded else { return }
+        let cursorBefore = feed.cursor
         await sync(waitIfBusy: false) { [self] in
             for _ in 0..<Self.maxBatchesPerPoll {
                 guard let cursor = feed.cursor else { return try await replaceWithFirstPage(revealAll: false) }
@@ -161,6 +181,8 @@ public final class FeedModel {
             }
             revealIfNothingShown()
         }
+        // Something changed (moments added, hidden or removed): recount.
+        if phase == .loaded, feed.cursor != cursorBefore { await loadStats() }
     }
 
     /// Polls every `interval` until the task is cancelled (the view goes away).

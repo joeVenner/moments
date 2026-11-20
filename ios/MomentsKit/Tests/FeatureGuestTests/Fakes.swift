@@ -33,6 +33,12 @@ final class FakeService: MomentsService, @unchecked Sendable {
     func event(slug: String, credentials: EventCredentials) async throws -> Event {
         try lock.withLock { eventCalls.append(credentials); return try eventResults.removeFirst().get() }
     }
+    /// Answers every stats call (nil: an older server).
+    var statsResult: Result<EventStats?, Error> = .success(nil)
+    private(set) var statsCalls = 0
+    func eventStats(slug: String, credentials: EventCredentials) async throws -> EventStats? {
+        try lock.withLock { statsCalls += 1; return try statsResult.get() }
+    }
     func join(slug: String, nickname: String, avatarSeed: String?, credentials: EventCredentials) async throws -> JoinResult {
         try lock.withLock {
             joinCalls.append((nickname, credentials))

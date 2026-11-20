@@ -102,6 +102,8 @@ public protocol MomentsService: Sendable {
     /// Nil when the event is public (no grant needed).
     func access(slug: String, credential: AccessCredential) async throws -> AccessGrant?
     func event(slug: String, credentials: EventCredentials) async throws -> Event
+    /// The header counts; nil from a server that doesn't send them yet.
+    func eventStats(slug: String, credentials: EventCredentials) async throws -> EventStats?
     func feedPage(slug: String, before: Int?, limit: Int?, credentials: EventCredentials) async throws -> FeedPage
     func feedChanges(slug: String, since: Int, limit: Int?, credentials: EventCredentials) async throws -> FeedChanges
     func join(slug: String, nickname: String, avatarSeed: String?, credentials: EventCredentials) async throws -> JoinResult
@@ -219,19 +221,28 @@ public struct MomentsClient: MomentsService {
         }
     }
 
-    public func event(slug: String, credentials: EventCredentials = .init()) async throws -> Event {
+    public func eventStats(slug: String, credentials: EventCredentials = .init()) async throws -> EventStats? {
         try await perform {
-            let output = try await client.getEvent(
-                path: .init(slug: slug), headers: .init(xEventAccess: credentials.accessGrant)
-            )
-            switch output {
-            case let .ok(response): return try mapper.event(response.body.json.event)
-            case let .unauthorized(response): throw Self.error(401, try? response.body.json.code)
-            case let .notFound(response): throw Self.error(404, try? response.body.json.code)
-            case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
-            case let .gone(response): throw Self.error(410, try? response.body.json.code)
-            case let .default(status, response): throw Self.error(status, try? response.body.json.code)
+            try await eventPayload(slug: slug, credentials: credentials).stats.map {
+                EventStats(momentCount: $0.momentCount, guestCount: $0.guestCount)
             }
+        }
+    }
+
+    public func event(slug: String, credentials: EventCredentials = .init()) async throws -> Event {
+        try await perform { try mapper.event(try await eventPayload(slug: slug, credentials: credentials).event) }
+    }
+
+    /// GET /events/{slug}, shared by `event` and `eventStats`.
+    private func eventPayload(slug: String, credentials: EventCredentials) async throws -> Components.Schemas.EventResponse {
+        let output = try await client.getEvent(path: .init(slug: slug), headers: .init(xEventAccess: credentials.accessGrant))
+        switch output {
+        case let .ok(response): return try response.body.json
+        case let .unauthorized(response): throw Self.error(401, try? response.body.json.code)
+        case let .notFound(response): throw Self.error(404, try? response.body.json.code)
+        case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+        case let .gone(response): throw Self.error(410, try? response.body.json.code)
+        case let .default(status, response): throw Self.error(status, try? response.body.json.code)
         }
     }
 

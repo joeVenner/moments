@@ -31,6 +31,18 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
         #expect(fields[HTTPField.Name("X-Guest-Token")!] == nil)
     }
 
+    @Test func readsTheHeaderCountsAndToleratesAnOlderServer() async throws {
+        let withStats = Fixtures.event().replacingOccurrences(
+            of: "\"uploads_open\":true}}", with: "\"uploads_open\":true},\"stats\":{\"moment_count\":128,\"guest_count\":46}}"
+        )
+        #expect(withStats.contains("stats"))
+        let stub = StubTransport(json: withStats)
+        let stats = try await client(stub).eventStats(slug: "party", credentials: .init(accessGrant: "grant-1"))
+        #expect(stats == EventStats(momentCount: 128, guestCount: 46))
+        #expect(try #require(stub.requests.first).request.headerFields[HTTPField.Name("X-Event-Access")!] == "grant-1")
+        #expect(try await client(StubTransport(json: Fixtures.event())).eventStats(slug: "party") == nil)
+    }
+
     @Test func escapesTheSlugInThePath() async throws {
         let stub = StubTransport(json: Fixtures.event())
         _ = try await client(stub).event(slug: "a/b?c")

@@ -475,3 +475,64 @@ private final class Clock: @unchecked Sendable {
         #expect(service.reactionCalls.isEmpty)
     }
 }
+
+@Suite @MainActor struct FeedStatsTests {
+    @Test func theHeaderCountsLoadWithTheFirstPageAndRefresh() async {
+        let (model, service) = makeModel()
+        service.pageResults = [.success(page(1...3)), .success(page(1...4))]
+        service.statsResult = .success(EventStats(momentCount: 3, guestCount: 2))
+        await model.loadFirstPage()
+        #expect(model.stats == EventStats(momentCount: 3, guestCount: 2))
+        service.statsResult = .success(EventStats(momentCount: 4, guestCount: 2))
+        await model.refresh()
+        #expect(model.stats == EventStats(momentCount: 4, guestCount: 2))
+        #expect(service.statsCalls == 2)
+    }
+
+    @Test func aFailedOrMissingCountKeepsTheLastOnesAndTheFeedLoaded() async {
+        let (model, service) = makeModel()
+        service.pageResults = [.success(page(1...3)), .success(page(1...3)), .success(page(1...3))]
+        service.statsResult = .success(EventStats(momentCount: 3, guestCount: 2))
+        await model.loadFirstPage()
+        service.statsResult = .failure(MomentsAPIError.transport(nil))
+        await model.refresh()
+        #expect(model.stats == EventStats(momentCount: 3, guestCount: 2))
+        #expect(model.phase == .loaded)
+        #expect(!model.refreshFailed)
+        service.statsResult = .success(nil)
+        await model.refresh()
+        #expect(model.stats == EventStats(momentCount: 3, guestCount: 2))
+    }
+
+    @Test func aPollThatChangesTheFeedRecountsAndAQuietOneDoesnt() async {
+        let (model, service) = makeModel()
+        service.pageResults = [.success(page(1...3, cursor: 10))]
+        service.changesResults = [
+            .success(FeedChanges(upserts: [moment(4)], removed: [], cursor: 11, hasMore: false)),
+            .success(FeedChanges(upserts: [], removed: [], cursor: 11, hasMore: false)),
+        ]
+        service.statsResult = .success(EventStats(momentCount: 3, guestCount: 1))
+        await model.loadFirstPage()
+        service.statsResult = .success(EventStats(momentCount: 4, guestCount: 1))
+        await model.poll()
+        #expect(model.stats == EventStats(momentCount: 4, guestCount: 1))
+        #expect(service.statsCalls == 2)
+        await model.poll()
+        #expect(service.statsCalls == 2)
+    }
+
+    @Test func anOlderServerShowsNoCounts() async {
+        let (model, service) = makeModel()
+        service.pageResults = [.success(page(1...3))]
+        await model.loadFirstPage()
+        #expect(model.stats == nil)
+        #expect(model.phase == .loaded)
+    }
+
+    @Test func noCountsAreFetchedWhenTheFeedDidntLoad() async {
+        let (model, service) = makeModel()
+        service.pageResults = [.failure(MomentsAPIError.transport(nil))]
+        await model.loadFirstPage()
+        #expect(service.statsCalls == 0)
+    }
+}

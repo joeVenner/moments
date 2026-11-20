@@ -206,3 +206,16 @@ public struct Moment: Sendable, Hashable, Identifiable {
         self.media = media
     }
 }
+
+/// The counts in a guest's event header.
+public struct EventStats: Sendable, Hashable {
+    /// Moments guests can see (hidden ones are not counted).
+    public let momentCount: Int
+    /// Guests in the event now.
+    public let guestCount: Int
+
+    public init(momentCount: Int, guestCount: Int) {
+        self.momentCount = max(0, momentCount)
+        self.guestCount = max(0, guestCount)
+    }
+}
