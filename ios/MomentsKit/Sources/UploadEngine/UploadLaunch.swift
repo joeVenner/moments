@@ -121,7 +121,15 @@ public enum UploadLaunch {
                 guests[item.eventSlug] = guest
             }
             switch guest {
-            case .present: admitted.insert(id)
+            case let .present(owner):
+                // Queued by another guest for this event: the one holding
+                // it left (or was replaced) and this one never shared it.
+                // A guest with no token now can't be the one who queued it.
+                if let recorded = item.owner, recorded != owner {
+                    if drop(id, from: source) { dropped += 1 }
+                } else {
+                    admitted.insert(id)
+                }
             case .absent where isStale(item, now: clip.now, maxAge: clip.strangersKeptFor):
                 if drop(id, from: source) { dropped += 1 }
             case .absent, .unknown: continue
@@ -163,13 +171,15 @@ public enum UploadLaunch {
 
     /// Whether this device holds a guest for an event.
     private enum Guest {
-        case present, absent
+        /// With `ownerTag` of their token, if they have one.
+        case present(owner: String?)
+        case absent
         /// Can't tell now (the keychain locked).
         case unknown
 
         init(_ answer: CredentialsLookupResult) {
             switch answer {
-            case .found: self = .present
+            case let .found(credentials): self = .present(owner: credentials.guestToken.map(QueuedUpload.ownerTag))
             case .missing: self = .absent
             case .unavailable: self = .unknown
             }

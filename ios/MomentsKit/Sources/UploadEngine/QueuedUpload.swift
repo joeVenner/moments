@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import MomentsAPI
 import MomentsDomain
@@ -174,11 +175,28 @@ public struct QueuedUpload: Codable, Sendable, Hashable, Identifiable {
     /// end early when the network may be back (`endNetworkWait`). Kept in
     /// memory only: a relaunch starts over anyway.
     public private(set) var isWaitingForNetwork = false
+    /// Which guest queued it (`ownerTag` of their token), when known. The
+    /// app adopts the App Clip's items only for that same guest: one who
+    /// left and joined again is someone else. Absent in older records.
+    public private(set) var owner: String?
 
     /// The stored fields; `isWaitingForNetwork` is never written.
     enum CodingKeys: String, CodingKey {
         case schemaVersion, id, eventSlug, file, caption, createdAt, thumbnail, thumbnailSentFor
-        case clientUploadID, phase, session, uploaded, attempts, restarts, rounds, retryAt
+        case clientUploadID, phase, session, uploaded, attempts, restarts, rounds, retryAt, owner
+    }
+
+    /// A one-way tag for a guest token: records sit in a folder the App
+    /// Clip shares, so the token itself is never written there.
+    public static func ownerTag(guestToken: String) -> String {
+        SHA256.hash(data: Data(guestToken.utf8)).prefix(16).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// This item, marked as queued by the guest holding `guestToken`.
+    func owned(byGuestToken guestToken: String?) -> QueuedUpload {
+        var copy = self
+        copy.owner = guestToken.map(Self.ownerTag)
+        return copy
     }
 
     /// Ends a wait for the network now (the app came back to the
@@ -534,6 +552,11 @@ private extension QueuedUpload {
         return SessionRef(id: id, partSize: server.partSize, partCount: server.partCount)
     }
 
+    /// 32 lowercase hex characters, as `ownerTag` writes them.
+    static func validOwnerTag(_ value: String) -> String? {
+        value.count == 32 && value.unicodeScalars.allSatisfy { ("0" ... "9").contains($0) || ("a" ... "f").contains($0) } ? value : nil
+    }
+
     /// Server ids end up in URL paths and on disk: short and plain only.
     static func validID(_ value: String) -> String? {
         value.count <= 128 && !value.isEmpty
@@ -583,6 +606,7 @@ extension QueuedUpload {
         let thumbnail = try? c.decodeIfPresent(StagedFile.self, forKey: .thumbnail)
         self.thumbnail = thumbnail.flatMap { $0.contentType == Self.thumbnailContentType ? $0 : nil }
         thumbnailSentFor = (try? c.decodeIfPresent(String.self, forKey: .thumbnailSentFor)).flatMap(Self.validID)
+        owner = (try? c.decodeIfPresent(String.self, forKey: .owner)).flatMap(Self.validOwnerTag)
 
         if case let .done(momentID?) = phase, Self.validID(momentID) == nil {
             throw DecodingError.dataCorruptedError(forKey: .phase, in: c, debugDescription: "invalid moment id")

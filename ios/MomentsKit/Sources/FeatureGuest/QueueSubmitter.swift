@@ -10,7 +10,7 @@ public struct QueueSubmitter: UploadSubmitting {
     /// guest sharing in the first moments waits for it instead of failing.
     public init(queue: UploadQueue, isReady: @escaping @Sendable () async -> Bool) {
         self.isReady = isReady
-        enqueue = { try await queue.enqueue($0) }
+        enqueue = { try await queue.enqueueOwned($0) }
     }
 
     /// Any enqueue (tests script the queue's answers).

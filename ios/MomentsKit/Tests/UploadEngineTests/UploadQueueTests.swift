@@ -870,3 +870,53 @@ private extension Harness {
         return await queue.snapshot().first { $0.id == id }?.retryAt
     }
 }
+
+/// Each item remembers which guest queued it, as a one-way tag.
+@Suite struct QueuedUploadOwnerTests {
+    @Test func theTagIsOneWayAndStable() {
+        let tag = QueuedUpload.ownerTag(guestToken: "gt-secret")
+        #expect(tag == QueuedUpload.ownerTag(guestToken: "gt-secret"))
+        #expect(tag != QueuedUpload.ownerTag(guestToken: "gt-other"))
+        #expect(tag.count == 32 && tag.allSatisfy(\.isHexDigit) && tag == tag.lowercased())
+        #expect(!tag.contains("secret"))
+    }
+
+    @Test func enqueuingMarksTheGuestWhoQueuedIt() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue(credentials: .found(EventCredentials(guestToken: "gt-test")))
+        try await queue.enqueueOwned(harness.stage("a.jpg"))
+        #expect(await queue.snapshot().first?.owner == QueuedUpload.ownerTag(guestToken: "gt-test"))
+        // Saved too: the app reads it from the Clip's folder.
+        let id = try #require(await queue.snapshot().first?.id)
+        guard case let .item(saved) = harness.store.read(harness.store.recordURL(for: id)) else {
+            Issue.record("not saved")
+            return
+        }
+        #expect(saved.owner == QueuedUpload.ownerTag(guestToken: "gt-test"))
+    }
+
+    @Test func noGuestMeansNoMark() async throws {
+        let harness = try Harness()
+        let queue = try await harness.queue(credentials: .unavailable)
+        try await queue.enqueueOwned(harness.stage("a.jpg"))
+        #expect(await queue.snapshot().first?.owner == nil)
+    }
+
+    /// Records from before the mark, or with a damaged one, still load.
+    @Test func aMissingOrBadMarkStillLoads() throws {
+        let id = UUID()
+        let item = QueuedUpload(
+            id: id, eventSlug: "party",
+            file: .init(relativePath: StagingArea.relativePath(for: id, name: "a.jpg"), size: 10, contentType: "image/jpeg")!,
+            caption: nil, createdAt: Date(timeIntervalSince1970: 0)
+        )
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(item)) as? [String: Any])
+        #expect(json["owner"] == nil)
+        #expect(try JSONDecoder().decode(QueuedUpload.self, from: JSONSerialization.data(withJSONObject: json)).owner == nil)
+        json["owner"] = "gt-raw-token"
+        #expect(try JSONDecoder().decode(QueuedUpload.self, from: JSONSerialization.data(withJSONObject: json)).owner == nil)
+        let tag = QueuedUpload.ownerTag(guestToken: "gt")
+        json["owner"] = tag
+        #expect(try JSONDecoder().decode(QueuedUpload.self, from: JSONSerialization.data(withJSONObject: json)).owner == tag)
+    }
+}
