@@ -1666,6 +1666,17 @@
         }
       }
     },
+    "No hidden moments.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun moment masqué."
+          }
+        }
+      }
+    },
     "No highlights yet": {
       "extractionState": "manual",
       "localizations": {
@@ -1705,6 +1716,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aucun souvenir pour l'instant."
+          }
+        }
+      }
+    },
+    "No reported moments.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun moment signalé."
           }
         }
       }
@@ -2192,6 +2214,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Signaler ce moment ?"
+          }
+        }
+      }
+    },
+    "Reported": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signalé"
+          }
+        }
+      }
+    },
+    "Reported by ^[%lld guest](inflect: true)": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signalé par ^[%lld invité](inflect: true)"
           }
         }
       }
@@ -3996,6 +4040,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "^[%lld pt](inflect: true)"
+          }
+        }
+      }
+    },
+    "moderation.tab.all": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tous"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All"
+          }
+        }
+      }
+    },
+    "moderation.tab.reported": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signalés"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reported"
           }
         }
       }
