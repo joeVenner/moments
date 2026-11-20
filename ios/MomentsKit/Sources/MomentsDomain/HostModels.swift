@@ -2,7 +2,20 @@ import Foundation
 
 /// An event as the host's list shows it.
 public struct AdminEvent: Sendable, Hashable, Identifiable {
+    /// Where the event comes from, which decides its rules.
+    public enum Kind: String, Sendable, Hashable, CaseIterable {
+        /// From before hosting plans.
+        case legacy
+        /// The operator's own.
+        case operatorOwned = "operator"
+        /// Paid by the host's plan.
+        case main
+        /// The plan's one-month test event (fixed dates, few guests).
+        case test
+    }
+
     public let event: Event
+    public let kind: Kind
     /// Every moment, hidden ones included.
     public let momentCount: Int
     /// Guests currently in the event.
@@ -10,8 +23,9 @@ public struct AdminEvent: Sendable, Hashable, Identifiable {
 
     public var id: String { event.id }
 
-    public init(event: Event, momentCount: Int, participantCount: Int) {
+    public init(event: Event, kind: Kind, momentCount: Int, participantCount: Int) {
         self.event = event
+        self.kind = kind
         self.momentCount = momentCount
         self.participantCount = participantCount
     }

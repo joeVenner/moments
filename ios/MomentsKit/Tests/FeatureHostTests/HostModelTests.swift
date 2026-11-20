@@ -231,7 +231,7 @@ private func event(_ id: String) -> AdminEvent {
             coverImageURL: nil, createdAt: start, startsAt: nil, expiresAt: nil, uploadsCloseAt: nil,
             purgeAfter: nil, archivedAt: nil, accessMode: .public, areUploadsOpen: true
         ),
-        momentCount: 1, participantCount: 2
+        kind: .main, momentCount: 1, participantCount: 2
     )
 }
 

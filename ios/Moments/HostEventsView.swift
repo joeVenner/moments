@@ -226,7 +226,7 @@ struct HostLiveEventCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                if item.event.accessMode == .private { HostPrivateChip() }
+                HostEventChips(item: item)
             }
             // Large text: tiles stack so their labels never truncate.
             let tiles = typeSize.isAccessibilitySize
@@ -314,6 +314,35 @@ struct HostStatTile: View {
     }
 }
 
+/// The chips an event row shows: TEST for the plan's test event, then Private.
+struct HostEventChips: View {
+    let item: AdminEvent
+
+    var body: some View {
+        let isTest = item.kind == .test
+        let isPrivate = item.event.accessMode == .private
+        if isTest || isPrivate {
+            HStack(spacing: Spacing.xxs) {
+                if isTest { HostTestChip() }
+                if isPrivate { HostPrivateChip() }
+            }
+        }
+    }
+}
+
+/// Marks the plan's test event (a month, few guests): text, not colour.
+struct HostTestChip: View {
+    var body: some View {
+        Text("TEST")
+            .font(MomentsFont.caption().bold())
+            .foregroundStyle(MomentsColor.text)
+            .padding(.horizontal, Spacing.xs)
+            .padding(.vertical, Spacing.xxs)
+            .overlay(Capsule().stroke(MomentsColor.border))
+            .accessibilityLabel(Text("Test event"))
+    }
+}
+
 struct HostPrivateChip: View {
     var body: some View {
         Label("Private", systemImage: "lock.fill")
@@ -338,7 +367,7 @@ struct HostEventRow: View {
                     .foregroundStyle(MomentsColor.text)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
-                if item.event.accessMode == .private { HostPrivateChip() }
+                HostEventChips(item: item)
                 Text(detail)
                     .font(MomentsFont.caption())
                     .foregroundStyle(MomentsColor.textMuted)
