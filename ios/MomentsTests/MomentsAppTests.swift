@@ -160,6 +160,30 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(!navigation.handle(text: "WIFI:S:guest;T:WPA;P:secret;;"))
     }
 
+    @Test func theFlyerIsOneA6PageNamedAfterTheEvent() throws {
+        let event = Event(
+            id: "e1", slug: "sara-omar", title: "Sara & Omar's wedding", type: "Wedding",
+            createdAt: .now, accessMode: .private
+        )
+        let flyer = EventFlyer(event: event, url: try #require(URL(string: "https://moments-hq.com/e/sara-omar")))
+        #expect(flyer.fileName == "sara-omar-flyer.pdf")
+        #expect(flyer.isPrivate)
+        let file = try flyer.writePDF()
+        defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        #expect(file.lastPathComponent == "sara-omar-flyer.pdf")
+        let pdf = try #require(CGPDFDocument(file as CFURL))
+        #expect(pdf.numberOfPages == 1)
+        let box = try #require(pdf.page(at: 1)).getBoxRect(.mediaBox)
+        #expect(abs(box.width - EventFlyer.pageSize.width) < 1 && abs(box.height - EventFlyer.pageSize.height) < 1)
+    }
+
+    @Test(arguments: [("../../etc", "etc-flyer.pdf"), ("a/b", "ab-flyer.pdf"), ("", "flyer.pdf"), ("..", "flyer.pdf"), ("fête", "fte-flyer.pdf")])
+    func theFlyerFileNameNeverNamesAPath(slug: String, expected: String) throws {
+        let event = Event(id: "e1", slug: slug, title: "Party", type: "Party", createdAt: .now)
+        let flyer = EventFlyer(event: event, url: try #require(URL(string: "https://moments-hq.com/e/x")))
+        #expect(flyer.fileName == expected)
+    }
+
     @Test func theModerateBadgeShowsOnlyWhenSomethingWaits() {
         #expect(HostManageRow.badgeLabel(0) == nil)
         #expect(HostManageRow.badgeLabel(-1) == nil)
