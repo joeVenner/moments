@@ -1338,6 +1338,17 @@
         }
       }
     },
+    "Its moments can't be viewed right now.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ses moments ne sont pas visibles pour le moment."
+          }
+        }
+      }
+    },
     "Join again": {
       "extractionState": "manual",
       "localizations": {
@@ -2852,6 +2863,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cet événement est complet : il a autant d'invités que le permet l'offre de son organisateur."
+          }
+        }
+      }
+    },
+    "This event is no longer hosted": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet événement n'est plus hébergé"
           }
         }
       }

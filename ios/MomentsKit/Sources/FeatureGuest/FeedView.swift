@@ -87,6 +87,8 @@ public struct FeedView: View {
                 .padding(.horizontal, Spacing.md)
         case .failed(.eventGone):
             message("This event has ended", detail: "Its moments are no longer available.")
+        case .failed(.notHosted):
+            message("This event is no longer hosted", detail: "Its moments can't be viewed right now.")
         case .accessLost:
             message("Access changed", detail: "The host changed this event's access. Join again to keep watching.")
         case .guestRequired:

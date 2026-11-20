@@ -117,14 +117,14 @@ public struct GuestEventView: View {
         }
         // The event ended for this guest: every tab stops; lost access also
         // drops cached images of the private event.
-        .onChange(of: feed?.phase) { _, phase in
-            guard phase == .accessLost || phase == .guestRequired || phase == .failed(.eventGone) else { return }
+        .onChange(of: feed?.phase) {
+            guard feed?.hasEnded == true else { return }
             // The event ended: an open upload screen closes and drops its picks.
             upload?.discardAll()
             upload = nil
             highlights?.end()
             leaderboard?.end()
-            guard phase == .accessLost else { return }
+            guard feed?.phase == .accessLost else { return }
             for loader in [thumbnails, viewerImages].compactMap(\.self) { Task { await loader.removeAll() } }
         }
         .onChange(of: join.phase, initial: true) { _, phase in
@@ -286,8 +286,7 @@ public struct GuestEventView: View {
     /// Shown under Moments and Highlights (insetting their content) when
     /// uploads are available and the event is open.
     @ViewBuilder private func shareButton(_ feed: FeedModel) -> some View {
-        if let uploads = dependencies.uploads, feed.phase != .accessLost, feed.phase != .guestRequired,
-           feed.phase != .failed(.eventGone) {
+        if let uploads = dependencies.uploads, !feed.hasEnded {
             shareButton(uploads)
         }
     }

@@ -236,6 +236,7 @@ public struct JoinView: View {
     private func failureTitle(_ failure: JoinModel.Failure) -> LocalizedStringKey {
         switch failure {
         case .eventNotFound: "Event not found"
+        case .eventNotHosted: "This event is no longer hosted"
         case .upgradeRequired: "Update required"
         case .accessUnavailable: "Private events are unavailable"
         case .temporary: "Can't reach Moments"
@@ -246,6 +247,7 @@ public struct JoinView: View {
     private func failureDetail(_ failure: JoinModel.Failure) -> LocalizedStringKey {
         switch failure {
         case .eventNotFound: "Check the link or QR code with the host."
+        case .eventNotHosted: "Its moments can't be viewed right now."
         case .upgradeRequired: "Update Moments from the App Store to join this event."
         case .accessUnavailable: "Please try again later."
         case .temporary: "Check your connection and try again."

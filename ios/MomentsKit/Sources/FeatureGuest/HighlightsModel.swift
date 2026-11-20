@@ -112,7 +112,7 @@ public final class HighlightsModel {
         switch error {
         case is CancellationError:
             return
-        case MomentsAPIError.accessRequired, MomentsAPIError.eventNotFound:
+        case MomentsAPIError.accessRequired, MomentsAPIError.eventNotFound, MomentsAPIError.eventNotHosted:
             end()
             onFatalError?(error)
         case MomentsAPIError.rateLimited:
@@ -157,7 +157,7 @@ extension HighlightsModel: ReactionHost {
         switch error {
         case is CancellationError:
             return
-        case MomentsAPIError.accessRequired, MomentsAPIError.eventNotFound:
+        case MomentsAPIError.accessRequired, MomentsAPIError.eventNotFound, MomentsAPIError.eventNotHosted:
             end()
             onFatalError?(error)
         case MomentsAPIError.momentNotFound:
