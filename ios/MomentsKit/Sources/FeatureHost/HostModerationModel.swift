@@ -35,6 +35,21 @@ public final class HostModerationModel {
         case hidden
     }
 
+    /// How a hide or delete of several moments went.
+    public struct BulkResult: Equatable, Sendable {
+        public let succeeded: Int
+        public let failed: Int
+
+        public init(succeeded: Int, failed: Int) {
+            self.succeeded = succeeded
+            self.failed = failed
+        }
+    }
+
+    /// Requests on their way at once during a bulk action: enough to be
+    /// quick, few enough not to trip the server's rate limit.
+    static let bulkConcurrency = 4
+
     public let eventID: String
     public private(set) var moments: [AdminMoment] = []
     public var filter: Filter = .all
@@ -123,12 +138,14 @@ public final class HostModerationModel {
     }
 
     /// Hides the moment from guests (or shows it again) right away, and
-    /// puts it back if the server says no.
-    public func setHidden(_ isHidden: Bool, momentID: String) async {
+    /// puts it back if the server says no. True when it ends up that way
+    /// (or is gone).
+    @discardableResult
+    public func setHidden(_ isHidden: Bool, momentID: String) async -> Bool {
         let target: AdminMoment.Status = isHidden ? .hidden : .approved
-        guard let previous = moments.first(where: { $0.id == momentID })?.status, previous != target,
-              let action = begin(momentID)
-        else { return }
+        guard let previous = moments.first(where: { $0.id == momentID })?.status else { return false }
+        guard previous != target else { return true }
+        guard let action = begin(momentID) else { return false }
         defer { finish(momentID, action) }
         let version = listVersion
         let started = generation
@@ -136,29 +153,35 @@ public final class HostModerationModel {
         let outcome = await account.run(logCategory: "host-moderation", notFound: .momentNotFound) {
             try await service.moderate(token: $0, momentID: momentID, status: target)
         }
-        guard generation == started else { return }
+        guard generation == started else { return false }
         switch outcome {
         case let .success(saved):
             // The server's answer wins, even if another device changed it too.
             if let index = moments.firstIndex(where: { $0.id == momentID }) { moments[index] = saved }
             confirmedActions += 1
+            return true
         case .notFound:
             moments.removeAll { $0.id == momentID }
             confirmedActions += 1
+            return true
         case .signedOut:
             clear()
+            return false
         case .cancelled:
             rollBack(momentID, to: previous, ifListIs: version)
+            return false
         case let .failure(failure):
             rollBack(momentID, to: previous, ifListIs: version)
             actionFailure = ActionFailure(failure)
+            return false
         }
     }
 
     /// Deletes the moment and its files for good. It stays on screen until
-    /// the server confirms.
-    public func delete(momentID: String) async {
-        guard moments.contains(where: { $0.id == momentID }), let action = begin(momentID) else { return }
+    /// the server confirms. True when it's gone.
+    @discardableResult
+    public func delete(momentID: String) async -> Bool {
+        guard moments.contains(where: { $0.id == momentID }), let action = begin(momentID) else { return false }
         defer { finish(momentID, action) }
         let started = generation
         let outcome = await account.run(logCategory: "host-moderation", notFound: .momentNotFound) { token -> Bool in
@@ -169,20 +192,59 @@ public final class HostModerationModel {
                 return false
             }
         }
-        guard generation == started else { return }
+        guard generation == started else { return false }
         switch outcome {
         case .success(true), .notFound:
             moments.removeAll { $0.id == momentID }
             confirmedActions += 1
+            return true
         case .success(false):
             actionFailure = .mediaKept
+            return false
         case .signedOut:
             clear()
+            return false
         case .cancelled:
-            break
+            return false
         case let .failure(failure):
             actionFailure = ActionFailure(failure)
+            return false
         }
+    }
+
+    /// Hides several moments, a few requests at a time; each one is undone
+    /// on its own if the server says no.
+    public func hide(momentIDs: [String]) async -> BulkResult {
+        await runBulk(momentIDs) { await self.setHidden(true, momentID: $0) }
+    }
+
+    /// Deletes several moments for good, a few requests at a time.
+    public func delete(momentIDs: [String]) async -> BulkResult {
+        await runBulk(momentIDs) { await self.delete(momentID: $0) }
+    }
+
+    private func runBulk(
+        _ momentIDs: [String],
+        _ action: @escaping @MainActor @Sendable (String) async -> Bool
+    ) async -> BulkResult {
+        var succeeded = 0
+        var failed = 0
+        // Each request's `begin` clears the notice: keep the first failure.
+        var firstFailure: ActionFailure?
+        var remaining = momentIDs.makeIterator()
+        await withTaskGroup(of: Bool.self) { group in
+            for _ in 0..<Self.bulkConcurrency {
+                guard let id = remaining.next() else { break }
+                group.addTask { await action(id) }
+            }
+            for await didSucceed in group {
+                if didSucceed { succeeded += 1 } else { failed += 1 }
+                if firstFailure == nil { firstFailure = actionFailure }
+                if let id = remaining.next() { group.addTask { await action(id) } }
+            }
+        }
+        if let firstFailure, !moments.isEmpty { actionFailure = firstFailure }
+        return BulkResult(succeeded: succeeded, failed: failed)
     }
 
     public func dismissActionFailure() { actionFailure = nil }
