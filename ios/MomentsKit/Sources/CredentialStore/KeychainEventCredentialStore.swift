@@ -30,7 +30,7 @@ public final class KeychainEventCredentialStore: EventCredentialStore, @unchecke
     }
 
     public func credentials(for slug: EventSlug) throws -> StoredEventCredentials? {
-        try lock.withLock { try read(slug) }
+        try lock.withLock { try read(slug).value }
     }
 
     public func save(_ credentials: StoredEventCredentials, for slug: EventSlug) throws {
@@ -39,12 +39,18 @@ public final class KeychainEventCredentialStore: EventCredentialStore, @unchecke
 
     public func update(for slug: EventSlug, _ change: (inout StoredEventCredentials) -> Void) throws {
         try lock.withLock {
-            let original = try read(slug) ?? StoredEventCredentials()
+            let stored = try read(slug)
+            let original = stored.value ?? StoredEventCredentials()
             var value = original
             change(&value)
             // Unchanged (including an unreadable item read as empty): no write,
             // so a lookup can never delete what it couldn't read.
             guard value != original else { return }
+            // An unreadable item may hold a guest token: only a usable entry
+            // (a join, or an unlock's grant: this version can't use that token
+            // anyway) replaces it, never a partial change (a report, a mute)
+            // that would leave an empty value and so delete it.
+            if stored.isUnreadable && value.isEmpty { throw KeychainError.unreadableItem }
             try write(value, slug)
         }
     }
@@ -96,17 +102,19 @@ public final class KeychainEventCredentialStore: EventCredentialStore, @unchecke
         return query
     }
 
-    /// Unreadable items read as nil and are overwritten by the next save;
-    /// they are never deleted here, so a format change can't wipe a guest token.
-    private func read(_ slug: EventSlug) throws -> StoredEventCredentials? {
+    /// Unreadable items read as nil (`isUnreadable`) and are overwritten by
+    /// the next save; they are never deleted here, so a format change can't
+    /// wipe a guest token.
+    private func read(_ slug: EventSlug) throws -> (value: StoredEventCredentials?, isUnreadable: Bool) {
         var query = baseQuery(slug: slug)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { return nil }
+        if status == errSecItemNotFound { return (nil, false) }
         try check(status)
-        return (result as? Data).flatMap(StoredEventCredentials.decode)
+        let value = (result as? Data).flatMap(StoredEventCredentials.decode)
+        return (value, value == nil)
     }
 
     private func write(_ credentials: StoredEventCredentials, _ slug: EventSlug) throws {

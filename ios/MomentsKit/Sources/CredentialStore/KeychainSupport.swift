@@ -7,6 +7,10 @@ public enum KeychainError: Error, Equatable {
     /// unlocked since boot).
     case unavailableWhileLocked
     case tooManyItems
+    /// An item exists that this version can't read (e.g. a newer format
+    /// after a downgrade); a partial change would have deleted it. The item
+    /// is left untouched; a later join or unlock replaces it.
+    case unreadableItem
 }
 
 /// SecItem plumbing shared by the keychain stores.
