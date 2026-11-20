@@ -20,6 +20,8 @@ public final class LeaderboardModel {
     public private(set) var podiumCelebrations = 0
     /// Guests this guest muted on this device, oldest first.
     public private(set) var mutedParticipantIDs: [String] = []
+    /// The last unmute couldn't be saved (the guest stays muted).
+    public private(set) var unmuteFailed = false
 
     @ObservationIgnored public var onFatalError: (@MainActor (any Error) -> Void)?
 
@@ -57,8 +59,10 @@ public final class LeaderboardModel {
         mutedParticipantIDs.map { id in MutedGuest(id: id, entry: entries.first { $0.participantID == id }) }
     }
 
-    /// Re-reads the mutes (the viewer may have added one).
+    /// Re-reads the mutes (the viewer may have added one), forgetting an
+    /// earlier failed unmute.
     public func reloadMuted() {
+        unmuteFailed = false
         do {
             mutedParticipantIDs = try store.credentials(for: slug)?.mutedParticipantIDs ?? []
         } catch {
@@ -72,6 +76,9 @@ public final class LeaderboardModel {
             try store.update(for: slug) { $0.unmute(participantID: participantID) }
         } catch {
             logger.error("saving an unmute failed: \(String(describing: error), privacy: .public)")
+            reloadMuted()
+            unmuteFailed = true
+            return
         }
         reloadMuted()
     }

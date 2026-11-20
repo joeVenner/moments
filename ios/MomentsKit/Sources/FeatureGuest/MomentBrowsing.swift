@@ -19,8 +19,9 @@ protocol MomentBrowsing: AnyObject {
     /// Whether this guest may mute the moment's sharer (not themselves,
     /// and only moments that name one).
     func canMute(_ moment: Moment) -> Bool
-    /// Hides the guest's moments on this device, from when the viewer closes.
-    func mute(participantID: String)
+    /// Hides the guest's moments on this device, from when the viewer
+    /// closes. False when this device couldn't save it (hidden for now only).
+    @discardableResult func mute(participantID: String) -> Bool
     /// The viewer closed: moments reported or muted from it leave the list.
     func viewerDidClose()
 }

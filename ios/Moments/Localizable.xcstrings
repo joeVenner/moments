@@ -53,6 +53,17 @@
         }
       }
     },
+    "%@'s moments are hidden for now, but this phone couldn't save it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les souvenirs de %@ sont masqués pour l'instant, mais ce téléphone n'a pas pu l'enregistrer."
+          }
+        }
+      }
+    },
     "%lld couldn't be changed": {
       "extractionState": "manual",
       "localizations": {
@@ -1091,6 +1102,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connexion impossible. Réessayez."
+          }
+        }
+      }
+    },
+    "Couldn't unmute. Try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de ne plus masquer. Réessayez."
           }
         }
       }
