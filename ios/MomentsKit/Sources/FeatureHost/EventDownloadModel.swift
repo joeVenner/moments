@@ -23,7 +23,8 @@ public protocol MediaDownloading: Sendable {
 /// "Download everything": every moment guests can see, saved one by one to
 /// the host's library. Hidden moments stay out (the host took them down).
 /// Stream videos are skipped and counted: the server has no file for them
-/// yet, only a player.
+/// yet, only a player. The list's signed links last 1-2 hours, so a long
+/// run reloads the list once a link stops working and goes on with fresh ones.
 @MainActor @Observable
 public final class EventDownloadModel {
     public enum Phase: Equatable, Sendable {
@@ -68,6 +69,11 @@ public final class EventDownloadModel {
     @ObservationIgnored private let account: HostAccount
     @ObservationIgnored private let downloader: any MediaDownloading
     @ObservationIgnored private let saver: any MomentSaving
+    /// The clock spacing reloads (tests move it).
+    @ObservationIgnored var now: @Sendable () -> ContinuousClock.Instant = { .now }
+    /// Links last 1-2 hours: one that still fails this soon after a reload
+    /// is broken, not expired, and doesn't reload the whole list again.
+    nonisolated static let reloadGap: Duration = .seconds(10 * 60)
 
     public init(
         eventID: String, origin: URL, service: any HostService, account: HostAccount,
@@ -94,12 +100,12 @@ public final class EventDownloadModel {
     /// one the mapper allows for playback.
     nonisolated static func plan(
         _ moments: [AdminMoment], origin: URL
-    ) -> (files: [(url: URL, kind: Media.Kind)], skippedVideos: Int) {
-        var files: [(url: URL, kind: Media.Kind)] = []
+    ) -> (files: [(id: String, url: URL, kind: Media.Kind)], skippedVideos: Int) {
+        var files: [(id: String, url: URL, kind: Media.Kind)] = []
         var skipped = 0
         for moment in moments where !moment.isHidden {
             if let url = URL(string: moment.media.url), isOriginFile(url, origin: origin) {
-                files.append((url, moment.media.kind))
+                files.append((moment.id, url, moment.media.kind))
             } else {
                 skipped += 1
             }
@@ -123,12 +129,8 @@ public final class EventDownloadModel {
         account.refresh()
         guard account.currentToken() != nil else { phase = .idle; return }
         phase = .loading
-        let id = eventID
-        let outcome = await account.run(logCategory: "host-download", notFound: .eventNotFound) {
-            try await service.adminMoments(token: $0, eventID: id)
-        }
         let list: AdminMomentList
-        switch outcome {
+        switch await loadList() {
         case let .success(value): list = value
         case .notFound: phase = .failed(.gone); return
         case .signedOut, .cancelled: phase = .idle; return
@@ -138,18 +140,54 @@ public final class EventDownloadModel {
         let (files, skippedVideos) = Self.plan(list.moments, origin: origin)
         var saved = 0
         var failed = 0
+        /// Fresh links by moment, once a reload replaced the first list's.
+        var freshURLs: [String: URL]?
+        /// A reload that didn't work isn't tried again in this run.
+        var canReload = true
+        var lastReload: ContinuousClock.Instant?
         phase = .saving(done: 0, total: files.count)
         for (index, file) in files.enumerated() {
             if Task.isCancelled {
                 return finish(saved: saved, failed: failed, skipped: skippedVideos, truncated: list.isTruncated, cancelled: true)
             }
             do {
-                let local = try await downloader.download(file.url)
+                // After a reload, a moment missing from it (hidden or
+                // deleted meanwhile) has no link and fails.
+                var url = freshURLs.map { $0[file.id] } ?? file.url
+                let isDueForReload = lastReload.map { now() - $0 >= Self.reloadGap } ?? true
+                let local: URL
+                do {
+                    guard let current = url else { throw MomentsAPIError.eventNotFound }
+                    local = try await downloader.download(current)
+                } catch let error as MomentsAPIError
+                    where canReload && isDueForReload && url != nil && Self.isExpiredLink(error) {
+                    // The link expired (or the moment went): one reload,
+                    // then this file once more with its fresh link.
+                    lastReload = now()
+                    let reloaded: [String: URL]
+                    switch await reloadedURLs() {
+                    case let .success(value): reloaded = value
+                    case .signedOut: throw SignedOutDuringDownload()
+                    case .cancelled: throw CancellationError()
+                    case .notFound, .failure:
+                        canReload = false
+                        throw MomentsAPIError.eventNotFound
+                    }
+                    freshURLs = reloaded
+                    url = reloaded[file.id]
+                    // Removed or hidden since the run started.
+                    guard let fresh = url else { throw MomentsAPIError.eventNotFound }
+                    local = try await downloader.download(fresh)
+                }
                 defer { try? FileManager.default.removeItem(at: local) }
                 try await saver.save(fileAt: local, kind: file.kind)
                 saved += 1
             } catch MomentSavingError.accessDenied {
                 phase = .failed(.photosAccessDenied(saved: saved))
+                return
+            } catch is SignedOutDuringDownload {
+                // As signing out before the run: the host must sign in again.
+                phase = .idle
                 return
             } catch {
                 // URLSession answers a cancel with URLError(.cancelled),
@@ -166,6 +204,35 @@ public final class EventDownloadModel {
         finish(saved: saved, failed: failed, skipped: skippedVideos, truncated: list.isTruncated, cancelled: false)
     }
 
+    private func loadList() async -> HostCallOutcome<AdminMomentList> {
+        let id = eventID
+        return await account.run(logCategory: "host-download", notFound: .eventNotFound) {
+            try await service.adminMoments(token: $0, eventID: id)
+        }
+    }
+
+    /// How the downloader reports an expired `?mv=` link (the server answers
+    /// 404, or 401/403).
+    nonisolated static func isExpiredLink(_ error: MomentsAPIError) -> Bool {
+        switch error {
+        case .eventNotFound, .accessRequired: true
+        default: false
+        }
+    }
+
+    /// Each visible moment's fresh link.
+    private func reloadedURLs() async -> HostCallOutcome<[String: URL]> {
+        switch await loadList() {
+        case let .success(list):
+            let (files, _) = Self.plan(list.moments, origin: origin)
+            return .success(Dictionary(files.map { ($0.id, $0.url) }, uniquingKeysWith: { first, _ in first }))
+        case .notFound: return .notFound
+        case .signedOut: return .signedOut
+        case .cancelled: return .cancelled
+        case let .failure(failure): return .failure(failure)
+        }
+    }
+
     private func finish(saved: Int, failed: Int, skipped: Int, truncated: Bool, cancelled: Bool) {
         phase = .finished(Summary(
             saved: saved, failed: failed, skippedVideos: skipped, isTruncated: truncated, wasCancelled: cancelled
@@ -175,3 +242,5 @@ public final class EventDownloadModel {
 
 /// The real downloader: whole files on the API origin, streamed to disk.
 extension MediaFileDownloader: MediaDownloading {}
+
+private struct SignedOutDuringDownload: Error {}
