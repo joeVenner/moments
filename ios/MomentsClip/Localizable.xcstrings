@@ -725,6 +725,16 @@
         }
       }
     },
+    "Keep this open until your photos are sent.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gardez cet écran ouvert jusqu'à l'envoi de vos photos."
+          }
+        }
+      }
+    },
     "Large videos on Wi-Fi only": {
       "extractionState": "stale",
       "localizations": {
@@ -1034,7 +1044,6 @@
       }
     },
     "Photos and videos from your library": {
-      "extractionState": "stale",
       "localizations": {
         "fr": {
           "stringUnit": {
