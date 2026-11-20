@@ -493,6 +493,19 @@ private func event(_ id: String) -> AdminEvent {
         #expect(model.phase == .failed(.offline) && model.events.map(\.id) == ["a"])
     }
 
+    @Test func aPlanRefusalSaysSoAndKeepsTheLastList() async {
+        let service = FakeHostService()
+        service.eventsResult = .success(AdminEventList(events: [event("a")], isTruncated: false))
+        let host = account(service, store: FlakyHostStore(live))
+        let model = HostEventsModel(service: service, account: host)
+        await model.load()
+        service.eventsResult = .failure(MomentsAPIError.planRequired)
+        await model.load()
+        // Not a session problem: the host stays signed in to resubscribe.
+        #expect(model.phase == .failed(.planRequired) && model.events.map(\.id) == ["a"])
+        #expect(host.state != .signedOut)
+    }
+
     @Test func resetForgetsTheList() async {
         let service = FakeHostService()
         service.eventsResult = .success(AdminEventList(events: [event("a")], isTruncated: true))
@@ -1116,6 +1129,19 @@ private func plainEvent(_ id: String, mode: Event.AccessMode = .public, close: D
         #expect(!model.signsGuestsOut)
         await model.save()
         #expect(service.saveCalls == ["access e1 public -"])
+    }
+
+    @Test func aPlanRefusalKeepsThePINForARetry() async {
+        let service = FakeHostService()
+        service.saveResult = .failure(MomentsAPIError.planRequired)
+        let model = HostEventAccessModel(event: plainEvent("e1", mode: .private), service: service, account: account(service, store: FlakyHostStore(live)))
+        model.newPIN = "482913"
+        await model.save()
+        #expect(service.saveCalls == ["access e1 private 482913"])
+        #expect(model.phase == .failed(.planRequired) && model.newPIN == "482913")
+        // Resubscribing fixes it, so the form can be tried again.
+        model.dismissFailure()
+        #expect(model.phase == .editing)
     }
 
     @Test func forgetsThePINWhenTheEventIsGoneButKeepsItForARetry() async {
