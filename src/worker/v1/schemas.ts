@@ -462,6 +462,9 @@ export const AdminMomentSchema = z
     size_bytes: z.number().int().nullable(),
     moderation_status: ModerationStatusSchema.openapi({ description: "`hidden` moments are invisible to guests" }),
     reaction_count: nonNegativeCount,
+    report_count: nonNegativeCount.openapi({
+      description: "How many guests reported it (one report per guest); who reported is never shown",
+    }),
     media: MediaSchema,
   })
   .openapi("AdminMoment", {

@@ -562,6 +562,11 @@
             "type": "integer",
             "minimum": 0
           },
+          "report_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "How many guests reported it (one report per guest); who reported is never shown"
+          },
           "media": {
             "$ref": "#/components/schemas/Media"
           }
@@ -576,6 +581,7 @@
           "size_bytes",
           "moderation_status",
           "reaction_count",
+          "report_count",
           "media"
         ],
         "description": "Its `/media/...` URLs carry an `mv` admin view signature (not `at`) valid 1-2 hours, so hidden moments load too; reload the list for fresh ones."

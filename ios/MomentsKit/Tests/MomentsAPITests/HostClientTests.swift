@@ -36,10 +36,10 @@ private func detail(eventURL: String = "https://moments.test/e/party", inviteURL
     """
 }
 
-private func adminMoment(id: String = "m1", status: String = "approved", kind: String = "image") -> String {
+private func adminMoment(id: String = "m1", status: String = "approved", kind: String = "image", reports: Int = 0) -> String {
     """
     {"id":"\(id)","event_id":"e1","uploader_name":"Sara","caption":null,"created_at":"2026-11-17 18:30:00",
-     "mime_type":"image/jpeg","size_bytes":2048,"moderation_status":"\(status)","reaction_count":4,
+     "mime_type":"image/jpeg","size_bytes":2048,"moderation_status":"\(status)","reaction_count":4,"report_count":\(reports),
      "media":\(Fixtures.media(kind: kind, url: "/media/events/e1/moments/\(id).jpg?mv=sig"))}
     """
 }
@@ -236,13 +236,15 @@ private func adminMoment(id: String = "m1", status: String = "approved", kind: S
 
     @Test func listsAnEventsMomentsAndSkipsRowsItCantTrust() async throws {
         let stub = StubTransport(json: """
-        {"moments":[\(adminMoment(id: "m1")),\(adminMoment(id: "m2", status: "hidden")),
+        {"moments":[\(adminMoment(id: "m1", reports: 2)),\(adminMoment(id: "m2", status: "hidden")),
           \(adminMoment(id: "m3", status: "pending")),\(adminMoment(id: "m4", kind: "audio"))],"truncated":true}
         """)
         let list = try await client(stub).adminMoments(token: hostToken, eventID: "e1")
         // An unknown status is never guessed as visible or hidden.
         #expect(list.moments.map(\.id) == ["m1", "m2"])
         #expect(list.moments.map(\.isHidden) == [false, true])
+        #expect(list.moments.map(\.reportCount) == [2, 0])
+        #expect(list.moments.map(\.isReported) == [true, false])
         #expect(list.isTruncated)
         let first = try #require(list.moments.first)
         #expect(first.reactionCount == 4 && first.sizeBytes == 2048)

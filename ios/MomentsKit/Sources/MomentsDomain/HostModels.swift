@@ -138,13 +138,15 @@ public struct AdminMoment: Sendable, Hashable, Identifiable {
     public let sizeBytes: Int?
     public var status: Status
     public let reactionCount: Int
+    /// How many guests reported it; who reported is never sent.
+    public let reportCount: Int
     /// Its `/media/...` URLs carry a short-lived host view signature; reload
     /// the list for fresh ones.
     public let media: Media
 
     public init(
         id: String, eventID: String, uploaderName: String, caption: String? = nil, createdAt: Date,
-        sizeBytes: Int? = nil, status: Status, reactionCount: Int = 0, media: Media
+        sizeBytes: Int? = nil, status: Status, reactionCount: Int = 0, reportCount: Int = 0, media: Media
     ) {
         self.id = id
         self.eventID = eventID
@@ -154,10 +156,12 @@ public struct AdminMoment: Sendable, Hashable, Identifiable {
         self.sizeBytes = sizeBytes
         self.status = status
         self.reactionCount = reactionCount
+        self.reportCount = reportCount
         self.media = media
     }
 
     public var isHidden: Bool { status == .hidden }
+    public var isReported: Bool { reportCount > 0 }
 }
 
 /// An event's moments for moderation, newest first.
