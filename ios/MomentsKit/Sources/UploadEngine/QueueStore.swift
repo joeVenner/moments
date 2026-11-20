@@ -3,13 +3,15 @@ import Foundation
 /// Saves queued uploads, one JSON file per item named by its id, so a
 /// damaged or tampered record costs that item and never the whole queue.
 ///
+/// Files are excluded from backup (they point at staged files that aren't
+/// backed up either) and readable after first unlock, so a background wake
+/// while the phone is locked can still update them.
+///
 /// The app's lives in its own Application Support folder. The App Clip's
 /// lives in the App Group (`UploadFolders.clip`) so the app can adopt it;
 /// that's safe because nothing here holds a file lock (records are written
 /// atomically, staged files only read), and a suspended app is killed
-/// (0xdead10cc) only for a lock held in a shared container. Files are excluded from backup (they point at staged
-/// files that aren't backed up either) and readable after first unlock, so a
-/// background wake while the phone is locked can still update them.
+/// (0xdead10cc) only for a lock held in a shared container.
 ///
 /// Not thread-safe on its own; the upload engine actor owns it.
 public struct QueueStore: Sendable {
@@ -167,7 +169,7 @@ public struct QueueStore: Sendable {
         directory.appending(path: "\(id.uuidString).json", directoryHint: .notDirectory)
     }
 
-    private enum ReadResult {
+    enum ReadResult {
         case item(QueuedUpload)
         /// Can never be used: set it aside.
         case unusable
@@ -182,7 +184,7 @@ public struct QueueStore: Sendable {
     /// Read through one descriptor opened without following links and
     /// checked with `fstat`, so a file swapped after listing can't make it
     /// read something else or something huge.
-    private func read(_ url: URL) -> ReadResult {
+    func read(_ url: URL) -> ReadResult {
         guard let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent) else { return .unusable }
         let data: Data
         switch FileReader.read(url, maxBytes: Self.maxRecordBytes) {
