@@ -682,6 +682,17 @@
         }
       }
     },
+    "A name, a date, who it is about. Make it private with a PIN if you like.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un nom, une date, pour qui. Rendez-le privé avec un code PIN si vous voulez."
+          }
+        }
+      }
+    },
     "A test event's dates come from your plan, so they can't be changed.": {
       "extractionState": "manual",
       "localizations": {
@@ -858,12 +869,34 @@
         }
       }
     },
+    "Big weddings and parties": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grands mariages et fêtes"
+          }
+        }
+      }
+    },
     "Birthday": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Anniversaire"
+          }
+        }
+      }
+    },
+    "Birthdays and dinners": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anniversaires et dîners"
           }
         }
       }
@@ -1038,6 +1071,17 @@
         }
       }
     },
+    "Corporate and festivals": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entreprises et festivals"
+          }
+        }
+      }
+    },
     "Couldn't add these to your uploads. Try again.": {
       "extractionState": "manual",
       "localizations": {
@@ -1196,6 +1240,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Créer l'événement"
+          }
+        }
+      }
+    },
+    "Create your event": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Créez votre événement"
           }
         }
       }
@@ -1529,12 +1584,13 @@
         }
       }
     },
-    "Every moment, together": {
+    "Every guest's camera.": {
+      "extractionState": "manual",
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Chaque moment, ensemble"
+            "value": "L'appareil de chaque invité."
           }
         }
       }
@@ -1570,12 +1626,13 @@
         }
       }
     },
-    "Get started": {
+    "For weddings, birthdays and every party": {
+      "extractionState": "manual",
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Commencer"
+            "value": "Pour les mariages, les anniversaires et toutes les fêtes"
           }
         }
       }
@@ -1637,6 +1694,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Les invités ont besoin du code PIN ou du lien d'invitation pour ouvrir l'événement."
+          }
+        }
+      }
+    },
+    "Guests never pay. Prices are shown when you subscribe.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les invités ne paient jamais. Les prix s'affichent au moment de l'abonnement."
+          }
+        }
+      }
+    },
+    "Guests scan a QR code and share photos and videos from their phone, with nothing to install. You keep every moment, in full quality.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les invités scannent un QR code et partagent photos et vidéos depuis leur téléphone, sans rien installer. Vous gardez chaque moment, en pleine qualité."
           }
         }
       }
@@ -1808,6 +1887,17 @@
         }
       }
     },
+    "Host an event": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Organiser un événement"
+          }
+        }
+      }
+    },
     "Host sign-in": {
       "localizations": {
         "fr": {
@@ -1876,6 +1966,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hébergement terminé. Téléchargez tout jusqu'au %@."
+          }
+        }
+      }
+    },
+    "Hosting plans": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formules d'hébergement"
+          }
+        }
+      }
+    },
+    "How it works": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comment ça marche"
           }
         }
       }
@@ -1961,6 +2073,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rejoignez-le à nouveau pour continuer à regarder et partager."
+          }
+        }
+      }
+    },
+    "Join an event": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rejoindre un événement"
           }
         }
       }
@@ -2209,16 +2332,6 @@
         }
       }
     },
-    "Moments gathers the photos and videos guests take at an event into one live feed.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Moments rassemble les photos et vidéos prises par les invités d'un événement dans un fil en direct."
-          }
-        }
-      }
-    },
     "Moments: %lld · Guests: %lld": {
       "localizations": {
         "fr": {
@@ -2236,6 +2349,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Souvenirs : %lld · Invités : %lld sur %lld"
+          }
+        }
+      }
+    },
+    "Most weddings": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La plupart des mariages"
           }
         }
       }
@@ -2288,16 +2412,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nouveau visage"
-          }
-        }
-      }
-    },
-    "Next": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Suivant"
           }
         }
       }
@@ -2388,6 +2502,17 @@
         }
       }
     },
+    "Not now": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus tard"
+          }
+        }
+      }
+    },
     "Nothing is uploading.": {
       "extractionState": "manual",
       "localizations": {
@@ -2427,6 +2552,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Activé, ^[%lld cœur](inflect: true)"
+          }
+        }
+      }
+    },
+    "One monthly plan, sized by how many guests will share. Each includes your main event and a test event.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un abonnement mensuel, selon le nombre d'invités qui partagent. Chacun comprend votre événement principal et un événement test."
+          }
+        }
+      }
+    },
+    "One shared album.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un seul album partagé."
           }
         }
       }
@@ -2652,6 +2799,17 @@
         }
       }
     },
+    "Photos and videos land in one live feed. Hearts, points and a leaderboard keep everyone sharing.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos et vidéos arrivent dans un seul fil en direct. Cœurs, points et classement donnent envie de partager."
+          }
+        }
+      }
+    },
     "Photos and videos shared by guests will appear here.": {
       "extractionState": "manual",
       "localizations": {
@@ -2760,6 +2918,17 @@
         }
       }
     },
+    "Print the flyer or share the link. Guests scan and they're in: no account, no download.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imprimez l'affiche ou partagez le lien. Les invités scannent et c'est parti : ni compte, ni téléchargement."
+          }
+        }
+      }
+    },
     "Privacy": {
       "localizations": {
         "fr": {
@@ -2839,6 +3008,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Public : toute personne ayant le lien peut rejoindre"
+          }
+        }
+      }
+    },
+    "Put the QR on the tables": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Posez le QR sur les tables"
           }
         }
       }
@@ -3138,26 +3318,6 @@
         }
       }
     },
-    "Scan the event's QR code, pick a name, and you're in. No account needed.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Scannez le QR code de l'événement, choisissez un nom, et c'est parti. Aucun compte nécessaire."
-          }
-        }
-      }
-    },
-    "Scan to join": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Scannez pour rejoindre"
-          }
-        }
-      }
-    },
     "Scan to share your photos and videos": {
       "extractionState": "manual",
       "localizations": {
@@ -3234,16 +3394,6 @@
         }
       }
     },
-    "Share and heart": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Partagez et aimez"
-          }
-        }
-      }
-    },
     "Share moments": {
       "extractionState": "manual",
       "localizations": {
@@ -3293,16 +3443,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Partager le lien du diaporama"
-          }
-        }
-      }
-    },
-    "Share your photos and videos, heart your favourites, and climb the leaderboard.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Partagez vos photos et vidéos, aimez vos préférées et grimpez dans le classement."
           }
         }
       }
@@ -3487,16 +3627,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connexion en cours"
-          }
-        }
-      }
-    },
-    "Skip": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Passer"
           }
         }
       }
@@ -4346,6 +4476,17 @@
         }
       }
     },
+    "Up to %lld guests": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jusqu'à %lld invités"
+          }
+        }
+      }
+    },
     "Upcoming": {
       "localizations": {
         "fr": {
@@ -4688,6 +4829,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "En attente du Wi-Fi"
+          }
+        }
+      }
+    },
+    "Watch it fill up": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Regardez l'album se remplir"
           }
         }
       }
