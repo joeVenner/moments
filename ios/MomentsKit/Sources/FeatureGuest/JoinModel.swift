@@ -34,6 +34,9 @@ public final class JoinModel: Identifiable {
         /// Too many joins from this network (a busy venue Wi-Fi); try again
         /// in a minute.
         case busy
+        /// The event has as many guests as its host's plan allows. A place
+        /// can free up (a guest leaves), so joining again may work later.
+        case eventFull
     }
 
     public enum Failure: Equatable, Sendable {
@@ -124,6 +127,7 @@ public final class JoinModel: Identifiable {
             case .rejected: phase = .needsNickname(event, .taken)
             case .invalid: phase = .needsNickname(event, .invalid)
             case .busy: phase = .needsNickname(event, .busy)
+            case .full: phase = .needsNickname(event, .eventFull)
             }
         }
     }
@@ -147,7 +151,7 @@ public final class JoinModel: Identifiable {
     // MARK: - Steps
 
     private enum UnlockOutcome { case unlocked, refused(AccessProblem) }
-    private enum ClaimOutcome { case accepted(JoinResult), rejected, invalid, busy }
+    private enum ClaimOutcome { case accepted(JoinResult), rejected, invalid, busy, full }
 
     private func unlock(_ credential: AccessCredential) async throws -> UnlockOutcome {
         do {
@@ -185,6 +189,12 @@ public final class JoinModel: Identifiable {
         case .busy:
             // Not a verdict on the stored identity: keep it and retry later.
             throw MomentsAPIError.rateLimited
+        case .full:
+            // A guest the server still knows rejoins before the cap is checked,
+            // so a full answer means this identity is gone (they left or were
+            // removed): forget it, and say why they can't pick a new name now.
+            try store.update(for: slug) { $0.guestToken = nil; $0.participantID = nil; $0.nickname = nil }
+            phase = .needsNickname(event, .eventFull)
         }
     }
 
@@ -203,6 +213,8 @@ public final class JoinModel: Identifiable {
             return .invalid
         } catch MomentsAPIError.rateLimited {
             return .busy
+        } catch MomentsAPIError.guestCapReached {
+            return .full
         }
         // Before enforcement a revoked token also gets a token-less 200 for the
         // same participant, so this can't detect revocation until then.

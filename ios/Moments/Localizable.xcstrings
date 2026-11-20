@@ -2716,6 +2716,17 @@
         }
       }
     },
+    "This event is full: it has as many guests as its host's plan allows.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet événement est complet : il a autant d'invités que le permet l'offre de son organisateur."
+          }
+        }
+      }
+    },
     "This event no longer exists.": {
       "extractionState": "manual",
       "localizations": {
