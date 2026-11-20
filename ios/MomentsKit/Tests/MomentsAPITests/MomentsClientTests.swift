@@ -146,6 +146,7 @@ private func client(_ transport: StubTransport) throws -> MomentsClient {
     @Test(arguments: [
         (401, "access_required", MomentsAPIError.accessRequired),
         (404, "event_not_found", .eventNotFound),
+        (410, "event_not_hosted", .eventNotHosted),
         (426, "client_upgrade_required", .upgradeRequired),
         (409, "nickname_taken", .nicknameTaken),
         (429, "rate_limited", .rateLimited),

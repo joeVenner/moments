@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "./index";
-import { canGuestsShare, eventPlanAccess, isPlanEvent, webUploaderEnv } from "./eventPlanAccess";
+import { canGuestsShare, canGuestsView, eventPlanAccess, isPlanEvent, webUploaderEnv } from "./eventPlanAccess";
 import { addDays, startPlan } from "./plans";
 import { insertPlan } from "./plansRepo";
 import { createSqliteD1, type SqliteD1 } from "./testing/sqliteD1";
@@ -128,5 +128,73 @@ describe("web upload routes", () => {
     // Past the uploader check: refused only for the missing file.
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "file is required" });
+  });
+});
+
+describe("guest reads once a plan stops hosting", () => {
+  function env(): Env {
+    return {
+      DB: sqlite.db,
+      BUCKET: { get: vi.fn(async () => ({ body: "bytes", httpMetadata: {}, httpEtag: "e" })) } as unknown as R2Bucket,
+      ASSETS: {} as Fetcher,
+      ADMIN_USER: "admin",
+      ADMIN_PASSWORD: "secret",
+      ADMIN_AUTH_LIMITER: { limit: vi.fn(async () => ({ success: true })) } as unknown as RateLimit,
+    };
+  }
+  const ctx = () => ({ waitUntil: vi.fn(), passThroughOnException: vi.fn() }) as unknown as ExecutionContext;
+  const get = (path: string, init: RequestInit = {}) =>
+    worker.fetch(new Request(`https://moments.test${path}`, init), env(), ctx());
+
+  async function endedPlanEvent() {
+    const { id } = await buyPlan();
+    setPlanState(id, "lapsed");
+    seedEvent("main", "main");
+  }
+
+  it("lets guests see a plan event while its plan hosts it", async () => {
+    await buyPlan();
+    seedEvent("main", "main");
+    expect(await canGuestsView(sqlite.db, { kind: "main", owner_user_id: HOST })).toBe(true);
+    expect((await get("/api/events/main")).status).toBe(200);
+    expect((await get("/api/v1/events/main")).status).toBe(200);
+  });
+
+  it.each(["/api/events/main", "/api/events/main/feed", "/api/events/main/highlights", "/api/v1/events/main", "/api/v1/events/main/feed"])(
+    "answers 410 event_not_hosted for %s",
+    async (path) => {
+      await endedPlanEvent();
+      const response = await get(path);
+      expect(response.status).toBe(410);
+      expect(await response.json()).toEqual({ error: "This event is no longer hosted.", code: "event_not_hosted" });
+    }
+  );
+
+  it("still lets a guest leave, deleting what they shared", async () => {
+    await endedPlanEvent();
+    const response = await get("/api/events/main/leave", { method: "POST" });
+    // Reaches the leave route itself, which asks for the guest's token.
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "guest_required" });
+  });
+
+  it("stops serving the event's media to guests", async () => {
+    await endedPlanEvent();
+    expect((await get("/media/events/main/photo.jpg")).status).toBe(404);
+  });
+
+  it("keeps serving media of events from before plans, cacheable by anyone", async () => {
+    seedEvent("old", "legacy", null);
+    const response = await get("/media/events/old/photo.jpg");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("public, max-age=300");
+  });
+
+  it("keeps a hosted plan event's media out of shared caches", async () => {
+    await buyPlan();
+    seedEvent("main", "main");
+    const response = await get("/media/events/main/photo.jpg");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("private, max-age=300");
   });
 });

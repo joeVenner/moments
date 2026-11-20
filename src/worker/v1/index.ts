@@ -60,7 +60,7 @@ import {
 } from "../eventWrites";
 import { planAccess, testEventDates } from "../plans";
 import { loadLivePlan } from "../plansRepo";
-import { canGuestsShare } from "../eventPlanAccess";
+import { canGuestsShare, canGuestsView, EVENT_NOT_HOSTED } from "../eventPlanAccess";
 import { lifecycleChangeFrom, type SettingsResult, updateEventAccess, updateEventLifecycle } from "../eventSettings";
 import { deleteAdminMoment, listAdminMoments, setMomentModeration } from "../adminModeration";
 import {
@@ -151,6 +151,7 @@ const commonErrors = {
   default: json(ErrorSchema, "Any other error (415, 5xx, ...)"),
   401: json(ErrorSchema, "Private event; send a grant from the access endpoint in X-Event-Access"),
   404: json(ErrorSchema, "No live event with this slug"),
+  410: json(ErrorSchema, "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted"),
   426: json(ErrorSchema, "This app build is too old; show the update screen"),
 };
 
@@ -741,6 +742,7 @@ const eventGate: MiddlewareHandler<V1Env> = async (c, next) => {
   if (!(await verifyEventAccess(c, event, undefined, { signedGrantOnly: true }))) {
     return c.json({ error: "access required", code: "access_required" }, 401);
   }
+  if (!(await canGuestsView(c.env.DB, event))) return c.json(EVENT_NOT_HOSTED, 410);
   c.set("event", event);
   return next();
 };

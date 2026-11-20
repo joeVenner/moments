@@ -50,6 +50,7 @@ extension MomentsClient: UploadService {
             case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
             case let .notImplemented(response): throw Self.error(501, try? response.body.json.code)
             case let .badGateway(response): throw Self.error(502, try? response.body.json.code)
+            case let .gone(response): throw Self.error(410, try? response.body.json.code)
             case let .default(status, response): throw Self.error(status, try? response.body.json.code)
             }
         }
@@ -77,6 +78,7 @@ extension MomentsClient: UploadService {
             case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
             case let .notImplemented(response): throw Self.error(501, try? response.body.json.code)
             case let .badGateway(response): throw Self.error(502, try? response.body.json.code)
+            case let .gone(response): throw Self.error(410, try? response.body.json.code)
             case let .default(status, response): throw Self.error(status, try? response.body.json.code)
             }
         }
@@ -104,6 +106,7 @@ extension MomentsClient: UploadService {
             case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
             case let .notImplemented(response): throw Self.error(501, try? response.body.json.code)
             case let .badGateway(response): throw Self.error(502, try? response.body.json.code)
+            case let .gone(response): throw Self.error(410, try? response.body.json.code)
             case let .default(status, response): throw Self.error(status, try? response.body.json.code)
             }
         }
@@ -130,6 +133,7 @@ extension MomentsClient: UploadService {
             case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
             case let .notImplemented(response): throw Self.error(501, try? response.body.json.code)
             case let .badGateway(response): throw Self.error(502, try? response.body.json.code)
+            case let .gone(response): throw Self.error(410, try? response.body.json.code)
             case let .default(status, response): throw Self.error(status, try? response.body.json.code)
             }
         }
@@ -162,6 +166,7 @@ extension MomentsClient: UploadService {
             case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
             case let .notImplemented(response): throw Self.error(501, try? response.body.json.code)
             case let .badGateway(response): throw Self.error(502, try? response.body.json.code)
+            case let .gone(response): throw Self.error(410, try? response.body.json.code)
             case let .default(status, response): throw Self.error(status, try? response.body.json.code)
             }
         }
@@ -185,6 +190,7 @@ extension MomentsClient: UploadService {
             case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
             case let .notImplemented(response): throw Self.error(501, try? response.body.json.code)
             case let .badGateway(response): throw Self.error(502, try? response.body.json.code)
+            case let .gone(response): throw Self.error(410, try? response.body.json.code)
             case let .default(status, response): throw Self.error(status, try? response.body.json.code)
             }
         }

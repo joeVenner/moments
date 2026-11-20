@@ -5,7 +5,7 @@ import { deleteAdminMoment } from "./adminModeration";
 import type { Env, EventRow, MomentRow, LeaderboardEntry, UploadRow } from "./types";
 import { insertEvent, normalizeDate } from "./eventWrites";
 import { OPERATOR_USER_ID } from "./hostSessions";
-import { canStartWebUpload, webUploaderEnv } from "./eventPlanAccess";
+import { canGuestsView, canStartWebUpload, EVENT_NOT_HOSTED, isPlanEvent, webUploaderEnv } from "./eventPlanAccess";
 import { upsertParticipant } from "./participants";
 import { lifecycleChangeFrom, type SettingsRefusal, updateEventAccess, updateEventLifecycle } from "./eventSettings";
 import { putMedia, pointsForContentType, isAllowedContentType, MAX_UPLOAD_BYTES, momentKey } from "./storage";
@@ -197,6 +197,9 @@ app.use("/api/events/:slug/*", async (c, next) => {
   if (event?.access_mode === "private" && !(await verifyEventAccess(c, event))) {
     return c.json({ error: "access required", access_required: true }, 401);
   }
+  // Leaving stays open so guests can still delete what they shared.
+  const isLeave = c.req.method === "POST" && /^\/api\/events\/[^/]+\/leave$/.test(c.req.path);
+  if (event && !isLeave && !(await canGuestsView(c.env.DB, event))) return c.json(EVENT_NOT_HOSTED, 410);
   return next();
 });
 
@@ -1599,7 +1602,7 @@ app.post("/api/admin/generate-banner", async (c) => {
   }
 });
 
-type MediaEvent = Pick<EventRow, "id" | "access_mode" | "invite_token" | "access_version">;
+type MediaEvent = Pick<EventRow, "id" | "access_mode" | "invite_token" | "access_version" | "kind" | "owner_user_id">;
 
 /**
  * On every /media answer: the bytes are guest uploads, so the browser must
@@ -1622,7 +1625,7 @@ app.get("/media/*", async (c) => {
   if (isThumbnailUploadKey(key)) return c.notFound();
   const eventId = /^events\/([^/]+)\//.exec(key)?.[1];
   // Only what the access check needs; the three lookups are independent.
-  const eventColumns = "id, access_mode, invite_token, access_version";
+  const eventColumns = "id, access_mode, invite_token, access_version, kind, owner_user_id";
   const secret = c.env.EVENT_ACCESS_SECRET;
   const nowSeconds = Math.floor(Date.now() / 1000);
   const [mediaEvent, isHidden, isAdminView] = await Promise.all([
@@ -1648,10 +1651,14 @@ app.get("/media/*", async (c) => {
     }
     // Hidden moments disappear from the feed and from direct links alike.
     if (isHidden) return c.notFound();
+    // So does everything in an event its plan no longer hosts (the host's ?mv= still works).
+    if (mediaEvent && !(await canGuestsView(c.env.DB, mediaEvent))) return c.notFound();
   }
   // Not immutable: hiding a moment must take effect, so browsers revalidate
   // after 5 minutes (cheap: ETag -> 304, and the hidden check runs again).
-  const mediaCacheControl = mediaEvent?.access_mode === "private" || isAdminView
+  // Plan events too: no shared cache may keep serving them once the plan lapses.
+  const isPlanMedia = mediaEvent ? isPlanEvent(mediaEvent) : false;
+  const mediaCacheControl = mediaEvent?.access_mode === "private" || isPlanMedia || isAdminView
     ? "private, max-age=300"
     : "public, max-age=300";
   const ifNoneMatch = c.req.header("If-None-Match") ?? "";

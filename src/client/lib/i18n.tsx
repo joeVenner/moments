@@ -206,6 +206,7 @@ const dict: Record<Lang, Record<string, Entry>> = {
     uploadsSafeHint: "These moments are safely stored in the event gallery.",
 
     eventNotFound: "Event not found.",
+    eventNotHosted: "This event is no longer hosted.",
     greetingName: "Hi {name}",
     yourPoints: "Your points:",
     leaveEvent: "Leave",
@@ -491,6 +492,7 @@ const dict: Record<Lang, Record<string, Entry>> = {
     uploadsSafeHint: "Ces souvenirs sont enregistrés en sécurité dans la galerie.",
 
     eventNotFound: "Événement introuvable.",
+    eventNotHosted: "Cet événement n'est plus hébergé.",
     greetingName: "Salut {name}",
     yourPoints: "Tes points :",
     leaveEvent: "Quitter",

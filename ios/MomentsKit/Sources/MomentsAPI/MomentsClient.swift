@@ -226,6 +226,7 @@ public struct MomentsClient: MomentsService {
             case let .unauthorized(response): throw Self.error(401, try? response.body.json.code)
             case let .notFound(response): throw Self.error(404, try? response.body.json.code)
             case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+            case let .gone(response): throw Self.error(410, try? response.body.json.code)
             case let .default(status, response): throw Self.error(status, try? response.body.json.code)
             }
         }
@@ -246,6 +247,7 @@ public struct MomentsClient: MomentsService {
             case let .unauthorized(response): throw Self.error(401, try? response.body.json.code)
             case let .notFound(response): throw Self.error(404, try? response.body.json.code)
             case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+            case let .gone(response): throw Self.error(410, try? response.body.json.code)
             case let .default(status, response): throw Self.error(status, try? response.body.json.code)
             }
         }
@@ -267,6 +269,7 @@ public struct MomentsClient: MomentsService {
             case let .notFound(response): throw Self.error(404, try? response.body.json.code)
             case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
             case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+            case let .gone(response): throw Self.error(410, try? response.body.json.code)
             case let .default(status, response): throw Self.error(status, try? response.body.json.code)
             }
         }
@@ -284,6 +287,7 @@ public struct MomentsClient: MomentsService {
             case let .notFound(response): throw Self.error(404, try? response.body.json.code)
             case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
             case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+            case let .gone(response): throw Self.error(410, try? response.body.json.code)
             case let .default(status, response): throw Self.error(status, try? response.body.json.code)
             }
         }
@@ -304,6 +308,7 @@ public struct MomentsClient: MomentsService {
             case let .unauthorized(response): throw Self.error(401, try? response.body.json.code)
             case let .notFound(response): throw Self.error(404, try? response.body.json.code)
             case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+            case let .gone(response): throw Self.error(410, try? response.body.json.code)
             case let .default(status, response): throw Self.error(status, try? response.body.json.code)
             }
         }
@@ -328,6 +333,7 @@ public struct MomentsClient: MomentsService {
             case let .conflict(response): throw Self.error(409, try? response.body.json.code)
             case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
             case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+            case let .gone(response): throw Self.error(410, try? response.body.json.code)
             case let .default(status, response): throw Self.error(status, try? response.body.json.code)
             }
         }
@@ -350,6 +356,7 @@ public struct MomentsClient: MomentsService {
                 case let .notFound(response): throw Self.error(404, try? response.body.json.code)
                 case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
                 case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+                case let .gone(response): throw Self.error(410, try? response.body.json.code)
                 case let .default(status, response): throw Self.error(status, try? response.body.json.code)
                 }
             } else {
@@ -365,6 +372,7 @@ public struct MomentsClient: MomentsService {
                 case let .notFound(response): throw Self.error(404, try? response.body.json.code)
                 case let .tooManyRequests(response): throw Self.error(429, try? response.body.json.code)
                 case let .upgradeRequired(response): throw Self.error(426, try? response.body.json.code)
+                case let .gone(response): throw Self.error(410, try? response.body.json.code)
                 case let .default(status, response): throw Self.error(status, try? response.body.json.code)
                 }
             }
@@ -403,6 +411,7 @@ public struct MomentsClient: MomentsService {
         case (401, _): .accessRequired
         case (503, "access_unavailable"): .accessUnavailable
         case (404, "event_not_found"): .eventNotFound
+        case (410, "event_not_hosted"): .eventNotHosted
         case (426, _): .upgradeRequired
         case (409, "nickname_taken"): .nicknameTaken
         case (404, "moment_not_found"): .momentNotFound

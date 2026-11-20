@@ -450,7 +450,7 @@ private extension QueuedUpload {
         case let .tooManyAttempts(seconds):
             retryAt = now.addingTimeInterval(TimeInterval(min(max(seconds, 1), Int(Self.maxBackoff))))
         case .uploadsClosed: phase = .failed(.uploadsClosed)
-        case .eventNotFound: phase = .failed(.eventGone)
+        case .eventNotFound, .eventNotHosted: phase = .failed(.eventGone)
         case .accessRequired, .invalidAccess, .guestRequired, .accessUnavailable:
             phase = .failed(.accessLost)
         case .invalidUpload, .invalidRequest: phase = .failed(.refused)

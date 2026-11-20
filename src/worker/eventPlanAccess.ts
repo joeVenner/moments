@@ -23,6 +23,14 @@ export async function eventPlanAccess(db: D1Database, event: PlanEventRef, now: 
   return stored ? planAccess(stored.plan, now) : NO_ACCESS;
 }
 
+/** What guests get once the plan behind an event no longer lets them see it. */
+export const EVENT_NOT_HOSTED = { error: "This event is no longer hosted.", code: "event_not_hosted" } as const;
+
+/** Whether guests may open the event and see its moments now. */
+export async function canGuestsView(db: D1Database, event: PlanEventRef, now: Date = new Date()): Promise<boolean> {
+  return (await eventPlanAccess(db, event, now)).guestsCanView;
+}
+
 /** Whether guests may start sharing new moments now (the event's own dates are checked separately). */
 export async function canGuestsShare(db: D1Database, event: PlanEventRef, now: Date = new Date()): Promise<boolean> {
   return (await eventPlanAccess(db, event, now)).guestsCanShare;

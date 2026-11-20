@@ -10,7 +10,7 @@ public extension MomentsAPIError {
             true
         case let .server(status, _):
             status >= 500 || status == 408
-        case .accessRequired, .invalidAccess, .tooManyAttempts, .accessUnavailable, .eventNotFound,
+        case .accessRequired, .invalidAccess, .tooManyAttempts, .accessUnavailable, .eventNotFound, .eventNotHosted,
              .upgradeRequired, .nicknameTaken, .momentNotFound, .guestRequired, .invalidRequest,
              .uploadsClosed, .uploadNotFound, .uploadNotOpen, .uploadConflict, .invalidUpload, .uploadsUnavailable,
              .invalidCredentials, .hostAuthRequired, .signInUnavailable, .mediaDeleteFailed:

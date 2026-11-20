@@ -22,7 +22,7 @@ export const ErrorSchema = z
     error: z.string(),
     code: z.string().openapi({
       description:
-        "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, media_delete_failed, plan_required, no_events_left, test_event_dates_fixed, guest_cap_reached, not_found, internal",
+        "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, media_delete_failed, plan_required, no_events_left, test_event_dates_fixed, guest_cap_reached, event_not_hosted, not_found, internal",
     }),
   })
   .openapi("Error");

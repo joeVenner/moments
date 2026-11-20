@@ -15,6 +15,8 @@ public enum MomentsAPIError: Error, Sendable, Equatable {
     case accessUnavailable
     /// No live event with this slug (unknown, expired or archived).
     case eventNotFound
+    /// The host's plan no longer covers this event: show that it is no longer hosted.
+    case eventNotHosted
     /// This build is below the server minimum: show the update screen.
     case upgradeRequired
     /// Another device owns this nickname in the event.

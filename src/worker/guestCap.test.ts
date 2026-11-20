@@ -154,7 +154,9 @@ describe("join routes", () => {
   }
   const ctx = () => ({ waitUntil: vi.fn(), passThroughOnException: vi.fn() }) as unknown as ExecutionContext;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // The plan hosts the event, so the join reaches the cap check.
+    await buyPlan();
     seedEvent("trial", "test");
     seedGuests("trial", TEST_EVENT_GUEST_CAP);
   });
