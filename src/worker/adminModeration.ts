@@ -1,7 +1,7 @@
 import { buildMomentMedia, type MomentMedia } from "./media";
 import { withAdminViewUrls } from "./mediaAccess";
 import { deleteMomentMedia } from "./moderation";
-import { signMomentsForEvent } from "./streamSigning";
+import { signMomentsForEvent, type StreamSigningEvent } from "./streamSigning";
 import type { Env, MomentRow } from "./types";
 
 /** Hard cap on one moderation list, like the web admin's. */
@@ -37,13 +37,13 @@ type AdminMomentRow = Pick<
 
 /**
  * Raw rows → host-facing moments: storage keys become `media` URLs, Stream
- * URLs get playback tokens for private events, and every /media URL gets a
+ * URLs get playback tokens when the event needs them, and every /media URL gets a
  * short-lived admin view signature so hidden moments still load.
  */
-async function toAdminMoments(env: Env, accessMode: string, rows: readonly AdminMomentRow[]): Promise<AdminMoment[]> {
+async function toAdminMoments(env: Env, event: StreamSigningEvent, rows: readonly AdminMomentRow[]): Promise<AdminMoment[]> {
   // Both signers take {media_url, media}; `row` rides along for the final shape.
   const withMedia = rows.map((row) => ({ row, media_url: row.media_url, media: buildMomentMedia(row) }));
-  const streamed = await signMomentsForEvent(env, { access_mode: accessMode }, withMedia);
+  const streamed = await signMomentsForEvent(env, event, withMedia);
   const viewable = await withAdminViewUrls(env.EVENT_ACCESS_SECRET, streamed);
   return viewable.map(({ row, media }) => ({
     id: row.id,
@@ -64,7 +64,7 @@ export async function listAdminMoments(
   env: Env,
   eventId: string
 ): Promise<{ moments: AdminMoment[]; truncated: boolean } | null> {
-  const event = await env.DB.prepare("SELECT access_mode FROM events WHERE id = ?").bind(eventId).first<{ access_mode: string }>();
+  const event = await env.DB.prepare("SELECT access_mode, kind FROM events WHERE id = ?").bind(eventId).first<StreamSigningEvent>();
   if (!event) return null;
   const { results } = await env.DB.prepare(
     `SELECT ${ADMIN_MOMENT_COLUMNS} FROM moments WHERE event_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`
@@ -73,7 +73,7 @@ export async function listAdminMoments(
     .bind(eventId, ADMIN_MOMENTS_LIMIT + 1)
     .all<AdminMomentRow>();
   return {
-    moments: await toAdminMoments(env, event.access_mode, results.slice(0, ADMIN_MOMENTS_LIMIT)),
+    moments: await toAdminMoments(env, event, results.slice(0, ADMIN_MOMENTS_LIMIT)),
     truncated: results.length > ADMIN_MOMENTS_LIMIT,
   };
 }
@@ -87,14 +87,15 @@ export async function setMomentModeration(env: Env, momentId: string, status: Mo
     env.DB.prepare("UPDATE moments SET moderation_status = ? WHERE id = ?").bind(status, momentId),
     env.DB.prepare(
       `SELECT ${ADMIN_MOMENT_COLUMNS},
-              (SELECT access_mode FROM events WHERE events.id = moments.event_id) AS access_mode
+              (SELECT access_mode FROM events WHERE events.id = moments.event_id) AS access_mode,
+              (SELECT kind FROM events WHERE events.id = moments.event_id) AS kind
          FROM moments WHERE id = ?`
     ).bind(momentId),
   ]);
-  const row = (select.results as (AdminMomentRow & { access_mode: string })[])[0];
+  const row = (select.results as (AdminMomentRow & StreamSigningEvent)[])[0];
   if (!row) return null;
-  const { access_mode: accessMode, ...moment } = row;
-  const [admin] = await toAdminMoments(env, accessMode, [moment]);
+  const { access_mode, kind, ...moment } = row;
+  const [admin] = await toAdminMoments(env, { access_mode, kind }, [moment]);
   return admin ?? null;
 }
 

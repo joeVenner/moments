@@ -2,6 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import worker from "./index";
 import { buildMomentMedia } from "./media";
 import {
+  needsSignedStream,
   shouldSignStream,
   signStreamMoments,
   signStreamToken,
@@ -10,6 +11,8 @@ import {
   syncStreamSigning,
   tokenExpiry,
 } from "./streamSigning";
+import { addDays, startPlan } from "./plans";
+import { insertPlan } from "./plansRepo";
 import { createSqliteD1, type SqliteD1 } from "./testing/sqliteD1";
 import type { Env } from "./types";
 
@@ -99,10 +102,19 @@ describe("tokenExpiry", () => {
 });
 
 describe("shouldSignStream", () => {
-  it("signs only private events with a configured key", () => {
-    expect(shouldSignStream(env(), { access_mode: "private" })).toBe(true);
-    expect(shouldSignStream(env(), { access_mode: "public" })).toBe(false);
-    expect(shouldSignStream(env({ STREAM_SIGNING_JWK: undefined }), { access_mode: "private" })).toBe(false);
+  it("signs private events with a configured key", () => {
+    expect(shouldSignStream(env(), { access_mode: "private", kind: "legacy" })).toBe(true);
+    expect(shouldSignStream(env(), { access_mode: "public", kind: "legacy" })).toBe(false);
+    expect(shouldSignStream(env(), { access_mode: "public", kind: "operator" })).toBe(false);
+    expect(shouldSignStream(env({ STREAM_SIGNING_JWK: undefined }), { access_mode: "private", kind: "legacy" })).toBe(false);
+  });
+
+  it("signs every event a plan pays for, public or not, so playback stops with the plan", () => {
+    for (const kind of ["main", "test"] as const) {
+      expect(needsSignedStream({ access_mode: "public", kind })).toBe(true);
+      expect(shouldSignStream(env(), { access_mode: "public", kind })).toBe(true);
+    }
+    expect(shouldSignStream(env({ STREAM_SIGNING_JWK: undefined }), { access_mode: "public", kind: "main" })).toBe(false);
   });
 });
 
@@ -268,6 +280,37 @@ describe("with a database", () => {
   });
 
   it.each([
+    ["a plan event", "main", "filetype dmlkZW8vbXA0,requiresignedurls"],
+    ["an event from before plans", "legacy", "filetype dmlkZW8vbXA0"],
+  ])("asks Stream for signed URLs on a public event only when it is %s", async (_label, kind, expected) => {
+    const host = "aaaaaaaa-0000-4000-8000-000000000001";
+    sqlite.raw.prepare("INSERT INTO users (id, role) VALUES (?, 'host')").run(host);
+    await insertPlan(sqlite.db, host, startPlan("host_50", new Date(), addDays(new Date(), 30)));
+    sqlite.raw.prepare("UPDATE events SET kind = ?, owner_user_id = ? WHERE id = 'ev-1'").run(kind, host);
+    sqlite.raw
+      .prepare(
+        "INSERT INTO uploads (id, event_id, uploader_name, key, upload_id, content_type, size_bytes, status) VALUES ('s2', 'ev-1', 'Sara', 'stream-session/s2', 's2', 'video/mp4', 1000, 'open')"
+      )
+      .run();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, { status: 201, headers: { Location: "https://upload.example/x", "stream-media-id": UID } })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx = { waitUntil: vi.fn(), passThroughOnException: vi.fn() } as unknown as ExecutionContext;
+    const res = await worker.fetch(
+      new Request("https://moments.test/api/events/party/moments/stream/tus?session=s2", {
+        method: "POST",
+        headers: { "Tus-Resumable": "1.0.0", "Upload-Length": "1000", "Upload-Metadata": "filetype dmlkZW8vbXA0" },
+      }),
+      env(),
+      ctx
+    );
+    expect(res.status).toBe(201);
+    const headers = (fetchMock.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+    expect(headers["Upload-Metadata"]).toBe(expected);
+  });
+
+  it.each([
     ["not base64", "%%%"],
     ["not RSA", btoa(JSON.stringify({ kty: "EC", d: "x" }))],
     ["public key only", btoa(JSON.stringify({ kty: "RSA", n: "x", e: "AQAB" }))],
@@ -372,6 +415,27 @@ describe("with a database", () => {
       expect((await complete()).status).toBe(201);
       expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
     });
+    it("unlocks a signed video finishing in an event that went public", async () => {
+      sqlite.raw.prepare("UPDATE events SET access_mode = 'public' WHERE id = 'ev-2'").run();
+      const fetchMock = stubStream(true);
+      expect((await complete()).status).toBe(201);
+      const update = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
+      expect(JSON.parse(String(update?.[1]?.body))).toEqual({ uid: NEW_UID, requireSignedURLs: false });
+    });
+
+    it("never unlocks a video finishing in a public plan event", async () => {
+      const host = "aaaaaaaa-0000-4000-8000-000000000001";
+      sqlite.raw.prepare("INSERT INTO users (id, role) VALUES (?, 'host')").run(host);
+      await insertPlan(sqlite.db, host, startPlan("host_50", new Date(), addDays(new Date(), 30)));
+      sqlite.raw
+        .prepare("UPDATE events SET access_mode = 'public', kind = 'main', owner_user_id = ? WHERE id = 'ev-2'")
+        .run(host);
+      const fetchMock = stubStream(true);
+      const res = await complete();
+      expect(res.status).toBe(201);
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+      expect(JSON.stringify(await res.json())).not.toContain(NEW_UID);
+    });
   });
 
   it("syncs in batches and follows a mode flip that happened meanwhile", async () => {
@@ -431,5 +495,26 @@ describe("with a database", () => {
     await Promise.all(waitUntil.mock.calls.map(([p]) => p));
     const streamCall = fetchMock.mock.calls.find(([url]) => String(url).includes("/stream/"));
     expect(JSON.parse(String((streamCall?.[1] as RequestInit).body))).toEqual({ uid: UID, requireSignedURLs: false });
+  });
+
+  it("keeps a plan event's videos signed when it goes public", async () => {
+    sqlite.raw.prepare("UPDATE events SET kind = 'main' WHERE id = 'ev-2'").run();
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const waitUntil = vi.fn();
+    const ctx = { waitUntil, passThroughOnException: vi.fn() } as unknown as ExecutionContext;
+    const res = await worker.fetch(
+      new Request("https://moments.test/api/admin/events/ev-2/access", {
+        method: "PATCH",
+        headers: { Authorization: `Basic ${btoa("admin:secret")}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "public" }),
+      }),
+      env(),
+      ctx
+    );
+    expect(res.status).toBe(200);
+    await Promise.all(waitUntil.mock.calls.map(([p]) => p));
+    const streamCall = fetchMock.mock.calls.find(([url]) => String(url).includes("/stream/"));
+    expect(JSON.parse(String((streamCall?.[1] as RequestInit).body))).toEqual({ uid: UID, requireSignedURLs: true });
   });
 });

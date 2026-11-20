@@ -39,10 +39,11 @@ import { v1 } from "./v1";
 import { generateAiBanner, BannerGenerationError } from "./banner";
 import { isStreamConfigured, streamApiUrl, streamAuthHeaders, streamMediaUrl } from "./stream";
 import {
-  isStreamSigningConfigured,
   setRequireSignedUrls,
   shouldSignStream,
+  needsSignedStream,
   signMomentsForEvent,
+  type StreamSigningEvent,
   signStreamToken,
   STREAM_SIGNING_UNAVAILABLE,
   StreamSigningError,
@@ -618,8 +619,8 @@ app.patch("/api/admin/moments/:id", async (c) => {
   const moment = await c.env.DB.prepare("SELECT * FROM moments WHERE id = ?")
     .bind(c.req.param("id")).first<MomentRow>();
   if (!moment) return c.json({ error: "moment not found" }, 404);
-  const event = await c.env.DB.prepare("SELECT access_mode FROM events WHERE id = ?")
-    .bind(moment.event_id).first<{ access_mode: string }>();
+  const event = await c.env.DB.prepare("SELECT access_mode, kind FROM events WHERE id = ?")
+    .bind(moment.event_id).first<StreamSigningEvent>();
   const [signed] = event ? await signMomentsForEvent(c.env, event, [moment]) : [moment];
   const [viewable] = await withAdminViewUrls(c.env.EVENT_ACCESS_SECRET, [signed]);
   c.header("Cache-Control", "private, no-store");
@@ -777,7 +778,7 @@ app.post("/api/events/:slug/moments/stream/tus", async (c) => {
   // Sessions opened before the close get a short grace, not until purge.
   if (!canFinishUploads(event)) return c.json(UPLOADS_CLOSED, 403);
   if (!isStreamConfigured(c.env)) return c.json({ error: "Stream uploads are not configured" }, 501);
-  const shouldRequireSigned = event.access_mode === "private" && isStreamSigningConfigured(c.env);
+  const shouldRequireSigned = shouldSignStream(c.env, event);
 
   const tusVersion = c.req.header("Tus-Resumable") ?? "";
   const uploadLength = Number(c.req.header("Upload-Length") ?? NaN);
@@ -801,7 +802,7 @@ app.post("/api/events/:slug/moments/stream/tus", async (c) => {
         ...streamAuthHeaders(c.env),
         "Tus-Resumable": tusVersion,
         "Upload-Length": String(uploadLength),
-        // Private events' videos only play through signed URLs (when configured).
+        // Private and plan events' videos only play through signed URLs (when configured).
         "Upload-Metadata": streamUploadMetadata(uploadMetadata, shouldRequireSigned),
         "Upload-Creator": event.id,
       },
@@ -924,9 +925,10 @@ app.post("/api/events/:slug/moments/stream/complete", async (c) => {
     return c.json({ error: "Stream upload size mismatch" }, 400);
   }
 
-  if (event.access_mode !== "private" && details.result.requireSignedURLs === true) {
+  if (!needsSignedStream(event) && details.result.requireSignedURLs === true) {
     // Started while the event was private, finishing after it went public:
     // unlock it, or the unsigned public URL would never play. Best effort.
+    // Never for a plan event: its videos stay signed whatever its mode.
     await setRequireSignedUrls(c.env, streamUid, false).catch((error: unknown) =>
       logUpload("error", "stream_unlock_failed", {
         eventId: event.id,

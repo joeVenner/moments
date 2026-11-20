@@ -1,9 +1,11 @@
+import { isPlanEvent } from "./eventPlanAccess";
 import type { MomentMedia } from "./media";
 import { streamApiUrl, streamAuthHeaders } from "./stream";
-import type { Env } from "./types";
+import type { Env, EventRow } from "./types";
 
 /**
- * Signed playback for private-event Stream videos.
+ * Signed playback for Stream videos of private events and of events a host's
+ * plan pays for (so playback stops with the plan, like /media).
  *
  * Opt-in: nothing changes until STREAM_SIGNING_KEY_ID and STREAM_SIGNING_JWK
  * (the base64 `jwk` returned by POST /stream/keys) are set. Then private
@@ -38,9 +40,20 @@ export function isStreamSigningConfigured(env: Env): boolean {
   return Boolean(env.STREAM_SIGNING_KEY_ID && env.STREAM_SIGNING_JWK);
 }
 
-/** Whether a private event's Stream URLs must be signed in this deployment. */
-export function shouldSignStream(env: Env, event: { access_mode: string }): boolean {
-  return event.access_mode === "private" && isStreamSigningConfigured(env);
+/** What decides whether an event's videos need signed URLs. */
+export type StreamSigningEvent = Pick<EventRow, "access_mode" | "kind">;
+
+/**
+ * Whether this event's videos may only play through signed URLs: private
+ * events, and plan events (a plain uid URL would outlive the plan).
+ */
+export function needsSignedStream(event: StreamSigningEvent): boolean {
+  return event.access_mode === "private" || isPlanEvent(event);
+}
+
+/** Whether this event's Stream URLs must be signed in this deployment. */
+export function shouldSignStream(env: Env, event: StreamSigningEvent): boolean {
+  return needsSignedStream(event) && isStreamSigningConfigured(env);
 }
 
 /** Expiry shared by every token minted in the same hour, so URLs stay stable (cacheable). */
@@ -187,7 +200,7 @@ export async function signStreamMoments<T extends SignableMoment>(
 /** Signs only when the event needs it; otherwise returns the moments as-is. */
 export async function signMomentsForEvent<T extends SignableMoment>(
   env: Env,
-  event: { access_mode: string },
+  event: StreamSigningEvent,
   moments: readonly T[]
 ): Promise<T[]> {
   return shouldSignStream(env, event) ? signStreamMoments(env, moments) : [...moments];
@@ -267,12 +280,12 @@ export async function syncStreamSigning(
     }
   }
   // A later save may have flipped the mode while we ran; follow the final state.
-  const current = await env.DB.prepare("SELECT access_mode FROM events WHERE id = ?")
+  const current = await env.DB.prepare("SELECT access_mode, kind FROM events WHERE id = ?")
     .bind(eventId)
-    .first<{ access_mode: string }>();
+    .first<StreamSigningEvent>();
   // Depth-capped: an admin flipping the mode during every run cannot loop us.
-  if (current && (current.access_mode === "private") !== requireSigned && depth < 2) {
-    return syncStreamSigning(env, eventId, current.access_mode === "private", depth + 1);
+  if (current && needsSignedStream(current) !== requireSigned && depth < 2) {
+    return syncStreamSigning(env, eventId, needsSignedStream(current), depth + 1);
   }
   const log = result.failed > 0 ? console.error : console.log;
   log(JSON.stringify({ event: "stream_signing_synced", eventId, requireSigned, total: uids.length, ...result }));
