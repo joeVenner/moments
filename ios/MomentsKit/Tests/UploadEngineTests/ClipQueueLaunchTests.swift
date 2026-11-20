@@ -1,5 +1,6 @@
 import Foundation
 import MomentsAPI
+import MomentsDomain
 import Testing
 @testable import UploadEngine
 
@@ -128,6 +129,70 @@ import Testing
         // Its folder now has a record here, so the sweep keeps it.
         #expect(report.swept == 0)
         #expect(stagedExists(app, item.id))
+    }
+
+    @Test func dropsAFutureDatedStranger() async throws {
+        let planted = try leave(for: "elsewhere", createdAt: Self.now.addingTimeInterval(UploadLaunch.futureSkew + 60))
+        let skewed = try leave(for: "elsewhere", createdAt: Self.now.addingTimeInterval(UploadLaunch.futureSkew - 60))
+        let adoption = await UploadLaunch.adoptClipQueue(answering([:]), into: app.store, staging: app.staging)
+        #expect(adoption == .init(moved: .init(skipped: 1), dropped: 1))
+        #expect(try clip.store.recordIDs() == [skewed.id])
+        #expect(!stagedExists(clip, planted.id))
+    }
+
+    /// The Clip's own launch: finished and stale records go, with their
+    /// files; a recent failure stays for the guest to retry.
+    @Test func theClipPrunesItsOwnQueue() async throws {
+        var done = try leave(for: "party", createdAt: Self.now)
+        let session = { (status: UploadSession.Status, momentID: String?) in
+            UploadSession(
+                id: "u1", clientUploadID: done.clientUploadID, status: status, contentType: "image/jpeg",
+                size: 5, partSize: 8 * 1024 * 1024, partCount: 1, createdAt: Self.now, momentID: momentID
+            )
+        }
+        done.apply(.sessionStarted(session(.open, nil)), now: Self.now)
+        done.apply(.completeAnswered(.completed(session(.completed, "m1"))), now: Self.now)
+        #expect(done.phase == .done(momentID: "m1"))
+        try clip.store.save(done)
+        let old = try leave(for: "party", createdAt: Self.now.addingTimeInterval(-Self.week - 60))
+        let future = try leave(for: "party", createdAt: Self.now.addingTimeInterval(UploadLaunch.futureSkew + 60))
+        let recent = try leave(for: "party", createdAt: Self.now.addingTimeInterval(-Self.week + 60))
+
+        UploadLaunch.prune(clip.store, staleAfter: Self.week, now: Self.now)
+
+        #expect(try clip.store.recordIDs() == [recent.id])
+        #expect(stagedExists(clip, old.id) && stagedExists(clip, future.id))
+        // Their folders now have no record: the launch sweep removes them.
+        let swept = try clip.staging.sweepItemFolders(keeping: clip.store.recordIDs(), createdBefore: .distantFuture)
+        #expect(swept == 3)
+        #expect(stagedExists(clip, recent.id))
+    }
+
+    /// Can't tell what it is: never taken for stale.
+    @Test func pruningLeavesARecordItCantRead() throws {
+        let item = try leave(for: "party", createdAt: Self.now.addingTimeInterval(-2 * Self.week))
+        // Written by a newer app: not read now.
+        try Data(#"{"schemaVersion": 999}"#.utf8).write(to: clip.store.recordURL(for: item.id))
+        UploadLaunch.prune(clip.store, staleAfter: Self.week, now: Self.now)
+        #expect(try clip.store.recordIDs() == [item.id])
+    }
+
+    @Test func prepareRemovesStaleItemsAndTheirFiles() async throws {
+        // Real dates: the sweep after loading keeps folders made after launch.
+        let launchedAt = Date().addingTimeInterval(60)
+        let old = try leave(for: "party", createdAt: launchedAt.addingTimeInterval(-Self.week - 60))
+        let recent = try leave(for: "party", createdAt: launchedAt.addingTimeInterval(-60))
+        let server = FakeUploadServer()
+        let queue = UploadQueue(
+            store: clip.store, staging: clip.staging, service: server, partUploader: server,
+            credentials: { _ in .found(EventCredentials(guestToken: "gt-test")) }, thumbnailSender: FakeThumbnailSender()
+        )
+        let report = await UploadLaunch.prepare(
+            queue: queue, store: clip.store, staging: clip.staging, launchedAt: launchedAt, pruningAfter: Self.week
+        )
+        #expect(report.loaded?.items.map(\.id) == [recent.id])
+        #expect(!stagedExists(clip, old.id))
+        #expect(stagedExists(clip, recent.id))
     }
 
     @Test func findsOnlyARealFolder() throws {

@@ -90,6 +90,8 @@ import Testing
         let uploads = try String(contentsOf: folder.appending(path: "ClipUploads.swift"), encoding: .utf8)
         #expect(uploads.contains("UploadFolders.clip(appGroup: appGroup)"))
         #expect(uploads.contains("appGroup: String? = ClipCredentials.appGroup"))
+        // It clears its own finished and stale items at launch.
+        #expect(uploads.contains("pruningAfter: CredentialHandoff.handoffWindow"))
         let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "swift" }
         for file in files {

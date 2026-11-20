@@ -51,8 +51,14 @@ enum ClipUploads {
         let launchedAt = Date()
         let launch = Task(priority: .userInitiated) { () -> Bool in
             // As the app: a passing I/O error gets another try.
+            // Finished and stale items go: the Clip has nowhere to clear them,
+            // and they'd stay in the shared folder. Stale by the same rule
+            // (`UploadLaunch.isStale`) and age as the app's takeover uses.
             let report = await UploadLaunch.retrying {
-                await UploadLaunch.prepare(queue: queue, store: store, staging: staging, launchedAt: launchedAt)
+                await UploadLaunch.prepare(
+                    queue: queue, store: store, staging: staging, launchedAt: launchedAt,
+                    pruningAfter: CredentialHandoff.handoffWindow
+                )
             }
             guard let loaded = report.loaded else {
                 log.error("upload queue could not load")
