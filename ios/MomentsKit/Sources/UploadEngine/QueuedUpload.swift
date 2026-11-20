@@ -166,7 +166,28 @@ public struct QueuedUpload: Codable, Sendable, Hashable, Identifiable {
     /// Ambiguous answers in a row without progress.
     public private(set) var rounds: Int
     /// Not before this time.
-    public private(set) var retryAt: Date?
+    public private(set) var retryAt: Date? {
+        // Any other wait replaces a wait for the network.
+        didSet { isWaitingForNetwork = false }
+    }
+    /// `retryAt` is only the offline wait (no failure behind it), so it can
+    /// end early when the network may be back (`endNetworkWait`). Kept in
+    /// memory only: a relaunch starts over anyway.
+    public private(set) var isWaitingForNetwork = false
+
+    /// The stored fields; `isWaitingForNetwork` is never written.
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion, id, eventSlug, file, caption, createdAt, thumbnail, thumbnailSentFor
+        case clientUploadID, phase, session, uploaded, attempts, restarts, rounds, retryAt
+    }
+
+    /// Ends a wait for the network now (the app came back to the
+    /// foreground); a wait after a real failure stays. True if it changed.
+    mutating func endNetworkWait(at date: Date) -> Bool {
+        guard isWaitingForNetwork, let retryAt, retryAt > date else { return false }
+        self.retryAt = date
+        return true
+    }
 
     public init(
         id: UUID = UUID(), eventSlug: String, file: StagedFile, thumbnail: StagedFile? = nil, caption: String?, createdAt: Date
@@ -418,7 +439,10 @@ private extension QueuedUpload {
             if code == .cancelled { return }
             if let code, Self.offlineCodes.contains(code) {
                 // Never shortens a longer wait already set.
-                retryAt = max(retryAt ?? .distantPast, now.addingTimeInterval(Self.offlineWait))
+                let offline = now.addingTimeInterval(Self.offlineWait)
+                let wasLonger = (retryAt ?? .distantPast) > offline
+                retryAt = max(retryAt ?? .distantPast, offline)
+                isWaitingForNetwork = !wasLonger
                 return
             }
         }

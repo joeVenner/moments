@@ -76,6 +76,10 @@ public actor UploadQueue {
     /// their items starts and nothing is enqueued for them meanwhile.
     private var leavingEvents: [String: Int] = [:]
     private var heldUntil: [UUID: Date] = [:]
+    /// The last `resume()`, for failures that land just after it.
+    private var resumedAt: Date?
+    static let resumeWindow: TimeInterval = 10
+    static let resumedRetry: TimeInterval = 2
     private var observers: [UUID: AsyncStream<[QueuedUpload]>.Continuation] = [:]
     private var sleeper: Task<Void, Never>?
     private var isRunning = false
@@ -191,6 +195,25 @@ public actor UploadQueue {
         heldUntil[id] = nil
         store(item)
         wake()
+    }
+
+    /// The app is back in the foreground: uploads waiting only for the
+    /// network (a suspended app's requests fail as if offline) try again
+    /// now instead of after `QueuedUpload.offlineWait`.
+    ///
+    /// A request cut off by the suspension may only fail after this call,
+    /// so for `resumeWindow` an offline failure waits `resumedRetry`
+    /// instead (a few tries, not a spin, if the network really is gone).
+    public func resume() {
+        let current = now()
+        resumedAt = current
+        var changed = false
+        for id in order {
+            guard var item = items[id], item.endNetworkWait(at: current) else { continue }
+            store(item)
+            changed = true
+        }
+        if changed { wake() }
     }
 
     /// Removes a finished item (done or failed) and its staged file.
@@ -426,7 +449,11 @@ public actor UploadQueue {
     private func apply(_ event: QueuedUpload.Event, to id: UUID) -> Bool {
         guard var item = items[id] else { return false }
         let before = item
-        item.apply(event, now: now())
+        let current = now()
+        item.apply(event, now: current)
+        if let resumedAt, current.timeIntervalSince(resumedAt) < Self.resumeWindow {
+            _ = item.endNetworkWait(at: current.addingTimeInterval(Self.resumedRetry))
+        }
         guard item != before else { return false }
         // The staged file goes only once "done" is saved; otherwise a
         // relaunch would find an unfinished record without its file.

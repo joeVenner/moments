@@ -489,3 +489,55 @@ private extension QueuedUpload {
         #expect(uploading([1, 2, 3]).uploadedFraction == 1)
     }
 }
+
+@Suite struct QueuedUploadNetworkWaitTests {
+    // `#expect` can't hold a mutating call, hence the `ended` constants.
+    @Test func anOfflineWaitCanEndEarly() {
+        var upload = item()
+        upload.failRequest(.transport(.networkConnectionLost), now: t0)
+        #expect(upload.isWaitingForNetwork)
+        let ended1 = upload.endNetworkWait(at: t0.addingTimeInterval(1))
+        #expect(ended1)
+        #expect(upload.retryAt == t0.addingTimeInterval(1))
+        #expect(upload.attempts == 0)
+        // Once is enough: it is no longer waiting.
+        let ended2 = upload.endNetworkWait(at: t0.addingTimeInterval(2))
+        #expect(!ended2)
+    }
+
+    @Test func theBackOffAfterARealFailureStays() {
+        var upload = item()
+        upload.failRequest(.rateLimited, now: t0)
+        let wait = upload.retryAt
+        #expect(!upload.isWaitingForNetwork)
+        let ended3 = upload.endNetworkWait(at: t0.addingTimeInterval(1))
+        #expect(!ended3)
+        #expect(upload.retryAt == wait)
+    }
+
+    @Test func goingOfflineDuringALongerWaitKeepsThatWait() {
+        var upload = item()
+        upload.failRequest(.tooManyAttempts(retryAfterSeconds: 600), now: t0)
+        upload.failRequest(.transport(.notConnectedToInternet), now: t0)
+        let ended4 = upload.endNetworkWait(at: t0.addingTimeInterval(1))
+        #expect(!ended4)
+        #expect(upload.retryAt == t0.addingTimeInterval(600))
+    }
+
+    @Test func aLaterFailureReplacesTheNetworkWait() {
+        var upload = item()
+        upload.failRequest(.transport(.notConnectedToInternet), now: t0)
+        upload.failRequest(.rateLimited, now: t0.addingTimeInterval(31))
+        #expect(!upload.isWaitingForNetwork)
+        let ended5 = upload.endNetworkWait(at: t0.addingTimeInterval(32))
+        #expect(!ended5)
+    }
+
+    @Test func itIsNeverStored() throws {
+        var upload = item()
+        upload.failRequest(.transport(.notConnectedToInternet), now: t0)
+        let data = try JSONEncoder().encode(upload)
+        #expect(!String(decoding: data, as: UTF8.self).contains("isWaitingForNetwork"))
+        #expect(try !JSONDecoder().decode(QueuedUpload.self, from: data).isWaitingForNetwork)
+    }
+}
