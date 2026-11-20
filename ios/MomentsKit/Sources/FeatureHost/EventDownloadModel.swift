@@ -164,3 +164,6 @@ public final class EventDownloadModel {
         ))
     }
 }
+
+/// The real downloader: whole files on the API origin, streamed to disk.
+extension MediaFileDownloader: MediaDownloading {}
