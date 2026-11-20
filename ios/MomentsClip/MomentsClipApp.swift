@@ -4,6 +4,7 @@ import FeatureGuest
 import MomentsDomain
 import StoreKit
 import SwiftUI
+import UIKit
 import UploadEngine
 
 /// The App Clip: opened from an event's QR code or link without installing
@@ -50,6 +51,10 @@ struct ClipRootView: View {
     @State private var presentedUpload: UploadModel?
     @State private var progress: UploadProgressModel?
     @State private var isShowingProgress = false
+    @Environment(\.scenePhase) private var scenePhase
+    /// The Clip can't send in the background, so the screen stays on while
+    /// it sends.
+    @State private var screenAwake = ScreenAwakeHold { UIApplication.shared.isIdleTimerDisabled = $0 }
 
     private static let client = ClipClient.make()
     private static let store = ClipCredentials.store()
@@ -110,12 +115,26 @@ struct ClipRootView: View {
         .sheet(isPresented: $isShowingProgress) {
             if let progress { UploadProgressView(model: progress, showsWiFiChoice: false) }
         }
+        // Back in front: what failed while suspended (as if offline) goes
+        // again now rather than after the offline wait.
+        // Only after the background: a passing Control Centre or banner
+        // doesn't cut a real offline wait short.
+        .onChange(of: scenePhase) { old, phase in
+            if old == .background, phase == .active, let uploads = Self.uploads { Task { await uploads.progress.resume() } }
+            updateScreenAwake()
+        }
+        .onChange(of: progress?.activeCount ?? 0, initial: true) { updateScreenAwake() }
+        .onDisappear { screenAwake.release() }
         // The system banner that installs the full app. Not while joining:
         // it would cover the form's buttons.
         .onChange(of: shouldOfferApp, initial: true) { _, offer in isOfferingApp = offer }
         .appStoreOverlay(isPresented: $isOfferingApp) {
             SKOverlay.AppClipConfiguration(position: .bottom)
         }
+    }
+
+    private func updateScreenAwake() {
+        screenAwake.update(activeCount: progress?.activeCount ?? 0, isInFront: scenePhase == .active)
     }
 
     private var shouldOfferApp: Bool {
