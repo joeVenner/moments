@@ -113,16 +113,16 @@ export async function resolveHostSession(
   if (!TOKEN_PATTERN.test(token)) return null;
   const tag = (await configured(env))?.tag;
   if (!tag) return null;
-  // A deleted account's sessions stop working at once. A row without a user
-  // came from code older than 0023 (during a deploy): it is the operator's.
-  // Remove the fallback before any other host can sign in (it fails open).
+  // Every session belongs to an active user: a deleted account's sessions stop
+  // working at once, and a row without a user (left by code older than 0023)
+  // matches no one, so it is refused rather than guessed to be the operator's.
   const row = await db
     .prepare(
-      `SELECT s.id, s.subject, COALESCE(s.user_id, ?1) AS user_id, u.role, s.credential_tag, s.expires_at
-       FROM host_sessions s JOIN users u ON u.id = COALESCE(s.user_id, ?1)
-       WHERE s.token_hash = ?2 AND s.expires_at > ?3 AND u.status = 'active'`
+      `SELECT s.id, s.subject, s.user_id, u.role, s.credential_tag, s.expires_at
+       FROM host_sessions s JOIN users u ON u.id = s.user_id
+       WHERE s.token_hash = ?1 AND s.expires_at > ?2 AND u.status = 'active'`
     )
-    .bind(OPERATOR_USER_ID, await hashToken(token), sqlTimestamp(now))
+    .bind(await hashToken(token), sqlTimestamp(now))
     .first<{ id: string; subject: HostSubject; user_id: string; role: HostRole; credential_tag: string; expires_at: string }>();
   if (!row || !timingSafeEqual(row.credential_tag, tag)) return null;
   return { id: row.id, subject: row.subject, userId: row.user_id, role: row.role, expiresAt: row.expires_at };
