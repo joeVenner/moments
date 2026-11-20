@@ -1261,6 +1261,16 @@
         }
       }
     },
+    "Sending your photos. Keep this open, or get the app to keep sending in the background.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoi de vos photos. Gardez cet écran ouvert, ou installez l'app Moments pour continuer l'envoi en arrière-plan."
+          }
+        }
+      }
+    },
     "Share": {
       "extractionState": "manual",
       "localizations": {

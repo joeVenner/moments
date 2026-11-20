@@ -138,10 +138,10 @@ struct ClipRootView: View {
     }
 
     private var shouldOfferApp: Bool {
-        // Not over a sheet (it would cover the share button), nor while
-        // photos are sending: installing the app replaces the Clip, and
-        // what it hasn't sent is lost.
-        guard let join, upload == nil, !isShowingProgress, (progress?.activeCount ?? 0) == 0 else { return false }
+        // Not over a sheet (it would cover the share button). While photos
+        // are sending too: the app takes over what the Clip hasn't sent
+        // (`UploadLaunch.prepare(adopting:)`) and goes on in the background.
+        guard let join, upload == nil, !isShowingProgress else { return false }
         if case .joined = join.phase { return true }
         return false
     }
@@ -180,10 +180,17 @@ struct ClipRootView: View {
                     .multilineTextAlignment(.center)
                 if let progress { uploadsButton(progress) }
             } else if let uploads = Self.uploads {
-                Text("Keep this open until your photos are sent.")
-                    .font(MomentsFont.body())
-                    .foregroundStyle(MomentsColor.textMuted)
-                    .multilineTextAlignment(.center)
+                // The banner below is the system's: the reason to install is said here.
+                Group {
+                    if (progress?.activeCount ?? 0) > 0 {
+                        Text("Sending your photos. Keep this open, or get the app to keep sending in the background.")
+                    } else {
+                        Text("Keep this open until your photos are sent.")
+                    }
+                }
+                .font(MomentsFont.body())
+                .foregroundStyle(MomentsColor.textMuted)
+                .multilineTextAlignment(.center)
                 shareButton(uploads, slug: slug)
                 if let progress { uploadsButton(progress) }
             } else {

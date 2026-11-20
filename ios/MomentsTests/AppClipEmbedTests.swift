@@ -98,6 +98,18 @@ import Testing
         }
     }
 
+    /// The app takes over what the Clip hasn't sent, so the install offer
+    /// may show while photos are sending.
+    @Test func theClipOffersTheAppWhileSending() throws {
+        let file = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "MomentsClip/MomentsClipApp.swift")
+        let source = try String(contentsOf: file, encoding: .utf8)
+        let offer = try #require(source.range(of: "private var shouldOfferApp: Bool {"))
+        let gate = source[offer.upperBound...].prefix(600)
+        #expect(gate.contains("guard let join, upload == nil, !isShowingProgress else { return false }"))
+        #expect(!gate.contains("activeCount"))
+    }
+
     /// The app takes the Clip's queue over only once the Clip's guests are
     /// imported (otherwise every Clip upload would look like a stranger's),
     /// and keeps strangers for the handover window.
