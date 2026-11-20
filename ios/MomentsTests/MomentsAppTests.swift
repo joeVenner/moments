@@ -160,6 +160,12 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(!navigation.handle(text: "WIFI:S:guest;T:WPA;P:secret;;"))
     }
 
+    @Test func theModerateBadgeShowsOnlyWhenSomethingWaits() {
+        #expect(HostManageRow.badgeLabel(0) == nil)
+        #expect(HostManageRow.badgeLabel(-1) == nil)
+        #expect(HostManageRow.badgeLabel(3) == "3 to review")
+    }
+
     @Test func everySignInFailureHasItsOwnMessage() {
         let failures: [HostAccount.SignInFailure] = [.invalidCredentials, .locked, .unavailable, .appTooOld, .offline, .failed]
         let messages = failures.map(HostSignInView.message(for:))

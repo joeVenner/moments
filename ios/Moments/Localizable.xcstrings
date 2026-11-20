@@ -289,6 +289,17 @@
         }
       }
     },
+    "%lld to review": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld à vérifier"
+          }
+        }
+      }
+    },
     "A QR code for the tables, one live album for every guest, and every photo and video kept in full quality.": {
       "localizations": {
         "fr": {
