@@ -7,6 +7,8 @@ import { announceGuestRequired, isGuestRequired } from "./guestRequired";
 
 export class UnauthorizedError extends Error {}
 export class AccessRequiredError extends Error {}
+/** The host's plan no longer covers this event. */
+export class EventNotHostedError extends Error {}
 
 async function asJson<T>(res: Response): Promise<T> {
   const body = await res.json();
@@ -14,6 +16,7 @@ async function asJson<T>(res: Response): Promise<T> {
     if (body.access_required) throw new AccessRequiredError("Event access required");
     throw new UnauthorizedError(body.error || "Unauthorized");
   }
+  if (res.status === 410 && body.code === "event_not_hosted") throw new EventNotHostedError(body.error);
   if (!res.ok) throw new Error(body.error || "request failed");
   return body as T;
 }

@@ -9,6 +9,7 @@ import {
   joinEvent,
   DIRECT_UPLOAD_MAX_BYTES,
   AccessRequiredError,
+  EventNotHostedError,
   unlockEvent,
 } from "../lib/api";
 import {
@@ -92,6 +93,7 @@ function EventPageForSlug() {
   const [gateProblem, setGateProblem] = useState<JoinProblem | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [notHosted, setNotHosted] = useState(false);
   const [accessRequired, setAccessRequired] = useState(false);
   const [accessVersion, setAccessVersion] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -198,7 +200,9 @@ function EventPageForSlug() {
         });
       })
       .catch((error) => {
-        if (error instanceof AccessRequiredError || error instanceof Error && error.message.includes("access")) {
+        if (error instanceof EventNotHostedError) {
+          setNotHosted(true);
+        } else if (error instanceof AccessRequiredError || error instanceof Error && error.message.includes("access")) {
           setAccessRequired(true);
         } else {
           setNotFound(true);
@@ -510,10 +514,10 @@ function EventPageForSlug() {
     );
   }
 
-  if (notFound || !event) {
+  if (notFound || notHosted || !event) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-[var(--color-text-muted)]">
-        {t("eventNotFound")}
+      <div className="flex min-h-screen items-center justify-center px-4 text-center text-sm text-[var(--color-text-muted)]">
+        {t(notHosted ? "eventNotHosted" : "eventNotFound")}
       </div>
     );
   }
