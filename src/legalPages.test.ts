@@ -70,6 +70,10 @@ describe("legal pages", () => {
     expect(placeholder.test("[NOM DE L'ENTITÉ]")).toBe(true);
     expect(placeholder.test("<h2>Your rights</h2> [1]")).toBe(false);
     expect(workflow.indexOf("Refuse unfinished pages")).toBeLessThan(workflow.indexOf("upload-pages-artifact"));
+    // No accented character ranges (they break outside a UTF-8 locale), and a grep
+    // error must fail the job, not pass as "no placeholders".
+    expect(guard).not.toMatch(/[^\x00-\x7f]-|-[^\x00-\x7f]/);
+    expect(workflow).toContain('elif [ "$status" -ne 1 ]; then');
   });
 
   it("lists every page in the sitemap", () => {
