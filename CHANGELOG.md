@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS: a new first-launch welcome in the landing's style, ending in Join an event (opens the scanner) or Host an event (opens Hosting).
 - New bilingual landing page at / with hosting prices (from $7.99 a month), how it works, features and FAQ; it keeps the event-code join box.
 - Terms of Use and Privacy Policy pages (English and French) at /terms and /privacy, linked from the footer and published to GitHub Pages.
 - iOS App Clip: the install banner no longer covers the "Couldn't leave the event" alert.
