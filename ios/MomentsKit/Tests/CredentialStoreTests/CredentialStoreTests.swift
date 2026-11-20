@@ -84,6 +84,23 @@ func exerciseListing(_ store: some EventCredentialStore) throws {
 }
 
 @Suite struct CredentialStoreTests {
+    @Test func reportedMomentsAloneAreNotWorthKeeping() {
+        var stored = StoredEventCredentials()
+        stored.rememberReport(of: "m1")
+        #expect(stored.isEmpty)
+        stored.guestToken = "gt"
+        #expect(!stored.isEmpty)
+    }
+
+    @Test func anEntryFromBeforeReportsStillDecodesAndRoundTrips() throws {
+        let old = Data(#"{"schemaVersion":1,"guestToken":"gt","participantID":"p1"}"#.utf8)
+        var decoded = try #require(StoredEventCredentials.decode(old))
+        #expect(decoded.guestToken == "gt" && decoded.reportedMomentIDs == nil)
+        decoded.rememberReport(of: "m1")
+        let again = try #require(StoredEventCredentials.decode(try StoredEventCredentials.encode(decoded)))
+        #expect(again.reportedMomentIDs == ["m1"])
+    }
+
     @Test func inMemoryListing() throws {
         try exerciseListing(InMemoryEventCredentialStore())
     }

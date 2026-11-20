@@ -36,6 +36,8 @@ public final class HighlightsModel {
     @ObservationIgnored private let slug: EventSlug
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let logger = Logger(subsystem: "moments", category: "highlights")
+    /// Moments this guest reported, left out of the list.
+    @ObservationIgnored private var reportHiding = ReportHiding()
 
     public init(
         slug: EventSlug, service: any MomentsService, store: any EventCredentialStore,
@@ -49,6 +51,8 @@ public final class HighlightsModel {
 
     /// When the tab appears: loads unless it loaded moments ago.
     public func loadIfStale() async {
+        // Another list may have had a moment reported meanwhile.
+        if reportHiding.reload(store: store, slug: slug, logger: logger) { publish() }
         guard throttle.isStale(at: now()) else { return }
         await load()
     }
@@ -74,7 +78,7 @@ public final class HighlightsModel {
     /// This device's state learned from the feed.
     public func applyServerReaction(momentID: String, state reaction: ReactionState) {
         state.applyServerReaction(forMomentID: momentID, reacted: reaction.reacted, reactionCount: reaction.reactionCount)
-        if state.moments != moments { moments = state.moments }
+        publish()
     }
 
     /// The event ended for this guest (the feed lost access): stop.
@@ -100,7 +104,7 @@ public final class HighlightsModel {
                 credentials: eventCredentials(store: store, slug: slug)
             )
             state.replace(with: loaded)
-            moments = state.moments
+            publish()
             throttle.markLoaded(at: now())
             phase = .loaded
         } catch {
@@ -146,7 +150,18 @@ extension HighlightsModel: ReactionHost {
     }
 
     func reactionListDidChange() {
-        moments = state.moments
+        publish()
+    }
+
+    /// The viewer closed: moments reported from it leave the list.
+    public func viewerDidClose() {
+        if reportHiding.applyPending(store: store, slug: slug, logger: logger) { publish() }
+    }
+
+    /// The list without the moments this guest reported.
+    private func publish() {
+        let shown = reportHiding.filter(state.moments)
+        if shown != moments { moments = shown }
     }
 
     /// Reports a moment to the host. Errors that end the event go to the
@@ -157,6 +172,7 @@ extension HighlightsModel: ReactionHost {
             try await service.reportMoment(
                 slug: slug.value, momentID: momentID, credentials: eventCredentials(store: store, slug: slug)
             )
+            reportHiding.markReported(momentID, store: store, slug: slug, logger: logger)
             return .reported
         } catch {
             let outcome = ReportOutcome(error)
@@ -183,7 +199,7 @@ extension HighlightsModel: ReactionHost {
             // Hidden or deleted meanwhile.
             reactionFailureCount += 1
             state.remove([momentID])
-            moments = state.moments
+            publish()
         default:
             reactionFailureCount += 1
             if !(error is MomentsAPIError) {

@@ -96,3 +96,117 @@ private func photo(_ id: String) -> Moment {
         #expect(model.hasEnded)
     }
 }
+
+@Suite @MainActor struct ReportHidingTests {
+    private var joined: InMemoryEventCredentialStore {
+        InMemoryEventCredentialStore([slug: StoredEventCredentials(
+            eventID: "e1", guestToken: "gt_me", participantID: "p1", nickname: "Lea"
+        )])
+    }
+
+    private func feed(store: InMemoryEventCredentialStore, moments: [String] = ["m1", "m2"]) async -> (FeedModel, FakeService) {
+        let service = FakeService()
+        let model = FeedModel(event: event, participant: guest, slug: slug, service: service, store: store)
+        service.pageResults = [.success(FeedPage(moments: moments.map(photo), nextBefore: nil, cursor: 10))]
+        await model.loadFirstPage()
+        return (model, service)
+    }
+
+    @Test func aReportedMomentStaysUntilTheViewerCloses() async {
+        let store = joined
+        let (model, _) = await feed(store: store)
+        #expect(await model.report(momentID: "m1") == .reported)
+        // Still there: the viewer is showing it, with the thanks message.
+        #expect(Set(model.moments.map(\.id)) == ["m1", "m2"])
+        model.viewerDidClose()
+        #expect(model.moments.map(\.id) == ["m2"])
+        #expect(store.credentials(for: slug)?.reportedMomentIDs == ["m1"])
+    }
+
+    @Test func showingTheFeedAgainWhileTheViewerIsOpenKeepsTheReportedMoment() async {
+        let store = joined
+        let (model, _) = await feed(store: store)
+        #expect(await model.report(momentID: "m1") == .reported)
+        model.reloadReports()
+        #expect(Set(model.moments.map(\.id)) == ["m1", "m2"])
+        model.viewerDidClose()
+        #expect(model.moments.map(\.id) == ["m2"])
+    }
+
+    @Test func aReportHidesTheMomentEvenWhenTheDeviceCantSaveIt() async {
+        let store = FlakyStore()
+        let service = FakeService()
+        let model = FeedModel(event: event, participant: guest, slug: slug, service: service, store: store)
+        service.pageResults = [.success(FeedPage(moments: [photo("m1"), photo("m2")], nextBefore: nil, cursor: 10))]
+        await model.loadFirstPage()
+        store.failWrites = true
+        #expect(await model.report(momentID: "m1") == .reported)
+        model.viewerDidClose()
+        #expect(model.moments.map(\.id) == ["m2"])
+    }
+
+    @Test func whenEveryLoadedMomentIsReportedOlderOnesStillLoad() async {
+        let store = joined
+        try? store.update(for: slug) { $0.rememberReport(of: "m1") }
+        let service = FakeService()
+        let model = FeedModel(event: event, participant: guest, slug: slug, service: service, store: store)
+        service.pageResults = [
+            .success(FeedPage(moments: [photo("m1")], nextBefore: 1, cursor: 10)),
+            .success(FeedPage(moments: [photo("m0")], nextBefore: nil, cursor: 10)),
+        ]
+        await model.loadFirstPage()
+        for _ in 0..<200 where model.moments.isEmpty { await Task.yield() }
+        #expect(model.canLoadOlder == false)
+        #expect(model.moments.map(\.id) == ["m0"])
+    }
+
+    @Test func aFailedReportHidesNothing() async {
+        let store = joined
+        let (model, service) = await feed(store: store)
+        service.reportResults = [.failure(MomentsAPIError.transport(nil))]
+        #expect(await model.report(momentID: "m1") == .failed)
+        model.viewerDidClose()
+        #expect(Set(model.moments.map(\.id)) == ["m1", "m2"])
+        #expect(store.credentials(for: slug)?.reportedMomentIDs == nil)
+    }
+
+    @Test func savedReportsAreHiddenFromTheStart() async {
+        let store = joined
+        try? store.update(for: slug) { $0.rememberReport(of: "m2") }
+        let (model, _) = await feed(store: store)
+        #expect(model.moments.map(\.id) == ["m1"])
+    }
+
+    @Test func aReportFromHighlightsReachesTheFeedAndBack() async {
+        let store = joined
+        let (model, _) = await feed(store: store)
+        let service = FakeService()
+        service.highlightsResults = [.success([photo("m1"), photo("m2")])]
+        let highlights = HighlightsModel(slug: slug, service: service, store: store)
+        await highlights.loadIfStale()
+        #expect(await highlights.report(momentID: "m2") == .reported)
+        highlights.viewerDidClose()
+        #expect(highlights.moments.map(\.id) == ["m1"])
+        // The feed picks it up when shown again.
+        #expect(Set(model.moments.map(\.id)) == ["m1", "m2"])
+        model.reloadReports()
+        #expect(model.moments.map(\.id) == ["m1"])
+        // And the other way: highlights picks up a feed report when shown.
+        #expect(await model.report(momentID: "m1") == .reported)
+        model.viewerDidClose()
+        await highlights.loadIfStale()
+        #expect(highlights.moments.isEmpty)
+    }
+}
+
+@Suite struct ReportMemoryTests {
+    @Test func remembersEachReportOnceAndOnlyTheNewest() {
+        var stored = StoredEventCredentials(guestToken: "gt")
+        stored.rememberReport(of: "a")
+        stored.rememberReport(of: "a")
+        #expect(stored.reportedMomentIDs == ["a"])
+        for index in 0..<StoredEventCredentials.reportedMomentLimit { stored.rememberReport(of: "m\(index)") }
+        #expect(stored.reportedMomentIDs?.count == StoredEventCredentials.reportedMomentLimit)
+        #expect(stored.reportedMomentIDs?.first == "m0" && stored.reportedMomentIDs?.last == "m199")
+    }
+}

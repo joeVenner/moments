@@ -18,6 +18,12 @@ public struct StoredEventCredentials: Sendable, Hashable, Codable, CustomStringC
     /// Not secrets; kept with the token they belong to.
     public var participantID: String?
     public var nickname: String?
+    /// Moments this guest reported, newest last, hidden from them on this
+    /// device. Not secrets; optional so older entries still decode.
+    public var reportedMomentIDs: [String]?
+
+    /// Enough for any one guest; the oldest are forgotten past it.
+    public static let reportedMomentLimit = 200
 
     public init(
         eventID: String? = nil, accessGrant: String? = nil, accessGrantExpiresAt: Date? = nil,
@@ -32,13 +38,24 @@ public struct StoredEventCredentials: Sendable, Hashable, Codable, CustomStringC
         self.nickname = nickname
     }
 
+    /// Remembers a reported moment (once), keeping at most
+    /// `reportedMomentLimit`.
+    public mutating func rememberReport(of momentID: String) {
+        var ids = reportedMomentIDs ?? []
+        guard !ids.contains(momentID) else { return }
+        ids.append(momentID)
+        if ids.count > Self.reportedMomentLimit { ids.removeFirst(ids.count - Self.reportedMomentLimit) }
+        reportedMomentIDs = ids
+    }
+
     /// The grant if it is still valid at `now` (with a minute's margin for clock skew).
     public func validAccessGrant(at now: Date = .now) -> String? {
         guard let accessGrant, let accessGrantExpiresAt, accessGrantExpiresAt > now.addingTimeInterval(60) else { return nil }
         return accessGrant
     }
 
-    /// Nothing worth keeping (an event ID alone is not).
+    /// Nothing worth keeping (an event ID alone is not, nor reported moments
+    /// alone: a report needs the guest token, and leaving should forget them).
     public var isEmpty: Bool {
         accessGrant == nil && accessGrantExpiresAt == nil && guestToken == nil && participantID == nil && nickname == nil
     }
