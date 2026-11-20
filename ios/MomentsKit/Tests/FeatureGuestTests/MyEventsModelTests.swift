@@ -53,6 +53,15 @@ private func joined(_ nickname: String = "Sam") -> StoredEventCredentials {
         #expect(model.entries[2].details == .unavailable)
     }
 
+    @Test func anEventNoLongerHostedStaysListedAndSaysSo() async {
+        let store = InMemoryEventCredentialStore([EventSlug("party")!: joined()])
+        let service = FakeService()
+        service.eventResults = [.failure(MomentsAPIError.eventNotHosted)]
+        let model = MyEventsModel(service: service, store: store)
+        await model.load()
+        #expect(model.entries.map(\.id) == ["party"] && model.entries.first?.details == .notHosted)
+    }
+
     @Test func storedGrantsWithoutAGuestTokenAreNotJoinedEvents() async {
         let grantOnly = StoredEventCredentials(accessGrant: "grant", accessGrantExpiresAt: .distantFuture)
         let store = InMemoryEventCredentialStore([EventSlug("party")!: grantOnly])

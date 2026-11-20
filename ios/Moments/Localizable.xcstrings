@@ -1644,6 +1644,17 @@
         }
       }
     },
+    "No longer hosted": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "N'est plus hébergé"
+          }
+        }
+      }
+    },
     "No moments yet": {
       "extractionState": "manual",
       "localizations": {

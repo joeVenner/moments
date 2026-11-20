@@ -62,6 +62,8 @@ struct MyEventsList: View {
             status = String(localized: "Enter the PIN again to open it")
         case .unavailable:
             status = String(localized: "Details unavailable right now")
+        case .notHosted:
+            status = String(localized: "No longer hosted")
         }
         guard let nickname = entry.nickname else { return status }
         return String(localized: "\(status) · as \(nickname)")

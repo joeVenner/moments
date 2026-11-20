@@ -17,6 +17,9 @@ public final class MyEventsModel {
             case locked
             /// Couldn't be fetched now (offline, server trouble): still openable.
             case unavailable
+            /// The host's plan no longer covers it. Kept: the host can bring it
+            /// back, and opening it says why it's closed.
+            case notHosted
         }
 
         public let slug: EventSlug
@@ -105,6 +108,8 @@ public final class MyEventsModel {
             return nil
         } catch MomentsAPIError.accessRequired {
             return Entry(slug: slug, nickname: stored.nickname, details: .locked)
+        } catch MomentsAPIError.eventNotHosted {
+            return Entry(slug: slug, nickname: stored.nickname, details: .notHosted)
         } catch {
             return Entry(slug: slug, nickname: stored.nickname, details: .unavailable)
         }
