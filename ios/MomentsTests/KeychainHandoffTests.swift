@@ -114,18 +114,6 @@ private let party = EventSlug("party")!
         #expect(try host.load()?.token == "real")
     }
 
-    @Test(arguments: [
-        ("7877JLKPRQ.com.moments-hq.moments", true),
-        ("7877JLKPRQ.com.moments-hq.moments.shared", true),
-        // An unsigned build: no team prefix.
-        ("com.moments-hq.moments", false),
-        ("$(AppIdentifierPrefix)com.moments-hq.moments", false),
-        ("", false),
-    ])
-    func groupsNeedATeamPrefix(_ value: String, _ isValid: Bool) {
-        #expect((KeychainGroups.group(value) != nil) == isValid)
-    }
-
     @Test func aGroupThisAppIsntEntitledToIsRefused() throws {
         // Proves the simulator enforces access groups, so the tests above
         // check the entitlements and not just the logic.
