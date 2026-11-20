@@ -86,26 +86,6 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(navigation.destination == nil && navigation.openCount == 0)
     }
 
-    @Test func onboardingAdvancesPageByPageThenFinishes() {
-        var flow = OnboardingFlow(pageCount: 3)
-        #expect(flow.page == 0 && !flow.isLastPage)
-        let first = flow.advance()
-        #expect(first && flow.page == 1)
-        let second = flow.advance()
-        #expect(second && flow.isLastPage)
-        let past = flow.advance()
-        #expect(!past)
-        #expect(flow.page == 2)
-    }
-
-    @Test func onboardingSwipesStayWithinThePages() {
-        var flow = OnboardingFlow(pageCount: 3)
-        flow.show(7)
-        #expect(flow.page == 2)
-        flow.show(-1)
-        #expect(flow.page == 0)
-    }
-
     @Test func onboardingShowsOnceAndNeverOverAnEvent() {
         #expect(OnboardingFlow.shouldShow(completed: false, isShowingEvent: false))
         #expect(!OnboardingFlow.shouldShow(completed: true, isShowingEvent: false))
@@ -114,11 +94,26 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(OnboardingFlow.completedKey == "moments.onboarding.completed")
     }
 
-    @Test func aSinglePageFlowStartsOnItsLastPage() {
-        var flow = OnboardingFlow(pageCount: 1)
-        #expect(flow.isLastPage)
-        flow.show(3)
-        #expect(flow.page == 0)
+    @Test func theWelcomeOpensTheScannerOrHosting() {
+        #expect(WelcomeChoice.join.tab == .events)
+        #expect(WelcomeChoice.join.opensScanner)
+        #expect(WelcomeChoice.host.tab == .hosting)
+        #expect(!WelcomeChoice.host.opensScanner)
+    }
+
+    /// The tiers hosting is sold in (migrations/0025_plans.sql); prices
+    /// come from StoreKit, not from here.
+    @Test func theWelcomeListsTheHostingTiers() {
+        #expect(WelcomePlan.all.map(\.guests) == [50, 150, 300, 600])
+    }
+
+    /// Taken once: a home screen rebuilt after an event link closes must
+    /// not open the scanner or Hosting again.
+    @Test func theWelcomeChoiceOpensOnlyOnce() {
+        var pending: WelcomeChoice? = .host
+        #expect(WelcomeChoice.take(&pending) == .host)
+        #expect(pending == nil)
+        #expect(WelcomeChoice.take(&pending) == nil)
     }
 
     @Test func pickingAJoinedEventOpensItWithoutAnInvite() {

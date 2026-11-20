@@ -42,6 +42,8 @@ struct AppShell: View {
     let myEvents: MyEventsModel
     let host: HomeView.Host
     let notice: String?
+    /// The welcome's choice, opened (and cleared) when the shell appears.
+    @Binding var opening: WelcomeChoice?
 
     @Environment(\.scenePhase) private var scenePhase
     @State private var tabs = AppTabState()
@@ -76,7 +78,10 @@ struct AppShell: View {
             isKeyboardUp = false
         }
         .background(MomentsColor.background.ignoresSafeArea())
-        .onAppear { cameraAccess = CameraAccess.current }
+        .onAppear {
+            cameraAccess = CameraAccess.current
+            openWelcomeChoice()
+        }
         // Picks up expiry and a keychain that was locked at launch.
         .onChange(of: scenePhase, initial: true) {
             if scenePhase == .active { host.account.refresh() }
@@ -97,6 +102,13 @@ struct AppShell: View {
                 CameraDeniedSheet { scanSheet = nil } onGranted: { scanSheet = .scanner }
             }
         }
+    }
+
+    private func openWelcomeChoice() {
+        guard let choice = WelcomeChoice.take(&opening) else { return }
+        select(choice.tab)
+        // Without a camera, the Events tab's code field is the way in.
+        if choice.opensScanner { startScanning() }
     }
 
     private func select(_ newTab: AppTab) {

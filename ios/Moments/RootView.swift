@@ -6,13 +6,15 @@ import MomentsDomain
 import SwiftUI
 
 /// Shows the screen for the last opened link: the join flow for an event,
-/// otherwise the first-launch pages once, then the home screen.
+/// otherwise the first-launch welcome once, then the home screen.
 struct RootView: View {
     let navigation: AppNavigation
     let environment: AppEnvironment
     @State private var joinModel: JoinModel?
     @State private var myEvents: MyEventsModel
     @AppStorage(OnboardingFlow.completedKey) private var hasOnboarded = false
+    /// What the welcome asked to open, for the home screen it hands over to.
+    @State private var welcomeChoice: WelcomeChoice?
 
     init(navigation: AppNavigation, environment: AppEnvironment) {
         self.navigation = navigation
@@ -34,13 +36,16 @@ struct RootView: View {
                 // A new model per open restarts the flow cleanly.
                 .id(joinModel.id)
             } else if OnboardingFlow.shouldShow(completed: hasOnboarded, isShowingEvent: false) {
-                OnboardingView { hasOnboarded = true }
+                OnboardingView { choice in
+                    welcomeChoice = choice
+                    hasOnboarded = true
+                }
             } else {
                 AppShell(navigation: navigation, myEvents: myEvents, host: HomeView.Host(
                     account: environment.hostAccount, events: environment.hostEvents,
                     service: environment.hostService, mediaFetcher: environment.guest.mediaFetcher,
                     downloads: environment.hostDownloads
-                ), notice: notice)
+                ), notice: notice, opening: $welcomeChoice)
             }
         }
         // Universal links arrive here; App Clip invocations arrive as a
