@@ -49,7 +49,7 @@ private func ids(_ moments: [Moment]) -> Set<String> { Set(moments.map(\.id)) }
     @Test func aMutedGuestsMomentsGoWhenTheViewerCloses() async {
         let store = joined()
         let model = await feed(store: store)
-        model.mute(participantID: "p2")
+        #expect(model.mute(participantID: "p2"))
         // Still there: the viewer is showing one, with the message.
         #expect(ids(model.moments) == ["s1", "mine", "s2", "old"])
         model.viewerDidClose()
@@ -91,7 +91,7 @@ private func ids(_ moments: [Moment]) -> Set<String> { Set(moments.map(\.id)) }
     @Test func thisGuestCantMuteThemselves() async {
         let store = joined()
         let model = await feed(store: store)
-        model.mute(participantID: "p1")
+        #expect(model.mute(participantID: "p1") == false)
         #expect(store.credentials(for: slug)?.mutedParticipantIDs == nil)
     }
 
@@ -110,7 +110,7 @@ private func ids(_ moments: [Moment]) -> Set<String> { Set(moments.map(\.id)) }
         try? store.save(StoredEventCredentials(guestToken: "gt_me", participantID: "p1"), for: slug)
         let model = await feed(store: store)
         store.failWrites = true
-        model.mute(participantID: "p2")
+        #expect(model.mute(participantID: "p2") == false)
         model.viewerDidClose()
         #expect(ids(model.moments) == ["mine", "old"])
         // Not in the muted guests list, so it can't outlive a reload (it
@@ -181,6 +181,27 @@ private func ids(_ moments: [Moment]) -> Set<String> { Set(moments.map(\.id)) }
 }
 
 @Suite @MainActor struct MutedGuestsTests {
+    @Test func aFailedUnmuteSaysSoAndTheNextTryClearsIt() {
+        let store = FlakyStore()
+        try? store.save(StoredEventCredentials(guestToken: "gt_me", participantID: "p1"), for: slug)
+        try? store.update(for: slug) { $0.mute(participantID: "p2") }
+        let model = LeaderboardModel(slug: slug, participantID: "p1", service: FakeService(), store: store)
+        model.reloadMuted()
+        store.failWrites = true
+        model.unmute(participantID: "p2")
+        #expect(model.unmuteFailed)
+        #expect(model.mutedParticipantIDs == ["p2"])
+        // Reopening the list forgets the failure.
+        model.reloadMuted()
+        #expect(!model.unmuteFailed)
+        model.unmute(participantID: "p2")
+        #expect(model.unmuteFailed)
+        store.failWrites = false
+        model.unmute(participantID: "p2")
+        #expect(!model.unmuteFailed)
+        #expect(model.mutedParticipantIDs.isEmpty)
+    }
+
     @Test func namesMutedGuestsFromTheBoardOrAsAGuest() async {
         let store = joined()
         try? store.update(for: slug) {

@@ -156,8 +156,11 @@ struct MomentViewer: View {
     }
 
     private func mute(_ participantID: String, name: String) {
-        model.mute(participantID: participantID)
-        show("You won't see \(name)'s moments on this phone. Unmute them from the event menu.")
+        if model.mute(participantID: participantID) {
+            show("You won't see \(name)'s moments on this phone. Unmute them from the event menu.")
+        } else {
+            show("\(name)'s moments are hidden for now, but this phone couldn't save it.")
+        }
     }
 
     private func show(_ message: LocalizedStringResource) {

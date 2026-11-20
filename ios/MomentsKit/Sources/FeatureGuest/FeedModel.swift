@@ -299,8 +299,10 @@ public final class FeedModel {
         hiddenMoments.canMute(moment)
     }
 
-    /// Mutes the moment's sharer on this device; applies when the viewer closes.
-    public func mute(participantID: String) {
+    /// Mutes the moment's sharer on this device; applies when the viewer
+    /// closes. False when this device couldn't save it.
+    @discardableResult
+    public func mute(participantID: String) -> Bool {
         hiddenMoments.markMuted(participantID, store: store, slug: slug, logger: logger)
     }
 

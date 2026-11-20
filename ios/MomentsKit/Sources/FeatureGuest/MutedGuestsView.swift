@@ -19,6 +19,12 @@ struct MutedGuestsView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List {
+                        if model.unmuteFailed {
+                            Text("Couldn't unmute. Try again.")
+                                .font(MomentsFont.body(.footnote))
+                                .foregroundStyle(MomentsColor.accent)
+                                .listRowBackground(MomentsColor.surface)
+                        }
                         Section {
                             ForEach(model.mutedGuests) { guest in
                                 row(guest).listRowBackground(MomentsColor.surface)
@@ -42,6 +48,9 @@ struct MutedGuestsView: View {
                     Button("Done") { dismiss() }
                 }
             }
+        }
+        .onChange(of: model.unmuteFailed) { _, failed in
+            if failed { AccessibilityNotification.Announcement(String(localized: "Couldn't unmute. Try again.")).post() }
         }
         .task {
             model.reloadMuted()

@@ -42,15 +42,19 @@ struct HiddenMoments {
     }
 
     /// Saves the mute so every screen (and the next launch) hides the
-    /// guest's moments. Never mutes this guest.
-    mutating func markMuted(_ participantID: String, store: any EventCredentialStore, slug: EventSlug, logger: Logger) {
-        guard participantID != ownParticipantID else { return }
+    /// guest's moments. Returns false when the store refused it (it still
+    /// applies when the viewer closes, until the next reload), and for this
+    /// guest, who is never muted (`canMute` keeps that out of the UI).
+    @discardableResult
+    mutating func markMuted(_ participantID: String, store: any EventCredentialStore, slug: EventSlug, logger: Logger) -> Bool {
+        guard participantID != ownParticipantID else { return false }
         pendingMutes.insert(participantID)
         do {
             try store.update(for: slug) { $0.mute(participantID: participantID) }
+            return true
         } catch {
-            // Still applies when the viewer closes, until the next reload.
             logger.error("saving a mute failed: \(String(describing: error), privacy: .public)")
+            return false
         }
     }
 
