@@ -160,6 +160,32 @@ private func makeModel(invite: InviteToken? = nil, store: InMemoryEventCredentia
         #expect(model.phase == .joined(publicEvent, guest))
     }
 
+    @Test func aFullEventSaysSoAndLetsTheGuestTryAgain() async throws {
+        let (model, service, store) = makeModel()
+        service.eventResults = [.success(publicEvent)]
+        service.joinResults = [
+            .failure(MomentsAPIError.guestCapReached),
+            .success(JoinResult(participant: guest, guestToken: "gt_new")),
+        ]
+        await model.start()
+        await model.join(nickname: "Lea")
+        #expect(model.phase == .needsNickname(publicEvent, .eventFull))
+        #expect(try store.credentials(for: slug) == nil)
+        await model.join(nickname: "Lea")
+        #expect(model.phase == .joined(publicEvent, guest))
+    }
+
+    @Test func aReturningGuestTheServerNoLongerKnowsHearsTheEventIsFull() async throws {
+        // A known guest rejoins before the cap is checked: full means they're gone.
+        let store = InMemoryEventCredentialStore([slug: StoredEventCredentials(eventID: "e1", guestToken: "gt", participantID: "p1", nickname: "Lea")])
+        let (model, service, _) = makeModel(store: store)
+        service.eventResults = [.success(publicEvent)]
+        service.joinResults = [.failure(MomentsAPIError.guestCapReached)]
+        await model.start()
+        #expect(model.phase == .needsNickname(publicEvent, .eventFull))
+        #expect(store.credentials(for: slug) == nil)
+    }
+
     @Test func returningGuestWithARevokedTokenChoosesANameAgain() async throws {
         let store = InMemoryEventCredentialStore([slug: StoredEventCredentials(eventID: "e1", guestToken: "gt", participantID: "p1", nickname: "Lea")])
         let (model, service, _) = makeModel(store: store)

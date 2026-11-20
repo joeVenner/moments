@@ -229,6 +229,7 @@ public struct JoinView: View {
         case .taken: "This nickname is already taken in this event."
         case .invalid: "Enter a name between 1 and 60 characters."
         case .busy: "Too many people are joining from this network. Try again in a minute."
+        case .eventFull: "This event is full: it has as many guests as its host's plan allows."
         }
     }
 
