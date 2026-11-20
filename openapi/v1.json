@@ -68,7 +68,7 @@
           },
           "code": {
             "type": "string",
-            "description": "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, media_delete_failed, plan_required, no_events_left, test_event_dates_fixed, guest_cap_reached, not_found, internal"
+            "description": "Stable machine-readable reason: invalid_request, event_not_found, access_required, invalid_access, too_many_attempts, access_unavailable, nickname_taken, guest_required, moment_not_found, rate_limited, client_upgrade_required, invalid_credentials, host_auth_required, sign_in_unavailable, media_delete_failed, plan_required, no_events_left, test_event_dates_fixed, guest_cap_reached, event_not_hosted, not_found, internal"
           }
         },
         "required": [
@@ -2395,6 +2395,16 @@
               }
             }
           },
+          "410": {
+            "description": "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "426": {
             "description": "This app build is too old; show the update screen",
             "content": {
@@ -2517,6 +2527,16 @@
               }
             }
           },
+          "410": {
+            "description": "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "426": {
             "description": "This app build is too old; show the update screen",
             "content": {
@@ -2630,6 +2650,16 @@
               }
             }
           },
+          "410": {
+            "description": "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "426": {
             "description": "This app build is too old; show the update screen",
             "content": {
@@ -2715,6 +2745,16 @@
           },
           "404": {
             "description": "No live event with this slug",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted",
             "content": {
               "application/json": {
                 "schema": {
@@ -2855,6 +2895,16 @@
               }
             }
           },
+          "410": {
+            "description": "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "426": {
             "description": "This app build is too old; show the update screen",
             "content": {
@@ -2971,6 +3021,16 @@
           },
           "409": {
             "description": "`nickname_taken`: another device owns this nickname; `guest_cap_reached`: the event has as many guests as its plan allows (guests already in it can always rejoin)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted",
             "content": {
               "application/json": {
                 "schema": {
@@ -3122,6 +3182,16 @@
               }
             }
           },
+          "410": {
+            "description": "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "426": {
             "description": "This app build is too old; show the update screen",
             "content": {
@@ -3255,6 +3325,16 @@
               }
             }
           },
+          "410": {
+            "description": "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "426": {
             "description": "This app build is too old; show the update screen",
             "content": {
@@ -3363,6 +3443,16 @@
           },
           "404": {
             "description": "No live event with this slug",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted",
             "content": {
               "application/json": {
                 "schema": {
@@ -3537,6 +3627,16 @@
               }
             }
           },
+          "410": {
+            "description": "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "426": {
             "description": "This app build is too old; show the update screen",
             "content": {
@@ -3674,6 +3774,16 @@
           },
           "404": {
             "description": "No live event with this slug, or `upload_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted",
             "content": {
               "application/json": {
                 "schema": {
@@ -3827,6 +3937,16 @@
           },
           "409": {
             "description": "`upload_not_open`: already completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted",
             "content": {
               "application/json": {
                 "schema": {
@@ -4011,6 +4131,16 @@
               }
             }
           },
+          "410": {
+            "description": "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "426": {
             "description": "This app build is too old; show the update screen",
             "content": {
@@ -4187,6 +4317,16 @@
               }
             }
           },
+          "410": {
+            "description": "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "426": {
             "description": "This app build is too old; show the update screen",
             "content": {
@@ -4339,6 +4479,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UploadCompleteConflict"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "`event_not_hosted`: the host's plan no longer covers this event; show that it is no longer hosted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
