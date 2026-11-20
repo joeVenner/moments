@@ -136,6 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Website uploads now belong to the guest who made them. A guest who joined always uploads under their own nickname, whatever name the page sends, so nobody can post photos as someone else. Once guest identities are required, the website refuses uploads from visitors who haven't joined, before anything is stored.
 - Hearts now belong to the guest, not the device. A guest who joined reacts as themselves on the website and in the app: the server decides whose heart it is, so a client can no longer send hearts on another guest's behalf, and a guest sees their hearts on every device where they joined. Leaving an event takes back that guest's hearts. Clients without a guest identity keep their device id only until guest identities are required.
 ### Fixed
+- iOS event screen: details that were still loading when you saved a change no longer put the old values back on screen.
 - iOS Hosting screen: the TEST and Private chips stack instead of being clipped on a narrow card or at large text sizes.
 - iOS app: saving a shared photo with "Save Image" no longer crashes the app; Moments now asks permission to add to the photo library, in English and French.
 - App API: an empty string now clears an event date. Generated clients like the iOS one leave a missing field out rather than sending `null`, so the app couldn't clear a date before.
