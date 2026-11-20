@@ -119,14 +119,7 @@ public struct JoinView: View {
         .padding(.bottom, Spacing.sm)
     }
 
-    /// "Wedding · 14 Jun 2026": a known type in the guest's language, a
-    /// custom one as the host wrote it.
-    static func eventLine(_ event: Event) -> Text {
-        let type: Text = EventTypePreset.matching(event.type).map { Text(LocalizedStringKey($0.storedValue)) }
-            ?? Text(verbatim: event.type)
-        guard let startsAt = event.startsAt else { return type }
-        return type + Text(verbatim: " · ") + Text(startsAt, format: .dateTime.day().month().year())
-    }
+    static func eventLine(_ event: Event) -> Text { JoinEventLine(event).text }
 
     private var faceCard: some View {
         // Large text: the face goes above the words so they keep the width.
@@ -264,5 +257,44 @@ private extension View {
         #else
         self
         #endif
+    }
+}
+
+/// The invitation's second line, "Wedding · 14 Jun 2026": a known type in
+/// the guest's language, a custom one as the host wrote it, a blank one left
+/// out. Decided here so it can be tested apart from the view.
+struct JoinEventLine: Equatable {
+    enum Kind: Equatable {
+        case preset(EventTypePreset)
+        case custom(String)
+        case none
+    }
+
+    let kind: Kind
+    let startsAt: Date?
+
+    init(_ event: Event) {
+        let written = event.type.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let preset = EventTypePreset.matching(written) {
+            kind = .preset(preset)
+        } else {
+            kind = written.isEmpty ? .none : .custom(written)
+        }
+        startsAt = event.startsAt
+    }
+
+    var text: Text {
+        let date = startsAt.map { Text($0, format: .dateTime.day().month().year()) }
+        let type: Text? = switch kind {
+        case let .preset(preset): Text(LocalizedStringKey(preset.storedValue))
+        case let .custom(written): Text(verbatim: written)
+        case .none: nil
+        }
+        switch (type, date) {
+        case let (type?, date?): return type + Text(verbatim: " · ") + date
+        case let (type?, nil): return type
+        case let (nil, date?): return date
+        case (nil, nil): return Text(verbatim: "")
+        }
     }
 }
