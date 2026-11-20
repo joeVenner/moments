@@ -127,7 +127,7 @@ private func photo(_ id: String) -> Moment {
         let store = joined
         let (model, _) = await feed(store: store)
         #expect(await model.report(momentID: "m1") == .reported)
-        model.reloadReports()
+        model.reloadHidden()
         #expect(Set(model.moments.map(\.id)) == ["m1", "m2"])
         model.viewerDidClose()
         #expect(model.moments.map(\.id) == ["m2"])
@@ -189,7 +189,7 @@ private func photo(_ id: String) -> Moment {
         #expect(highlights.moments.map(\.id) == ["m1"])
         // The feed picks it up when shown again.
         #expect(Set(model.moments.map(\.id)) == ["m1", "m2"])
-        model.reloadReports()
+        model.reloadHidden()
         #expect(model.moments.map(\.id) == ["m1"])
         // And the other way: highlights picks up a feed report when shown.
         #expect(await model.report(momentID: "m1") == .reported)

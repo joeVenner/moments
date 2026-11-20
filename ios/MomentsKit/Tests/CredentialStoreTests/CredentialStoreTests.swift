@@ -101,6 +101,37 @@ func exerciseListing(_ store: some EventCredentialStore) throws {
         #expect(again.reportedMomentIDs == ["m1"])
     }
 
+    @Test func mutesAloneAreNotWorthKeepingAndOlderEntriesDecode() throws {
+        var stored = StoredEventCredentials()
+        stored.mute(participantID: "p2")
+        #expect(stored.isEmpty)
+        let old = Data(#"{"schemaVersion":1,"guestToken":"gt"}"#.utf8)
+        var decoded = try #require(StoredEventCredentials.decode(old))
+        #expect(decoded.mutedParticipantIDs == nil)
+        decoded.mute(participantID: "p2")
+        let again = try #require(StoredEventCredentials.decode(try StoredEventCredentials.encode(decoded)))
+        #expect(again.mutedParticipantIDs == ["p2"])
+    }
+
+    @Test func mutesEachGuestOnceKeepsTheNewestAndUnmutes() {
+        var stored = StoredEventCredentials(guestToken: "gt")
+        stored.mute(participantID: "a")
+        stored.mute(participantID: "a")
+        #expect(stored.mutedParticipantIDs == ["a"])
+        for index in 0..<StoredEventCredentials.mutedParticipantLimit { stored.mute(participantID: "p\(index)") }
+        #expect(stored.mutedParticipantIDs?.count == StoredEventCredentials.mutedParticipantLimit)
+        #expect(stored.mutedParticipantIDs?.first == "p0" && stored.mutedParticipantIDs?.last == "p199")
+        stored.unmute(participantID: "p0")
+        #expect(stored.mutedParticipantIDs?.contains("p0") == false)
+        // The last unmute leaves no list behind.
+        var one = StoredEventCredentials(guestToken: "gt")
+        one.mute(participantID: "x")
+        one.unmute(participantID: "nobody")
+        #expect(one.mutedParticipantIDs == ["x"])
+        one.unmute(participantID: "x")
+        #expect(one.mutedParticipantIDs == nil)
+    }
+
     @Test func inMemoryListing() throws {
         try exerciseListing(InMemoryEventCredentialStore())
     }

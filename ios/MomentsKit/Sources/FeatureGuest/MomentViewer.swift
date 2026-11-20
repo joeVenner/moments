@@ -31,8 +31,8 @@ struct MomentViewer: View {
     @State private var showsChrome = true
     /// Bumped by every heart tap, for the haptic.
     @State private var heartTaps = 0
-    /// The moment the report question is about, while it's asked.
-    @State private var reportTarget: Moment.ID?
+    /// The report question, while it's asked.
+    @State private var reportQuestion: ReportQuestion?
     @State private var isReporting = false
     /// Shown briefly after a report.
     @State private var reportMessage: LocalizedStringResource?
@@ -91,16 +91,24 @@ struct MomentViewer: View {
         }
         .momentsAnimation(value: showsChrome)
         .momentsAnimation(value: reportMessage == nil)
+        // One dialog for report and mute (dialogs are never chained).
         .confirmationDialog(
             Text("Report this moment?"),
-            isPresented: Binding { reportTarget != nil } set: { if !$0 { reportTarget = nil } },
+            isPresented: Binding { reportQuestion != nil } set: { if !$0 { reportQuestion = nil } },
             titleVisibility: .visible,
-            presenting: reportTarget
-        ) { id in
-            Button("Report", role: .destructive) { report(id) }
+            presenting: reportQuestion
+        ) { question in
+            Button("Report", role: .destructive) { report(question.momentID) }
+            if let participantID = question.muteParticipantID {
+                Button("Mute \(question.uploaderName)") { mute(participantID, name: question.uploaderName) }
+            }
             Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("The host will review it.")
+        } message: { question in
+            if question.muteParticipantID == nil {
+                Text("The host will review it.")
+            } else {
+                Text("The host will review a report. Muting hides \(question.uploaderName)'s moments on this phone.")
+            }
         }
         .onDisappear {
             reportTask?.cancel()
@@ -147,6 +155,11 @@ struct MomentViewer: View {
         }
     }
 
+    private func mute(_ participantID: String, name: String) {
+        model.mute(participantID: participantID)
+        show("You won't see \(name)'s moments on this phone. Unmute them from the event menu.")
+    }
+
     private func show(_ message: LocalizedStringResource) {
         reportMessage = message
         AccessibilityNotification.Announcement(String(localized: message)).post()
@@ -179,7 +192,8 @@ struct MomentViewer: View {
     }
 
     private func reportButton(_ moment: Moment) -> some View {
-        Button { reportTarget = moment.id } label: {
+        let question = ReportQuestion(moment, canMute: model.canMute(moment))
+        return Button { reportQuestion = question } label: {
             Image(systemName: "flag")
                 .font(MomentsFont.body().weight(.semibold))
                 .foregroundStyle(MomentsColor.text)
@@ -188,7 +202,7 @@ struct MomentViewer: View {
                 .overlay(Circle().stroke(MomentsColor.border))
         }
         .disabled(isReporting)
-        .accessibilityLabel(Text("Report"))
+        .accessibilityLabel(question.muteParticipantID == nil ? Text("Report") : Text("Report or mute"))
     }
 
     private func chrome(moment: Moment, position: Int, total: Int, isPlaying: Bool) -> some View {

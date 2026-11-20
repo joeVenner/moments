@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS: guests can mute another guest from a moment's Report dialog ("Mute <name>"); that guest's moments leave the feed and highlights on this phone when the viewer closes. "Muted guests" in the event menu lists them with Unmute. Stored per event (capped at 200), forgotten on leave; the server isn't told.
 - App API: guest feed, changes and highlights moments carry an optional `uploader_id` (the sharer's participant id; null for older moments), so the app can let a guest mute another guest.
 - iOS: a moment a guest reports disappears from their own feed and highlights (on that device) once they close the viewer; the host still sees it.
 - iOS host moderation: Select mode to hide or delete several moments at once ("3 selected · Hide · Delete"), with a spoken summary of what worked.

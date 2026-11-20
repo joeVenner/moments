@@ -63,7 +63,7 @@ public struct FeedView: View {
         .task(id: isSelected) {
             guard isSelected else { return }
             // Highlights may have had a moment reported meanwhile.
-            model.reloadReports()
+            model.reloadHidden()
             await model.loadFirstPage()
             await model.pollUntilCancelled()
         }
