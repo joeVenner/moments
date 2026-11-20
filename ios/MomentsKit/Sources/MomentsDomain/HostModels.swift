@@ -23,15 +23,20 @@ public struct AdminEvent: Sendable, Hashable, Identifiable {
     public let momentCount: Int
     /// Guests currently in the event.
     public let participantCount: Int
+    /// Moments guests still see that at least one guest reported.
+    public let toReviewCount: Int
 
     public var id: String { event.id }
 
-    public init(event: Event, kind: Kind, guestCap: Int? = nil, momentCount: Int, participantCount: Int) {
+    public init(
+        event: Event, kind: Kind, guestCap: Int? = nil, momentCount: Int, participantCount: Int, toReviewCount: Int = 0
+    ) {
         self.event = event
         self.kind = kind
         self.guestCap = guestCap
         self.momentCount = momentCount
         self.participantCount = participantCount
+        self.toReviewCount = toReviewCount
     }
 }
 

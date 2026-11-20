@@ -4,19 +4,33 @@ import { advertisedGuestCap, GUEST_PAYING_PLAN_STATES_SQL } from "./guestCap";
 import { withGuestMediaGrant } from "./mediaAccess";
 import type { EventRow } from "./types";
 
-/** An event as the host's list shows it: public fields, its billing kind, guest limit and two counts. */
+/** An event as the host's list shows it: public fields, its billing kind, guest limit and its counts. */
 export type AdminEventSummary = PublicEvent &
-  Pick<EventRow, "kind"> & { guest_cap: number | null; moment_count: number; participant_count: number };
+  Pick<EventRow, "kind"> & {
+    guest_cap: number | null;
+    moment_count: number;
+    participant_count: number;
+    /** Visible moments at least one guest reported. */
+    to_review_count: number;
+  };
 
-type AdminEventRow = EventRow & { moment_count: number; participant_count: number; tier_guest_cap: number | null };
+type AdminEventRow = EventRow & {
+  moment_count: number;
+  participant_count: number;
+  to_review_count: number;
+  tier_guest_cap: number | null;
+};
 
 /**
- * Every event column, the two counts and the owner's live tier cap (the
- * same plans the join check counts); callers add WHERE/ORDER/LIMIT.
+ * Every event column, the counts and the owner's live tier cap (the same
+ * plans the join check counts); callers add WHERE/ORDER/LIMIT. "To review"
+ * counts reported moments still shown to guests: hiding one clears it.
  */
 const ADMIN_EVENT_SELECT = `SELECT e.*,
         (SELECT COUNT(*) FROM moments m WHERE m.event_id = e.id) AS moment_count,
         (SELECT COUNT(*) FROM participants p WHERE p.event_id = e.id) AS participant_count,
+        (SELECT COUNT(DISTINCT r.moment_id) FROM moment_reports r JOIN moments m ON m.id = r.moment_id
+          WHERE r.event_id = e.id AND m.moderation_status = 'approved') AS to_review_count,
         (SELECT pr.guest_cap FROM plans pl JOIN products pr ON pr.id = pl.product_id
           WHERE pl.user_id = e.owner_user_id AND pl.state IN ${GUEST_PAYING_PLAN_STATES_SQL} LIMIT 1) AS tier_guest_cap
    FROM events e`;
@@ -27,7 +41,7 @@ const ADMIN_EVENT_SELECT = `SELECT e.*,
  * event's cover carries a signed grant like the guest API's.
  */
 async function toAdminEventSummary(
-  { moment_count, participant_count, tier_guest_cap, ...event }: AdminEventRow,
+  { moment_count, participant_count, to_review_count, tier_guest_cap, ...event }: AdminEventRow,
   secret: string | undefined,
   nowSeconds: number
 ): Promise<AdminEventSummary> {
@@ -40,6 +54,7 @@ async function toAdminEventSummary(
     cover_image_url: cover,
     moment_count,
     participant_count,
+    to_review_count,
   };
 }
 
