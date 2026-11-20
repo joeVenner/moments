@@ -1747,6 +1747,16 @@
               }
             }
           },
+          "402": {
+            "description": "`plan_required`: on an event a plan pays for, the host's plan no longer allows this (editing, moderating, or downloading after the read-only window)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "404": {
             "description": "`event_not_found`",
             "content": {
@@ -1845,6 +1855,16 @@
               }
             }
           },
+          "402": {
+            "description": "`plan_required`: on an event a plan pays for, the host's plan no longer allows this (editing, moderating, or downloading after the read-only window)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "404": {
             "description": "`event_not_found`",
             "content": {
@@ -1917,6 +1937,16 @@
           },
           "401": {
             "description": "`host_auth_required`: sign in again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "`plan_required`: on an event a plan pays for, the host's plan no longer allows this (editing, moderating, or downloading after the read-only window)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2013,6 +2043,16 @@
               }
             }
           },
+          "402": {
+            "description": "`plan_required`: on an event a plan pays for, the host's plan no longer allows this (editing, moderating, or downloading after the read-only window)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "404": {
             "description": "`moment_not_found`",
             "content": {
@@ -2074,6 +2114,16 @@
           },
           "401": {
             "description": "`host_auth_required`: sign in again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "`plan_required`: on an event a plan pays for, the host's plan no longer allows this (editing, moderating, or downloading after the read-only window)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2192,6 +2242,16 @@
               }
             }
           },
+          "402": {
+            "description": "`plan_required`: on an event a plan pays for, the host's plan no longer allows this (editing, moderating, or downloading after the read-only window)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "404": {
             "description": "`event_not_found`",
             "content": {
@@ -2284,6 +2344,16 @@
           },
           "401": {
             "description": "`host_auth_required`: sign in again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "`plan_required`: on an event a plan pays for, the host's plan no longer allows this (editing, moderating, or downloading after the read-only window)",
             "content": {
               "application/json": {
                 "schema": {
