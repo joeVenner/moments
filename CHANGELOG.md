@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS guest app: an event whose host's plan has ended now says "This event is no longer hosted" (when opening or joining it, and mid-visit on any tab) instead of a connection error with a retry that can't work (English and French).
 - iOS Hosting screen: a plan card above the events shows the guest limit, whether the plan renews or ends (or that a payment failed / hosting ended, with the download deadline), and how many events can still be created (English and French).
 - App API: `GET /api/v1/admin/plan` returns the signed-in host's hosting plan: state, tier and guest cap, dates, what the host may do now, and how many events of each kind they can still create (null without a plan). The iOS client reads it as `HostPlan`.
 - iOS host screens explain plan refusals instead of a generic error: no plan to create events, no events left (an Extra event adds one), a test event's fixed dates, and "your hosting plan doesn't allow this right now" when viewing, editing or moderating an event the plan no longer covers (English and French).
