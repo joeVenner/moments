@@ -391,6 +391,10 @@ export const AdminEventSchema = EventSchema.extend({
     description:
       "legacy: from before hosting plans; operator: the operator's own; main: paid by the host's plan; test: the plan's one-month test event (its dates are fixed)",
   }),
+  guest_cap: z.number().int().nullable().openapi({
+    description:
+      "The guest limit to show the host (before the 10% grace joins allow on a main event): 15 for a test event, the plan's tier for a main event; null for no limit, or for a main event its owner's plan no longer covers",
+  }),
   moment_count: z.number().int().openapi({ description: "All moments, hidden ones included" }),
   participant_count: z.number().int().openapi({ description: "Guests currently in the event (those who left are not counted)" }),
 }).openapi("AdminEvent");

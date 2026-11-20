@@ -1,17 +1,24 @@
 import { getEventAnalytics, type EventAnalytics } from "./adminAnalytics";
 import { toPublicEvent, type PublicEvent } from "./events";
+import { advertisedGuestCap, GUEST_PAYING_PLAN_STATES_SQL } from "./guestCap";
 import { withGuestMediaGrant } from "./mediaAccess";
 import type { EventRow } from "./types";
 
-/** An event as the host's list shows it: public fields, its billing kind and two counts. */
-export type AdminEventSummary = PublicEvent & Pick<EventRow, "kind"> & { moment_count: number; participant_count: number };
+/** An event as the host's list shows it: public fields, its billing kind, guest limit and two counts. */
+export type AdminEventSummary = PublicEvent &
+  Pick<EventRow, "kind"> & { guest_cap: number | null; moment_count: number; participant_count: number };
 
-type AdminEventRow = EventRow & { moment_count: number; participant_count: number };
+type AdminEventRow = EventRow & { moment_count: number; participant_count: number; tier_guest_cap: number | null };
 
-/** Every event column plus the two counts; callers add WHERE/ORDER/LIMIT. */
+/**
+ * Every event column, the two counts and the owner's live tier cap (the
+ * same plans the join check counts); callers add WHERE/ORDER/LIMIT.
+ */
 const ADMIN_EVENT_SELECT = `SELECT e.*,
         (SELECT COUNT(*) FROM moments m WHERE m.event_id = e.id) AS moment_count,
-        (SELECT COUNT(*) FROM participants p WHERE p.event_id = e.id) AS participant_count
+        (SELECT COUNT(*) FROM participants p WHERE p.event_id = e.id) AS participant_count,
+        (SELECT pr.guest_cap FROM plans pl JOIN products pr ON pr.id = pl.product_id
+          WHERE pl.user_id = e.owner_user_id AND pl.state IN ${GUEST_PAYING_PLAN_STATES_SQL} LIMIT 1) AS tier_guest_cap
    FROM events e`;
 
 /**
@@ -20,13 +27,20 @@ const ADMIN_EVENT_SELECT = `SELECT e.*,
  * event's cover carries a signed grant like the guest API's.
  */
 async function toAdminEventSummary(
-  { moment_count, participant_count, ...event }: AdminEventRow,
+  { moment_count, participant_count, tier_guest_cap, ...event }: AdminEventRow,
   secret: string | undefined,
   nowSeconds: number
 ): Promise<AdminEventSummary> {
   const publicEvent = toPublicEvent(event);
   const cover = await withGuestMediaGrant(secret, event, publicEvent.cover_image_url, nowSeconds);
-  return { ...publicEvent, kind: event.kind, cover_image_url: cover, moment_count, participant_count };
+  return {
+    ...publicEvent,
+    kind: event.kind,
+    guest_cap: advertisedGuestCap(event.kind, tier_guest_cap),
+    cover_image_url: cover,
+    moment_count,
+    participant_count,
+  };
 }
 
 /** Hard cap on one list; far above what a single host runs. */

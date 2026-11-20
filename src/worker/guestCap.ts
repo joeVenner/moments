@@ -7,6 +7,33 @@
 
 export const TEST_EVENT_GUEST_CAP = 15;
 
+/** Plan states that still pay for an event's guests (SQL list). */
+export const GUEST_PAYING_PLAN_STATES_SQL = "('active', 'canceling', 'grace', 'billing_retry')";
+
+type EventKind = "legacy" | "operator" | "main" | "test";
+
+/**
+ * The limit a host is told ("up to N guests"), before the 10% grace: null
+ * for no limit, and null for a main event its owner's plan no longer covers
+ * (it takes no new guests then, so there's no limit to show). `tierCap` is
+ * the owner's live plan's guest cap, or null without one.
+ */
+export function advertisedGuestCap(kind: EventKind, tierCap: number | null): number | null {
+  switch (kind) {
+    case "legacy":
+    case "operator":
+      return null;
+    case "test":
+      return TEST_EVENT_GUEST_CAP;
+    case "main":
+      return tierCap;
+    default: {
+      const unknownKind: never = kind;
+      throw new Error(`unknown event kind ${String(unknownKind)}`);
+    }
+  }
+}
+
 /** A tier's cap plus 10%, rounded up (integer maths: 50 → 55, never 56). */
 export function capWithGrace(tierCap: number): number {
   return Math.ceil((tierCap * 11) / 10);
@@ -22,26 +49,17 @@ export async function eventGuestCap(db: D1Database, eventId: string): Promise<nu
     .prepare(
       `SELECT e.kind, pr.guest_cap
        FROM events e
-       LEFT JOIN plans p ON p.user_id = e.owner_user_id AND p.state IN ('active', 'canceling', 'grace', 'billing_retry')
+       LEFT JOIN plans p ON p.user_id = e.owner_user_id AND p.state IN ${GUEST_PAYING_PLAN_STATES_SQL}
        LEFT JOIN products pr ON pr.id = p.product_id
        WHERE e.id = ?`
     )
     .bind(eventId)
-    .first<{ kind: "legacy" | "operator" | "main" | "test"; guest_cap: number | null }>();
+    .first<{ kind: EventKind; guest_cap: number | null }>();
   if (!row) return 0;
-  switch (row.kind) {
-    case "legacy":
-    case "operator":
-      return null;
-    case "test":
-      return TEST_EVENT_GUEST_CAP;
-    case "main":
-      return row.guest_cap === null ? 0 : capWithGrace(row.guest_cap);
-    default: {
-      const unknownKind: never = row.kind;
-      throw new Error(`unknown event kind ${String(unknownKind)}`);
-    }
-  }
+  const advertised = advertisedGuestCap(row.kind, row.guest_cap);
+  // Only a main event's tier gets the grace; an uncovered main event takes no one.
+  if (row.kind !== "main") return advertised;
+  return advertised === null ? 0 : capWithGrace(advertised);
 }
 
 /** A numbered SQL parameter such as "?5": the only thing guestFitsSql splices in. */

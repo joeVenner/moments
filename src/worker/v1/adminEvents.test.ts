@@ -108,6 +108,34 @@ describe("listAdminEvents", () => {
     expect(result.events).toHaveLength(ADMIN_EVENTS_LIMIT);
     expect(result.truncated).toBe(true);
   });
+
+  it("gives each event the guest limit its host is told", async () => {
+    const { listAdminEvents } = await import("../adminEvents");
+    const { addDays, startPlan } = await import("../plans");
+    const { insertPlan } = await import("../plansRepo");
+    const paying = "aaaaaaaa-0000-4000-8000-000000000001";
+    const lapsed = "bbbbbbbb-0000-4000-8000-000000000002";
+    const inGrace = "cccccccc-0000-4000-8000-000000000003";
+    for (const id of [paying, lapsed, inGrace]) sqlite.raw.prepare("INSERT INTO users (id, role) VALUES (?, 'host')").run(id);
+    await insertPlan(sqlite.db, paying, startPlan("host_150", new Date(), addDays(new Date(), 30)));
+    const old = await insertPlan(sqlite.db, lapsed, startPlan("host_50", addDays(new Date(), -60), addDays(new Date(), -30)));
+    sqlite.raw.prepare("UPDATE plans SET state = 'lapsed' WHERE id = ?").run(old.id);
+    // A failed payment still pays for guests until the grace ends.
+    const failing = await insertPlan(sqlite.db, inGrace, startPlan("host_300", new Date(), addDays(new Date(), 30)));
+    sqlite.raw.prepare("UPDATE plans SET state = 'grace' WHERE id = ?").run(failing.id);
+    const insert = sqlite.raw.prepare(
+      "INSERT INTO events (id, slug, title, type, access_mode, kind, owner_user_id) VALUES (?, ?, 'E', 'Party', 'public', ?, ?)"
+    );
+    insert.run("main", "main", "main", paying);
+    insert.run("test", "test", "test", paying);
+    insert.run("legacy", "legacy", "legacy", null);
+    insert.run("uncovered", "uncovered", "main", lapsed);
+    insert.run("grace", "grace", "main", inGrace);
+    const { events } = await listAdminEvents(sqlite.db, undefined, null);
+    const caps = Object.fromEntries(events.map((event) => [event.id, event.guest_cap]));
+    // The tier as sold (joins allow 10% more); null for no limit or an ended plan.
+    expect(caps).toEqual({ main: 150, test: 15, legacy: null, uncovered: null, grace: 300 });
+  });
 });
 
 describe("GET /api/v1/admin/events/{id}", () => {

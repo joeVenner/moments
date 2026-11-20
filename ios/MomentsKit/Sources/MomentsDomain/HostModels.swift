@@ -16,6 +16,9 @@ public struct AdminEvent: Sendable, Hashable, Identifiable {
 
     public let event: Event
     public let kind: Kind
+    /// The guest limit the host is told (joins allow 10% more on a main
+    /// event); nil for no limit, or a main event its plan no longer covers.
+    public let guestCap: Int?
     /// Every moment, hidden ones included.
     public let momentCount: Int
     /// Guests currently in the event.
@@ -23,9 +26,10 @@ public struct AdminEvent: Sendable, Hashable, Identifiable {
 
     public var id: String { event.id }
 
-    public init(event: Event, kind: Kind, momentCount: Int, participantCount: Int) {
+    public init(event: Event, kind: Kind, guestCap: Int? = nil, momentCount: Int, participantCount: Int) {
         self.event = event
         self.kind = kind
+        self.guestCap = guestCap
         self.momentCount = momentCount
         self.participantCount = participantCount
     }

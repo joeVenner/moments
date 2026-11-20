@@ -178,6 +178,13 @@ struct HostEventsView: View {
         return String(localized: "Uploads close \(when)")
     }
 
+    /// The live card's line, with the guest limit when there is one.
+    static func liveLine(_ item: AdminEvent) -> String {
+        let line = liveLine(item.event)
+        guard let cap = item.guestCap else { return line }
+        return String(localized: "\(line) · up to \(cap) guests")
+    }
+
     static func upcomingLine(_ event: Event) -> String {
         let when = (event.startsAt ?? event.createdAt).formatted(date: .abbreviated, time: .shortened)
         return String(localized: "Starts \(when)")
@@ -220,7 +227,7 @@ struct HostLiveEventCard: View {
                         .foregroundStyle(MomentsColor.text)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(HostEventsView.liveLine(item.event))
+                    Text(HostEventsView.liveLine(item))
                         .font(MomentsFont.caption())
                         .foregroundStyle(MomentsColor.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -359,6 +366,14 @@ struct HostEventRow: View {
     let item: AdminEvent
     let detail: String
 
+    /// Counts, with the guest limit when there is one ("Guests: 3 of 15").
+    static func countsLine(_ item: AdminEvent) -> String {
+        guard let cap = item.guestCap else {
+            return String(localized: "Moments: \(item.momentCount) · Guests: \(item.participantCount)")
+        }
+        return String(localized: "Moments: \(item.momentCount) · Guests: \(item.participantCount) of \(cap)")
+    }
+
     var body: some View {
         HStack(spacing: Spacing.sm) {
             VStack(alignment: .leading, spacing: Spacing.xxs) {
@@ -371,7 +386,7 @@ struct HostEventRow: View {
                 Text(detail)
                     .font(MomentsFont.caption())
                     .foregroundStyle(MomentsColor.textMuted)
-                Text("Moments: \(item.momentCount) · Guests: \(item.participantCount)")
+                Text(Self.countsLine(item))
                     .font(MomentsFont.caption())
                     .foregroundStyle(MomentsColor.textMuted)
             }

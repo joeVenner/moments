@@ -385,6 +385,7 @@ extension WireMapper {
         return AdminEvent(
             event: try event(wire.value1),
             kind: AdminEvent.Kind(rawValue: wire.value2.kind) ?? .legacy,
+            guestCap: wire.value2.guestCap.map { max(0, $0) },
             momentCount: max(0, wire.value2.momentCount),
             participantCount: max(0, wire.value2.participantCount)
         )
