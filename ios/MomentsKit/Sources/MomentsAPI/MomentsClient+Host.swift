@@ -427,7 +427,7 @@ extension WireMapper {
         return AdminMoment(
             id: wire.id, eventID: wire.eventId, uploaderName: wire.uploaderName, caption: wire.caption,
             createdAt: createdAt, sizeBytes: wire.sizeBytes.map { max(0, $0) }, status: status,
-            reactionCount: max(0, wire.reactionCount), media: media
+            reactionCount: max(0, wire.reactionCount), reportCount: max(0, wire.reportCount), media: media
         )
     }
 }

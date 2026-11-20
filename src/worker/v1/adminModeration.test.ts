@@ -104,6 +104,27 @@ describe("host moderation API", () => {
     expect(list.moments[1]?.media.url).toMatch(/\?mv=/);
   });
 
+  it("counts each moment's reporters without saying who they are, before and after hiding", async () => {
+    insertMoment("calm", "approved", "2026-11-09 10:00:00");
+    insertMoment("flagged", "approved", "2026-11-10 10:00:00");
+    for (const [id, nickname] of [["p1", "Sara"], ["p2", "Omar"]]) {
+      sqlite.raw.prepare("INSERT INTO participants (id, event_id, nickname) VALUES (?, 'e', ?)").run(id, nickname);
+      sqlite.raw
+        .prepare("INSERT INTO moment_reports (id, event_id, moment_id, participant_id) VALUES (?, 'e', 'flagged', ?)")
+        .run(`report-${id}`, id);
+    }
+    const response = await call("/admin/events/e/moments", { headers: await auth() });
+    const body = await response.text();
+    const list = AdminMomentListSchema.parse(JSON.parse(body));
+    expect(list.moments.map((moment) => [moment.id, moment.report_count])).toEqual([
+      ["flagged", 2],
+      ["calm", 0],
+    ]);
+    expect(body).not.toMatch(/p1|p2|Omar|report-/);
+    const hidden = await moderate("flagged", "hidden");
+    expect(AdminMomentSchema.parse(((await hidden.json()) as { moment: unknown }).moment).report_count).toBe(2);
+  });
+
   it("says when the 500 cap left older moments out", async () => {
     const insert = sqlite.raw.prepare("INSERT INTO moments (id, event_id, uploader_name, media_url) VALUES (?, 'e', 'Sara', '/media/x')");
     for (let index = 0; index < 501; index++) insert.run(`m${index}`);

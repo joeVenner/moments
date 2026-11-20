@@ -20,20 +20,23 @@ export interface AdminMoment {
   size_bytes: number | null;
   moderation_status: ModerationStatus;
   reaction_count: number;
+  /** How many guests reported it (one report per guest; who reported stays private). */
+  report_count: number;
   /** URLs carry `?mv=` view signatures (and Stream tokens when required). */
   media: MomentMedia;
 }
 
-// Selected FROM moments (unaliased): the count is correlated on moments.id.
+// Selected FROM moments (unaliased): the counts are correlated on moments.id.
 const ADMIN_MOMENT_COLUMNS = `id, event_id, uploader_name, media_url, caption, created_at, mime_type, size_bytes,
   moderation_status, width, height, duration_ms, blurhash, thumb_key, display_key, poster_key,
-  (SELECT COUNT(*) FROM moment_reactions r WHERE r.moment_id = moments.id) AS reaction_count`;
+  (SELECT COUNT(*) FROM moment_reactions r WHERE r.moment_id = moments.id) AS reaction_count,
+  (SELECT COUNT(*) FROM moment_reports rp WHERE rp.moment_id = moments.id) AS report_count`;
 
 type AdminMomentRow = Pick<
   MomentRow,
   | "id" | "event_id" | "uploader_name" | "media_url" | "caption" | "created_at" | "mime_type" | "size_bytes"
   | "moderation_status" | "width" | "height" | "duration_ms" | "blurhash" | "thumb_key" | "display_key" | "poster_key"
-> & { reaction_count: number };
+> & { reaction_count: number; report_count: number };
 
 /**
  * Raw rows → host-facing moments: storage keys become `media` URLs, Stream
@@ -55,6 +58,7 @@ async function toAdminMoments(env: Env, event: StreamSigningEvent, rows: readonl
     size_bytes: row.size_bytes,
     moderation_status: row.moderation_status,
     reaction_count: row.reaction_count,
+    report_count: row.report_count,
     media,
   }));
 }
