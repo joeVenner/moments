@@ -948,6 +948,13 @@
           "uploader_name": {
             "type": "string"
           },
+          "uploader_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The sharer's participant id (as on the leaderboard), for muting; null for older moments."
+          },
           "media_url": {
             "type": "string"
           },

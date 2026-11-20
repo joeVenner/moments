@@ -84,7 +84,8 @@ struct WireMapper: Sendable {
     func moment(_ wire: Components.Schemas.Moment) -> Moment? {
         guard let media = media(wire.media), let createdAt = ServerDate.parse(wire.createdAt) else { return nil }
         return Moment(
-            id: wire.id, eventID: wire.eventId, uploaderName: wire.uploaderName, caption: wire.caption,
+            id: wire.id, eventID: wire.eventId, uploaderName: wire.uploaderName,
+            uploaderID: wire.uploaderId.flatMap { $0.isEmpty ? nil : $0 }, caption: wire.caption,
             pointsAwarded: wire.pointsAwarded, createdAt: createdAt, seq: wire.seq, changeSeq: wire.changeSeq,
             reactionCount: wire.reactionCount, hasReacted: wire.reacted, media: media
         )

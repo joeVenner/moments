@@ -58,10 +58,13 @@ enum Fixtures {
         """
     }
 
+    /// `uploaderID` nil leaves the key out, like an older server.
     static func moment(id: String = "m1", seq: Int = 1, kind: String = "image",
-                       url: String = "/media/events/e1/moments/m1.jpg", createdAt: String = "2026-11-17 18:30:00") -> String {
-        """
-        {"id":"\(id)","event_id":"e1","uploader_name":"Sara","media_url":"\(url)","caption":"Hi",
+                       url: String = "/media/events/e1/moments/m1.jpg", createdAt: String = "2026-11-17 18:30:00",
+                       uploaderID: String? = nil) -> String {
+        let uploader = uploaderID.map { #""uploader_id":"\#($0)","# } ?? ""
+        return """
+        {"id":"\(id)","event_id":"e1","uploader_name":"Sara",\(uploader)"media_url":"\(url)","caption":"Hi",
          "points_awarded":1,"created_at":"\(createdAt)","size_bytes":10,"mime_type":"image/jpeg","seq":\(seq),
          "change_seq":\(seq),"reaction_count":2,"reacted":true,"media":\(media(kind: kind, url: url))}
         """

@@ -177,6 +177,9 @@ public struct Moment: Sendable, Hashable, Identifiable {
     public let id: String
     public let eventID: String
     public let uploaderName: String
+    /// The sharer's participant id, for muting; nil for older moments (or
+    /// an older server).
+    public let uploaderID: String?
     public let caption: String?
     public let pointsAwarded: Int
     public let createdAt: Date
@@ -190,12 +193,14 @@ public struct Moment: Sendable, Hashable, Identifiable {
     public let media: Media
 
     public init(
-        id: String, eventID: String, uploaderName: String, caption: String? = nil, pointsAwarded: Int,
-        createdAt: Date, seq: Int, changeSeq: Int, reactionCount: Int = 0, hasReacted: Bool = false, media: Media
+        id: String, eventID: String, uploaderName: String, uploaderID: String? = nil, caption: String? = nil,
+        pointsAwarded: Int, createdAt: Date, seq: Int, changeSeq: Int, reactionCount: Int = 0,
+        hasReacted: Bool = false, media: Media
     ) {
         self.id = id
         self.eventID = eventID
         self.uploaderName = uploaderName
+        self.uploaderID = uploaderID
         self.caption = caption
         self.pointsAwarded = pointsAwarded
         self.createdAt = createdAt

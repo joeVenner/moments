@@ -66,6 +66,18 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
         #expect(mapped.nextBefore == 1 && mapped.cursor == 9)
     }
 
+    @Test func readsTheUploaderIDWhenTheServerSendsOne() throws {
+        func uploader(_ uploaderID: String?) throws -> String? {
+            mapper.moment(try decode(Components.Schemas.Moment.self, Fixtures.moment(uploaderID: uploaderID)))?.uploaderID
+        }
+        #expect(try uploader("p-lea") == "p-lea")
+        // Older servers leave it out; an empty one names no one.
+        #expect(try uploader(nil) == nil)
+        #expect(try uploader("") == nil)
+        let null = Fixtures.moment().replacingOccurrences(of: #""uploader_name":"Sara","#, with: #""uploader_name":"Sara","uploader_id":null,"#)
+        #expect(mapper.moment(try decode(Components.Schemas.Moment.self, null))?.uploaderID == nil)
+    }
+
     @Test func reportsUnreadableChangesAsRemoved() throws {
         let changes = try decode(Components.Schemas.FeedChanges.self, """
             {"upserts":[\(Fixtures.moment(id: "a")),\(Fixtures.moment(id: "b", kind: "hologram"))],
