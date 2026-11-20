@@ -153,11 +153,31 @@ struct HostEventDetailView: View {
             : String(localized: "Public: anyone with the link can join")
     }
 
-    /// When uploads stop (or stopped), and when it all goes.
+    /// When uploads stop (or stopped), and when it all goes:
+    /// "Uploads close Sun 9 pm · deleted 15 Jul".
     static func datesLine(_ event: Event) -> String {
-        event.archivedAt == nil && event.areUploadsOpen
-            ? HostEventsView.liveLine(event)
-            : HostEventsView.pastLine(event)
+        func time(_ date: Date) -> String { date.formatted(date: .abbreviated, time: .shortened) }
+        func day(_ date: Date) -> String { date.formatted(date: .abbreviated, time: .omitted) }
+        switch HostEventDates(event) {
+        case .archived:
+            return String(localized: "Archived")
+        case let .open(closesAt?, deletesOn?):
+            return String(localized: "Uploads close \(time(closesAt)) · deleted \(day(deletesOn))")
+        case let .open(closesAt?, nil):
+            return String(localized: "Uploads close \(time(closesAt))")
+        case let .open(nil, deletesOn?):
+            return String(localized: "Open for uploads · deleted \(day(deletesOn))")
+        case .open(nil, nil):
+            return String(localized: "Open for uploads")
+        case let .closed(closedAt?, deletesOn?):
+            return String(localized: "Uploads closed \(time(closedAt)) · deleted \(day(deletesOn))")
+        case let .closed(closedAt?, nil):
+            return String(localized: "Uploads closed \(time(closedAt))")
+        case let .closed(nil, deletesOn?):
+            return String(localized: "Deleted on \(day(deletesOn))")
+        case .closed(nil, nil):
+            return String(localized: "Uploads closed")
+        }
     }
 
     private func shareSection(_ share: EventShareLinks) -> some View {

@@ -1771,6 +1771,17 @@
         }
       }
     },
+    "Open for uploads · deleted %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvert aux partages · supprimé le %@"
+          }
+        }
+      }
+    },
     "Open the event link again, then try again.": {
       "extractionState": "manual",
       "localizations": {
@@ -3355,12 +3366,45 @@
         }
       }
     },
+    "Uploads close %@ · deleted %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partages jusqu'au %@ · supprimé le %@"
+          }
+        }
+      }
+    },
     "Uploads closed": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Partages fermés"
+          }
+        }
+      }
+    },
+    "Uploads closed %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partages fermés le %@"
+          }
+        }
+      }
+    },
+    "Uploads closed %@ · deleted %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partages fermés le %@ · supprimé le %@"
           }
         }
       }
