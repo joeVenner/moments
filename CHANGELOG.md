@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS App Clip: scanning an event's QR code opens the join screen (name, face, and the event's code when it's private). The guest is then welcomed and offered the full app, and is handed over to it so installing keeps them. If the handover can't be saved (a locked phone, a damaged file), the guest still joins in the Clip. The Clip ships its own privacy manifest and French strings.
 - iOS: the App Clip's credential store refreshes the handover time on every change it saves, so the 7-day window counts from the guest's last change in the Clip.
 - iOS: the app only takes over a guest identity the App Clip handed over in the last 7 days (with its event, and without an expired private-event grant); older or unstamped handovers are deleted unread, so a phone that changed hands never inherits an earlier guest.
 - iOS: the App Clip hands a guest over to the app through the App Group container both share (one protected file, kept out of backups). Each launch, and again once the phone unlocks if a locked launch couldn't, moves a guest identity the Clip left there into the app's own keychain group, so joining in the Clip, then installing the app, keeps the guest. App Clips can't hold keychain access groups, so the shared keychain group is gone; the app keeps one keychain group of its own. The Clip doesn't write yet.
