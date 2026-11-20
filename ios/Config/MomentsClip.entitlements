@@ -8,6 +8,10 @@
 	</array>
 	<key>com.apple.developer.on-demand-install-capable</key>
 	<true/>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)$(MOMENTS_BUNDLE_ID_PREFIX).moments.shared</string>
+	</array>
 	<key>com.apple.developer.parent-application-identifiers</key>
 	<array>
 		<string>$(AppIdentifierPrefix)$(MOMENTS_BUNDLE_ID_PREFIX).moments</string>

@@ -11,8 +11,9 @@ import Security
 ///   survive app deletion on iOS: see `CredentialLifecycle`.
 /// - Never synchronised to iCloud Keychain.
 /// - All operations go through one lock, so `update` is atomic in-process.
-///   Sharing with the App Clip (`accessGroup`) will need cross-process care:
-///   decide the group once and pass it on every call.
+///   The app passes its own `accessGroup` (without one, queries span every
+///   entitled group, the one shared with the App Clip included); the Clip's
+///   entries reach it through `CredentialHandoff`, never a shared store.
 public final class KeychainEventCredentialStore: EventCredentialStore, @unchecked Sendable {
     // @unchecked: immutable configuration plus `lock`; SecItem calls are thread-safe.
     /// Kept for existing callers; shared with the host session store.

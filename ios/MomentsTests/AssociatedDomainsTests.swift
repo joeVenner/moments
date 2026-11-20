@@ -35,6 +35,21 @@ import Testing
         #expect(claimed.count == expected.count)
     }
 
+    private func keychainGroups(_ file: String) throws -> [String] {
+        let entitlements = try #require(
+            PropertyListSerialization.propertyList(from: source(file), format: nil) as? [String: Any]
+        )
+        return try #require(entitlements["keychain-access-groups"] as? [String])
+    }
+
+    @Test func onlyTheSharedKeychainGroupReachesTheClip() throws {
+        let own = "$(AppIdentifierPrefix)$(MOMENTS_BUNDLE_ID_PREFIX).moments"
+        // The app's own group first: items saved without a group (host
+        // sessions) land there, out of the Clip's reach.
+        #expect(try keychainGroups("Config/Moments.entitlements") == [own, own + ".shared"])
+        #expect(try keychainGroups("Config/MomentsClip.entitlements") == [own + ".shared"])
+    }
+
     @Test func bothAppConfigurationsSignWithTheEntitlements() throws {
         let project = try #require(String(data: source("Moments.xcodeproj/project.pbxproj"), encoding: .utf8))
         #expect(project.components(separatedBy: "CODE_SIGN_ENTITLEMENTS = Config/Moments.entitlements;").count - 1 == 2)
