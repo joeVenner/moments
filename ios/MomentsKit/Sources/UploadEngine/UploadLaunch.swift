@@ -69,12 +69,17 @@ public enum UploadLaunch {
     /// before `launchedAt`; if the records can't be listed it is skipped.
     ///
     /// First, with `clip`, it takes over the App Clip's leftover queue
-    /// (`adoptClipQueue`), so those items load with the rest.
+    /// (`adoptClipQueue`), so those items load with the rest. With
+    /// `pruningAfter` (the App Clip's own queue, in a shared folder), it
+    /// deletes finished records and any older than that (`prune`); their
+    /// files go with the sweep.
     public static func prepare(
-        queue: UploadQueue, store: QueueStore, staging: StagingArea, launchedAt: Date, adopting clip: ClipQueue? = nil
+        queue: UploadQueue, store: QueueStore, staging: StagingArea, launchedAt: Date,
+        adopting clip: ClipQueue? = nil, pruningAfter maxAge: TimeInterval? = nil
     ) async -> Report {
         var adoption: Adoption?
         if let clip { adoption = await adoptClipQueue(clip, into: store, staging: staging) }
+        if let maxAge { prune(store, staleAfter: maxAge, now: launchedAt) }
         let loaded: QueueStore.Loaded
         do {
             loaded = try await queue.load()
@@ -117,7 +122,7 @@ public enum UploadLaunch {
             }
             switch guest {
             case .present: admitted.insert(id)
-            case .absent where clip.now.timeIntervalSince(item.createdAt) > clip.strangersKeptFor:
+            case .absent where isStale(item, now: clip.now, maxAge: clip.strangersKeptFor):
                 if drop(id, from: source) { dropped += 1 }
             case .absent, .unknown: continue
             }
@@ -126,6 +131,34 @@ public enum UploadLaunch {
             from: source.store, staging: source.staging, into: store, staging: staging, admitting: admitted
         ) else { return Adoption(dropped: dropped) }
         return Adoption(moved: moved, dropped: dropped)
+    }
+
+    /// How far ahead of `now` a record's date may be: any later and it's
+    /// taken as stale, so a wrong date can't keep it forever. A week, so a
+    /// clock that was set ahead and then corrected doesn't drop real uploads.
+    static let futureSkew: TimeInterval = 7 * 24 * 60 * 60
+
+    static func isStale(_ item: QueuedUpload, now: Date, maxAge: TimeInterval) -> Bool {
+        let age = now.timeIntervalSince(item.createdAt)
+        return age > maxAge || age < -futureSkew
+    }
+
+    /// Deletes the records of finished items (their files are gone already;
+    /// a caption needn't stay in a shared folder) and of any item that is
+    /// stale (`isStale`): the App Clip has nowhere to clear them, and its
+    /// files would otherwise stay for as long as the Clip's data does.
+    /// Records it can't read now are left.
+    static func prune(_ store: QueueStore, staleAfter maxAge: TimeInterval, now: Date) {
+        guard let ids = try? store.recordIDs() else { return }
+        for id in ids {
+            guard case let .item(item) = store.read(store.recordURL(for: id)) else { continue }
+            if isFinished(item) || isStale(item, now: now, maxAge: maxAge) { try? store.remove(id: id) }
+        }
+    }
+
+    private static func isFinished(_ item: QueuedUpload) -> Bool {
+        if case .done = item.phase { return true }
+        return false
     }
 
     /// Whether this device holds a guest for an event.
