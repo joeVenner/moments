@@ -4,7 +4,7 @@ import { BrandMark } from "../components/BrandMark";
 import { EventAccessGate } from "../components/EventAccessGate";
 import { getEvent, listMoments } from "../lib/api";
 import { useI18n } from "../lib/i18n";
-import { slideshowLoadFailure } from "../lib/slideshowLoad";
+import { slideshowEmptyState, slideshowLoadFailure } from "../lib/slideshowLoad";
 import type { MomentData } from "../lib/types";
 import waitingIllustration from "../assets/illustrations/live-gallery-waiting.webp";
 
@@ -22,6 +22,9 @@ export default function Slideshow() {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  // Until a load succeeds, an empty screen means "loading", not "no moments".
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [lastLoadFailed, setLastLoadFailed] = useState(false);
   // A private event this browser hasn't unlocked: show the PIN form, and
   // load again (bumping accessVersion) once it's open.
   const [accessRequired, setAccessRequired] = useState(false);
@@ -30,6 +33,11 @@ export default function Slideshow() {
   useEffect(() => {
     if (!slug) return;
     let disposed = false;
+    // A new event (or a fresh unlock) starts from "loading" again.
+    setHasLoaded(false);
+    setLastLoadFailed(false);
+    setMoments([]);
+    setIndex(0);
     const refresh = async () => {
       try {
         const [, momentsResponse] = await Promise.all([
@@ -38,9 +46,12 @@ export default function Slideshow() {
         ]);
         if (disposed) return;
         setMoments(momentsResponse.moments);
+        setHasLoaded(true);
+        setLastLoadFailed(false);
         setIndex((current) => Math.min(current, Math.max(0, momentsResponse.moments.length - 1)));
       } catch (error) {
         if (disposed) return;
+        setLastLoadFailed(true);
         const failure = slideshowLoadFailure(error);
         if (failure === "access_required") {
           // No point polling until the PIN is entered.
@@ -72,6 +83,7 @@ export default function Slideshow() {
   }, [paused, moments.length]);
 
   const active = moments[index];
+  const emptyState = slideshowEmptyState(hasLoaded, lastLoadFailed);
   const mediaKind = useMemo(() => {
     if (!active) return "image";
     if (isStreamEmbed(active.media_url)) return "stream";
@@ -125,7 +137,11 @@ export default function Slideshow() {
       </header>
 
       <div className="relative z-10 flex min-h-screen items-center justify-center p-4 pt-24 pb-20 sm:p-12 sm:pt-28">
-        {!active ? (
+        {!active && emptyState !== "waiting" ? (
+          <p role="status" className="text-lg text-[var(--color-text-muted)]">
+            {emptyState === "retrying" ? t("slideshowRetrying") : t("slideshowLoading")}
+          </p>
+        ) : !active ? (
           <div className="max-w-md text-center">
             <img
               src={waitingIllustration}

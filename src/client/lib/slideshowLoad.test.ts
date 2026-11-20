@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccessRequiredError, EventNotHostedError, NotFoundError, getEvent } from "./api";
-import { slideshowLoadFailure } from "./slideshowLoad";
+import { slideshowEmptyState, slideshowLoadFailure } from "./slideshowLoad";
 
 describe("slideshowLoadFailure", () => {
   it("asks for the PIN when the event needs access", () => {
@@ -46,5 +46,17 @@ describe("getEvent errors", () => {
   it("still rejects a garbled success body", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>", { status: 200 })));
     await expect(getEvent("party")).rejects.toBeInstanceOf(SyntaxError);
+  });
+});
+
+describe("slideshowEmptyState", () => {
+  it("loads, then retries, until the first load succeeds", () => {
+    expect(slideshowEmptyState(false, false)).toBe("loading");
+    expect(slideshowEmptyState(false, true)).toBe("retrying");
+  });
+
+  it("waits for moments once a load succeeded, even after a failed poll", () => {
+    expect(slideshowEmptyState(true, false)).toBe("waiting");
+    expect(slideshowEmptyState(true, true)).toBe("waiting");
   });
 });
