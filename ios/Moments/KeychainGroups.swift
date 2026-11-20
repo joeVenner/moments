@@ -1,3 +1,4 @@
+import CredentialStore
 import Foundation
 
 /// Keychain access groups, from Info.plist (Config/Moments-Info.plist), which
@@ -8,13 +9,6 @@ import Foundation
 ///   there. The App Clip can't read it.
 /// - `shared`: the group the App Clip writes a guest's credentials to.
 enum KeychainGroups {
-    static let own = group(Bundle.main.object(forInfoDictionaryKey: "MomentsKeychainGroup"))
-    static let shared = group(Bundle.main.object(forInfoDictionaryKey: "MomentsSharedKeychainGroup"))
-
-    /// Nil unless it starts with a team ID ("ABCDE12345."): an unsigned build
-    /// leaves the prefix empty, and a group without it is never entitled.
-    static func group(_ value: Any?) -> String? {
-        guard let group = value as? String, group.wholeMatch(of: /[A-Z0-9]{10}\.[A-Za-z0-9.-]+/) != nil else { return nil }
-        return group
-    }
+    static let own = KeychainAccessGroup.validated(Bundle.main.object(forInfoDictionaryKey: "MomentsKeychainGroup") as? String)
+    static let shared = KeychainAccessGroup.validated(Bundle.main.object(forInfoDictionaryKey: "MomentsSharedKeychainGroup") as? String)
 }

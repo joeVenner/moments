@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS: the App Clip's credential store refreshes the handover time on every change it saves, so the 7-day window counts from the guest's last change in the Clip.
 - iOS: the app only takes over a guest identity the App Clip handed over in the last 7 days (with its event, and without an expired private-event grant); older or unstamped handovers are deleted unread, so a phone that changed hands never inherits an earlier guest.
 - iOS: a keychain group shared with the App Clip. The app keeps guest credentials and host sessions in its own group, and each launch moves a guest identity the Clip left in the shared group into the app (so joining in the Clip, then installing the app, keeps the guest). The Clip doesn't write it yet.
 - iOS: event links on moments-hq.com and www.moments-hq.com open the app (Associated Domains: `applinks` for both hosts, `appclips:moments-hq.com`), once the app is registered and the AASA is live.
