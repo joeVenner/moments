@@ -10,6 +10,31 @@ enum AppTab: Hashable {
     case events, hosting
 }
 
+/// Which tab is showing, and whether Hosting was ever opened. Hosting stays
+/// unbuilt until then, so a guest's launch never loads host events.
+struct AppTabState: Equatable {
+    /// What switching to a tab should refresh.
+    enum Refresh: Equatable {
+        case myEvents, hostAccount
+    }
+
+    private(set) var tab = AppTab.events
+    private(set) var hasOpenedHosting = false
+
+    /// Shows `newTab`; nil when it was already showing.
+    mutating func select(_ newTab: AppTab) -> Refresh? {
+        guard newTab != tab else { return nil }
+        tab = newTab
+        switch newTab {
+        case .hosting:
+            hasOpenedHosting = true
+            return .hostAccount
+        case .events:
+            return .myEvents
+        }
+    }
+}
+
 /// The home of the app: the Events and Hosting tabs under one bottom bar,
 /// whose middle button scans an event's QR code from either.
 struct AppShell: View {
@@ -19,10 +44,7 @@ struct AppShell: View {
     let notice: String?
 
     @Environment(\.scenePhase) private var scenePhase
-    @State private var tab = AppTab.events
-    /// Hosting stays unbuilt until first opened, so a guest's launch never
-    /// loads host events.
-    @State private var hasOpenedHosting = false
+    @State private var tabs = AppTabState()
     @State private var scanSheet: ScanSheet?
     // Read now, so the Scan button is there from the first frame.
     @State private var cameraAccess = CameraAccess.current
@@ -36,15 +58,15 @@ struct AppShell: View {
                 navigation: navigation, myEvents: myEvents, notice: notice,
                 onScan: scanAction, isScanBusy: isRequestingCamera
             )
-            .tabContent(isSelected: tab == .events)
-            if hasOpenedHosting {
-                HostingTab(host: host).tabContent(isSelected: tab == .hosting)
+            .tabContent(isSelected: tabs.tab == .events)
+            if tabs.hasOpenedHosting {
+                HostingTab(host: host).tabContent(isSelected: tabs.tab == .hosting)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             // Out of the way while typing, as the system tab bar does.
             if !isKeyboardUp {
-                AppTabBar(selection: $tab, onScan: scanAction, isScanBusy: isRequestingCamera)
+                AppTabBar(selection: Binding { tabs.tab } set: { select($0) }, onScan: scanAction, isScanBusy: isRequestingCamera)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
@@ -54,17 +76,6 @@ struct AppShell: View {
             isKeyboardUp = false
         }
         .background(MomentsColor.background.ignoresSafeArea())
-        .onChange(of: tab) {
-            // Typing in a tab that just went out of sight would leave its keyboard up.
-            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            switch tab {
-            case .hosting:
-                hasOpenedHosting = true
-                host.account.refresh()
-            case .events:
-                Task { await myEvents.load() }
-            }
-        }
         .onAppear { cameraAccess = CameraAccess.current }
         // Picks up expiry and a keychain that was locked at launch.
         .onChange(of: scenePhase, initial: true) {
@@ -85,6 +96,16 @@ struct AppShell: View {
             case .denied:
                 CameraDeniedSheet { scanSheet = nil } onGranted: { scanSheet = .scanner }
             }
+        }
+    }
+
+    private func select(_ newTab: AppTab) {
+        guard let refresh = tabs.select(newTab) else { return }
+        // Typing in a tab that just went out of sight would leave its keyboard up.
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        switch refresh {
+        case .hostAccount: host.account.refresh()
+        case .myEvents: Task { await myEvents.load() }
         }
     }
 
