@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../index";
 import { OPERATOR_USER_ID } from "../hostSessions";
 import { addDays, startPlan } from "../plans";
@@ -62,6 +62,8 @@ function setState(planId: string, state: string, readonlyUntil: Date | null) {
     .prepare("UPDATE plans SET state = ?, readonly_until = ? WHERE id = ?")
     .run(state, readonlyUntil ? readonlyUntil.toISOString().slice(0, 19).replace("T", " ") : null, planId);
 }
+
+afterEach(() => vi.restoreAllMocks());
 
 beforeEach(() => {
   sqlite = createSqliteD1();
@@ -127,6 +129,24 @@ describe("GET /api/v1/admin/plan", () => {
       can_edit: true,
       events_left: { main: 1, test: 1 },
     });
+  });
+
+  it("logs a plan whose product has no guest cap and answers 500", async () => {
+    // The schema keeps every subscription's cap; a plan pointing at the
+    // consumable (which has none) is the data bug that's still possible.
+    const { id } = await buyPlan(HOST);
+    sqlite.raw.prepare("UPDATE plans SET product_id = 'extra_event' WHERE id = ?").run(id);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const token = await sessionFor(HOST);
+    const response = await worker.fetch(
+      new Request("https://moments.test/api/v1/admin/plan", { headers: { Authorization: `Bearer ${token}` } }),
+      env(),
+      ctx()
+    );
+    expect(response.status).toBe(500);
+    expect(errors).toHaveBeenCalledWith(
+      JSON.stringify({ scope: "plan", event: "product_guest_cap_missing", product_id: "extra_event" })
+    );
   });
 
   it("never shows another host's plan", async () => {

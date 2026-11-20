@@ -51,7 +51,11 @@ export async function loadHostPlanView(db: D1Database, userId: string, now: Date
   ]);
   const guestCap = product?.guest_cap;
   // Every plan's product is seeded with its cap; a missing one is a data bug.
-  if (guestCap === null || guestCap === undefined) throw new Error(`product ${plan.productId} has no guest cap`);
+  if (guestCap === null || guestCap === undefined) {
+    // Structured so it can be found in the logs; the product id is catalog data, not personal.
+    console.error(JSON.stringify({ scope: "plan", event: "product_guest_cap_missing", product_id: plan.productId }));
+    throw new Error(`product ${plan.productId} has no guest cap`);
+  }
   const access = planAccess(plan, now);
   const free = countByKind(unused.results);
   // Same rules as creating an event: the plan must allow editing, and the
