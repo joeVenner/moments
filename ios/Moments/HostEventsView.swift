@@ -24,7 +24,7 @@ struct HostEventsView: View {
                 .refreshable { await model.load() }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(MomentsColor.background.ignoresSafeArea())
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationBarHiddenKeepingSwipeBack()
             .navigationDestination(for: AdminEvent.self) { item in
                 HostEventDetailView(summary: item, host: host)
             }

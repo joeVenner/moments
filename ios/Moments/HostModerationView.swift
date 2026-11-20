@@ -45,7 +45,7 @@ struct HostModerationView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(MomentsColor.background.ignoresSafeArea())
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarHiddenKeepingSwipeBack()
         .task { await model.load() }
         // Hidden moments' bitmaps shouldn't outlive the screen.
         .onDisappear {
