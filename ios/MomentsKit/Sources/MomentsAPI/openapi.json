@@ -843,10 +843,32 @@
         "properties": {
           "event": {
             "$ref": "#/components/schemas/Event"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/EventStats"
           }
         },
         "required": [
           "event"
+        ]
+      },
+      "EventStats": {
+        "type": "object",
+        "properties": {
+          "moment_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Moments guests can see (hidden ones are not counted)"
+          },
+          "guest_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Guests in the event now (those who left are not counted)"
+          }
+        },
+        "required": [
+          "moment_count",
+          "guest_count"
         ]
       },
       "FeedPage": {
@@ -2589,7 +2611,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The event",
+            "description": "The event and its header counts",
             "content": {
               "application/json": {
                 "schema": {
