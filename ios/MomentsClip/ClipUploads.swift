@@ -8,9 +8,10 @@ import UploadEngine
 /// The Clip's upload queue: the app's, minus what a Clip can't have. Parts
 /// go while the Clip is open (an App Clip can't use a background session),
 /// over any network (it has no settings, and holding a video for Wi-Fi
-/// would hold it until the Clip closes). The queue lives in the Clip's own
-/// container, which iOS deletes when the full app replaces the Clip, so
-/// what hasn't finished by then is lost; the app doesn't continue it.
+/// would hold it until the Clip closes). The queue lives in the App Group
+/// (`UploadFolders.clip`), which outlives the Clip when the full app
+/// replaces it, for the app to adopt. Without the group (an unsigned build)
+/// it lives in the Clip's own container and is lost on install.
 enum ClipUploads {
     struct Parts {
         let staging: StagingArea
@@ -19,14 +20,23 @@ enum ClipUploads {
     }
 
     /// Nil (sharing hidden) if the folders can't be set up.
-    static func start(client: MomentsClient, credentials: any EventCredentialStore) -> Parts? {
+    static func start(
+        client: MomentsClient, credentials: any EventCredentialStore, appGroup: String? = ClipCredentials.appGroup
+    ) -> Parts? {
         let log = Logger(subsystem: "moments", category: "clip-uploads")
         let hosts = StorageHostPolicy.moments
         let staging: StagingArea
         let store: QueueStore
         do {
-            staging = try StagingArea.appDefault()
-            store = try QueueStore.appDefault()
+            let shared = try UploadFolders.clip(appGroup: appGroup)
+            // A build without the group: uploads still go, but the app
+            // can't pick up what's unfinished.
+            if shared == nil { log.error("upload queue not in the App Group") }
+            let folders = try shared ?? UploadFolders.under(
+                FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            )
+            staging = folders.staging
+            store = folders.store
         } catch {
             // The type only: paths can hold the user's name on a Mac.
             log.error("upload folders unavailable: \(String(describing: type(of: error)), privacy: .public)")

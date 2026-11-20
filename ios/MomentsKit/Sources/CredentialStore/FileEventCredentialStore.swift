@@ -45,7 +45,7 @@ public final class FileEventCredentialStore: EventCredentialStore, @unchecked Se
     /// name the build filled in ("group.…") or when this build isn't
     /// entitled to it.
     public static func handover(appGroup: String?) -> FileEventCredentialStore? {
-        guard let appGroup, appGroup.wholeMatch(of: /group\.[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+/) != nil,
+        guard let appGroup, AppGroupID.isValid(appGroup),
               let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
         else { return nil }
         return FileEventCredentialStore(directory: container.appending(path: "Handover", directoryHint: .isDirectory))

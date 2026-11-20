@@ -25,8 +25,8 @@ public struct StagingArea: Sendable {
         self.root = root
     }
 
-    /// `Application Support/UploadStaging` in the app's own container (not
-    /// the App Group, like the queue's records), readable after first unlock
+    /// `Application Support/UploadStaging` in the app's own container (the
+    /// App Clip's is in the App Group: `UploadFolders.clip`), readable after first unlock
     /// and excluded from backup: it holds photo and video bytes.
     public static func appDefault(fileManager: FileManager = .default) throws -> StagingArea {
         let support = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
