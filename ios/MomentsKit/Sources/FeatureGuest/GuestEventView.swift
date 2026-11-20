@@ -277,21 +277,12 @@ public struct GuestEventView: View {
             Button("Try again") { Task { await leave.leave() } }
             Button("Cancel", role: .cancel) {}
         } message: { failure in
-            Text(leaveMessage(failure))
+            Text(failure.message)
         }
     }
 
     private func leaveFailure(_ leave: LeaveModel) -> LeaveModel.Failure? {
         if case let .failed(failure) = leave.phase { failure } else { nil }
-    }
-
-    private func leaveMessage(_ failure: LeaveModel.Failure) -> LocalizedStringResource {
-        switch failure {
-        case .busy: "Too many requests right now. Try again in a minute."
-        case .upgradeRequired: "Update Moments to leave this event."
-        case .temporary: "Moments couldn't finish leaving the event. Try again to continue where it stopped."
-        case .storage: "Your uploads are deleted, but this device couldn't forget your name. Try again."
-        }
     }
 
     /// Shown under Moments and Highlights (insetting their content) when

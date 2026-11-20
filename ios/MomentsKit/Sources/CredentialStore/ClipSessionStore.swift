@@ -58,14 +58,23 @@ public final class ClipSessionStore: EventCredentialStore, @unchecked Sendable {
         }
     }
 
-    public func removeCredentials(for slug: EventSlug) {
-        lock.withLock {
+    /// Throws `ForgetNotCopied` when the handover file may still hold the
+    /// entry (it is retried before the next change), so a guest leaving is
+    /// told rather than the app importing them later.
+    public func removeCredentials(for slug: EventSlug) throws {
+        try lock.withLock {
             retryFailedCopies()
             loaded.insert(slug)
             session.removeCredentials(for: slug)
+            // Forgetting removes the file's entry even if it couldn't be
+            // read: whatever token it holds is the guest's who is leaving.
+            unreadable.remove(slug)
             copy(slug)
+            if unsynced.contains(slug) { throw ForgetNotCopied() }
         }
     }
+
+    public struct ForgetNotCopied: Error, Equatable {}
 
     public func removeAll() {
         lock.withLock {
