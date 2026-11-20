@@ -46,7 +46,12 @@ final class FakeHostService: HostService, @unchecked Sendable {
     let beforeAnswer: Gate?
     private let holdsSignIn: Bool
 
-    func hostPlan(token: String) async throws -> HostPlan? { nil }
+    private var _planResult: Result<HostPlan?, Error> = .success(nil)
+    var planResult: Result<HostPlan?, Error> {
+        get { lock.withLock { _planResult } }
+        set { lock.withLock { _planResult = newValue } }
+    }
+    func hostPlan(token: String) async throws -> HostPlan? { try planResult.get() }
 
     /// `holdsSignIn: false` holds only event requests.
     init(holding gate: Gate? = nil, holdsSignIn: Bool = true) {
@@ -524,6 +529,68 @@ private func detail(_ id: String) -> AdminEventDetail {
             participants: 2, reactions: 3, activity: []
         )
     )
+}
+
+private func plan(
+    _ state: HostPlan.State, canEdit: Bool = true, canDownload: Bool = true,
+    readonlyUntil: Date? = nil, eventsLeft: HostPlan.EventsLeft = .init(main: 1, test: 1)
+) -> HostPlan {
+    HostPlan(
+        state: state, productID: "host_150", guestCap: 150, pendingProductID: nil,
+        periodEndsAt: Date(timeIntervalSince1970: 1_800_000_000), testWindowEndsAt: Date(timeIntervalSince1970: 1_800_000_000),
+        graceEndsAt: nil, readonlyUntil: readonlyUntil, canEdit: canEdit, canModerate: canEdit, canDownload: canDownload,
+        eventsLeft: eventsLeft
+    )
+}
+
+@Suite @MainActor struct HostPlanLoadingTests {
+    @Test func loadsThePlanWithTheEvents() async {
+        let service = FakeHostService()
+        service.planResult = .success(plan(.active))
+        let model = HostEventsModel(service: service, account: account(service, store: FlakyHostStore(live)))
+        await model.load()
+        #expect(model.phase == .loaded && model.plan == plan(.active))
+    }
+
+    @Test func aPlanThatWontLoadKeepsTheLastOneAndTheList() async {
+        let service = FakeHostService()
+        service.eventsResult = .success(AdminEventList(events: [event("a")], isTruncated: false))
+        service.planResult = .success(plan(.active))
+        let model = HostEventsModel(service: service, account: account(service, store: FlakyHostStore(live)))
+        await model.load()
+        service.planResult = .failure(MomentsAPIError.transport(.notConnectedToInternet))
+        await model.load()
+        #expect(model.phase == .loaded && model.events.map(\.id) == ["a"] && model.plan == plan(.active))
+    }
+
+    @Test func signingOutForgetsThePlan() async {
+        let service = FakeHostService()
+        service.planResult = .success(plan(.active))
+        let model = HostEventsModel(service: service, account: account(service, store: FlakyHostStore(live)))
+        await model.load()
+        model.reset()
+        #expect(model.plan == nil)
+    }
+}
+
+@Suite struct HostPlanStatusTests {
+    @Test func followsTheState() {
+        let ends = Date(timeIntervalSince1970: 1_800_000_000)
+        let until = Date(timeIntervalSince1970: 1_802_000_000)
+        #expect(HostPlanStatus(plan(.active)) == .renews(ends))
+        #expect(HostPlanStatus(plan(.canceling)) == .ends(ends))
+        #expect(HostPlanStatus(plan(.grace)) == .paymentFailed)
+        #expect(HostPlanStatus(plan(.billingRetry, canEdit: false)) == .paymentFailed)
+        #expect(HostPlanStatus(plan(.lapsed, canEdit: false, readonlyUntil: until)) == .ended(downloadUntil: until))
+        // The download window is over (the purge hasn't run yet).
+        #expect(HostPlanStatus(plan(.revoked, canEdit: false, canDownload: false, readonlyUntil: until)) == .ended(downloadUntil: nil))
+    }
+
+    @Test func countsCreatableEventsOnlyWhenThePlanAllowsCreating() {
+        #expect(plan(.active, eventsLeft: .init(main: 2, test: 1)).creatableEventCount == 3)
+        #expect(plan(.active, eventsLeft: .init(main: 0, test: 0)).creatableEventCount == 0)
+        #expect(plan(.lapsed, canEdit: false).creatableEventCount == nil)
+    }
 }
 
 @Suite @MainActor struct HostEventDetailModelTests {
