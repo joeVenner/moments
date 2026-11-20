@@ -116,6 +116,15 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(WelcomeChoice.take(&pending) == nil)
     }
 
+    /// The home screen showed "Your events" twice: the list has its own.
+    @Test func theHomeScreenTitlesYourEventsOnce() throws {
+        let folder = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appending(path: "Moments")
+        let headings = try ["HomeView.swift", "MyEventsList.swift"].map {
+            try String(contentsOf: folder.appending(path: $0), encoding: .utf8).components(separatedBy: "Text(\"Your events\")").count - 1
+        }
+        #expect(headings == [0, 1])
+    }
+
     @Test func pickingAJoinedEventOpensItWithoutAnInvite() {
         let navigation = AppNavigation(router: AppRouter())
         navigation.handle(URL(string: "https://moments-hq.com/e/party?invite=\(invite)")!)
