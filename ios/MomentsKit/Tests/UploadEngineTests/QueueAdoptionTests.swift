@@ -116,12 +116,25 @@ import Testing
         // No search permission on the staging root: its folders can't be checked.
         let root = from.staging.root.path(percentEncoded: false)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: root)
-        let report = try adopt(from, into)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root)
+        let report: QueueAdoption.Report
+        do {
+            defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root) }
+            report = try adopt(from, into)
+        }
         #expect(report == .init(skipped: 1))
         #expect(try from.store.recordIDs() == [item.id])
         #expect(try photo(from, item.id) == Data("photo".utf8))
         #expect(try into.store.recordIDs().isEmpty)
+    }
+
+    @Test func aStagingFolderThatIsAFileHoldsNothing() throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let from = try Side(clip), into = try Side(app)
+        let item = try queue(on: from, staged: false)
+        try FileManager.default.removeItem(at: from.staging.root)
+        try Data("not a folder".utf8).write(to: from.staging.root.deletingLastPathComponent().appending(path: "UploadStaging"))
+        #expect(try adopt(from, into) == .init(adopted: 1))
+        #expect(try into.store.recordIDs() == [item.id])
     }
 
     @Test func movesARecordWithoutFiles() throws {

@@ -145,7 +145,9 @@ public enum QueueAdoption {
     /// Without following links.
     private static func entry(_ url: URL) -> Entry {
         var status = stat()
-        guard lstat(path(url), &status) == 0 else { return errno == ENOENT ? .missing : .unreadable }
+        // ENOTDIR: a folder on the way was replaced by a file, so nothing
+        // is there (not a passing failure to skip forever).
+        guard lstat(path(url), &status) == 0 else { return errno == ENOENT || errno == ENOTDIR ? .missing : .unreadable }
         switch status.st_mode & S_IFMT {
         case S_IFREG: return .file
         case S_IFDIR: return .folder
