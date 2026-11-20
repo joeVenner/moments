@@ -11,6 +11,10 @@ private final class FakeDownloader: MediaDownloading, @unchecked Sendable {
     private var _requested: [URL] = []
     private var _files: [URL] = []
     var failing: Set<String> = []
+    /// URLs with this in their query answer like an expired `?mv=` link.
+    var expiredQuery: String?
+    /// Runs before the first expired answer (to change the server's list).
+    var onExpired: (() -> Void)?
     /// Fails like a cancelled URLSession task (and cancels the run).
     var cancelOnFailure = false
     var requested: [URL] { lock.withLock { _requested } }
@@ -18,6 +22,11 @@ private final class FakeDownloader: MediaDownloading, @unchecked Sendable {
 
     func download(_ url: URL) async throws -> URL {
         lock.withLock { _requested.append(url) }
+        if let expiredQuery, url.query()?.contains(expiredQuery) == true {
+            let hook = lock.withLock { defer { onExpired = nil }; return onExpired }
+            hook?()
+            throw MomentsAPIError.eventNotFound
+        }
         if failing.contains(url.lastPathComponent) {
             if cancelOnFailure {
                 withUnsafeCurrentTask { $0?.cancel() }
@@ -52,6 +61,15 @@ private final class FakeSaver: MomentSaving, @unchecked Sendable {
 }
 
 private let origin = URL(string: "https://moments.test")!
+
+/// An hour later on every reading.
+private final class Ticker: @unchecked Sendable {
+    private let lock = NSLock()
+    private var instant = ContinuousClock.now
+    func next() -> ContinuousClock.Instant {
+        lock.withLock { instant += .seconds(3600); return instant }
+    }
+}
 private let session = StoredHostSession(token: "hs_live", expiresAt: Date.distantFuture)
 
 private func moment(_ id: String, kind: Media.Kind = .image, status: AdminMoment.Status = .approved, url: String? = nil) -> AdminMoment {
@@ -63,9 +81,9 @@ private func moment(_ id: String, kind: Media.Kind = .image, status: AdminMoment
 
 @Suite @MainActor struct EventDownloadModelTests {
     private func model(
-        _ moments: [AdminMoment], truncated: Bool = false, downloader: FakeDownloader = FakeDownloader(), saver: FakeSaver = FakeSaver()
+        _ moments: [AdminMoment], truncated: Bool = false, downloader: FakeDownloader = FakeDownloader(), saver: FakeSaver = FakeSaver(),
+        service: FakeHostService = FakeHostService()
     ) -> EventDownloadModel {
-        let service = FakeHostService()
         service.momentsResult = .success(AdminMomentList(moments: moments, isTruncated: truncated))
         let host = HostAccount(service: service, store: FlakyHostStore(session))
         return EventDownloadModel(eventID: "a", origin: origin, service: service, account: host, downloader: downloader, saver: saver)
@@ -96,6 +114,106 @@ private func moment(_ id: String, kind: Media.Kind = .image, status: AdminMoment
         let subject = model([moment("p1"), moment("p2"), moment("p3"), moment("p4")], downloader: downloader, saver: saver)
         await subject.start()
         #expect(subject.phase == .finished(.init(saved: 2, failed: 2, skippedVideos: 0, isTruncated: false, wasCancelled: false)))
+    }
+
+    private func signed(_ ids: [String], _ signature: String) -> [AdminMoment] {
+        ids.map { moment($0, url: "https://moments.test/media/\($0).jpg?mv=\(signature)") }
+    }
+
+    /// The list's links last 1-2 hours: once one stops working, the list is
+    /// reloaded and the run goes on with fresh links.
+    @Test func anExpiredLinkReloadsTheListOnce() async {
+        let service = FakeHostService()
+        let downloader = FakeDownloader()
+        downloader.expiredQuery = "mv=old"
+        let fresh = signed(["p1", "p2", "p3"], "new")
+        downloader.onExpired = { service.momentsResult = .success(AdminMomentList(moments: fresh, isTruncated: false)) }
+        let saver = FakeSaver()
+        let subject = model(signed(["p1", "p2", "p3"], "old"), downloader: downloader, saver: saver, service: service)
+        await subject.start()
+        // p1 again with its fresh link, then the rest with theirs.
+        #expect(downloader.requested.map(\.query) == ["mv=old", "mv=new", "mv=new", "mv=new"])
+        #expect(service.listCalls == 2)
+        #expect(subject.phase == .finished(.init(saved: 3, failed: 0, skippedVideos: 0, isTruncated: false, wasCancelled: false)))
+    }
+
+    /// A moment hidden or deleted since the run started isn't saved.
+    @Test func aMomentGoneFromTheReloadedListFails() async {
+        let service = FakeHostService()
+        let downloader = FakeDownloader()
+        downloader.expiredQuery = "mv=old"
+        let fresh = signed(["p2"], "new")
+        downloader.onExpired = { service.momentsResult = .success(AdminMomentList(moments: fresh, isTruncated: false)) }
+        let subject = model(signed(["p1", "p2"], "old"), downloader: downloader, service: service)
+        await subject.start()
+        #expect(downloader.requested.map(\.query) == ["mv=old", "mv=new"])
+        #expect(subject.phase == .finished(.init(saved: 1, failed: 1, skippedVideos: 0, isTruncated: false, wasCancelled: false)))
+    }
+
+    /// A reload that fails isn't tried for every file after it.
+    @Test func aFailedReloadIsntRepeated() async {
+        let service = FakeHostService()
+        let downloader = FakeDownloader()
+        downloader.expiredQuery = "mv=old"
+        downloader.onExpired = { service.momentsResult = .failure(MomentsAPIError.transport(.notConnectedToInternet)) }
+        let subject = model(signed(["p1", "p2", "p3"], "old"), downloader: downloader, service: service)
+        await subject.start()
+        #expect(service.listCalls == 2)
+        #expect(subject.phase == .finished(.init(saved: 0, failed: 3, skippedVideos: 0, isTruncated: false, wasCancelled: false)))
+    }
+
+    /// A link that still fails right after a reload is broken, not
+    /// expired: it doesn't reload the list again.
+    @Test func aBrokenFreshLinkDoesntReloadAgainRightAway() async {
+        let service = FakeHostService()
+        let downloader = FakeDownloader()
+        downloader.expiredQuery = "mv="
+        let fresh = signed(["p1", "p2", "p3"], "new")
+        downloader.onExpired = { service.momentsResult = .success(AdminMomentList(moments: fresh, isTruncated: false)) }
+        let subject = model(signed(["p1", "p2", "p3"], "old"), downloader: downloader, service: service)
+        await subject.start()
+        #expect(service.listCalls == 2)
+        #expect(subject.phase == .finished(.init(saved: 0, failed: 3, skippedVideos: 0, isTruncated: false, wasCancelled: false)))
+    }
+
+    /// A run of several hours outlives the reloaded links too.
+    @Test func aLaterExpiryReloadsAgain() async {
+        let service = FakeHostService()
+        let downloader = FakeDownloader()
+        downloader.expiredQuery = "mv="
+        let subject = model(signed(["p1", "p2"], "old"), downloader: downloader, service: service)
+        let clock = Ticker()
+        subject.now = { clock.next() }
+        await subject.start()
+        // Each file is an hour later here, so each expiry reloads.
+        #expect(service.listCalls == 3)
+    }
+
+    /// Signed out meanwhile: stops, as when signed out before the run.
+    @Test func signingOutDuringAReloadStops() async {
+        let service = FakeHostService()
+        let downloader = FakeDownloader()
+        downloader.expiredQuery = "mv=old"
+        let store = FlakyHostStore(session)
+        let host = HostAccount(service: service, store: store)
+        downloader.onExpired = {
+            try? store.remove()
+            service.momentsResult = .failure(MomentsAPIError.hostAuthRequired)
+        }
+        service.momentsResult = .success(AdminMomentList(moments: signed(["p1", "p2"], "old"), isTruncated: false))
+        let subject = EventDownloadModel(eventID: "a", origin: origin, service: service, account: host, downloader: downloader, saver: FakeSaver())
+        await subject.start()
+        #expect(subject.phase == .idle)
+        #expect(downloader.requested.count == 1)
+    }
+
+    @Test func otherDownloadErrorsDontReload() async {
+        let service = FakeHostService()
+        let downloader = FakeDownloader()
+        downloader.failing = ["p1.jpg"]
+        let subject = model([moment("p1"), moment("p2")], downloader: downloader, service: service)
+        await subject.start()
+        #expect(service.listCalls == 1)
     }
 
     @Test func photosAccessDeniedStopsEverything() async {
