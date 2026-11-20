@@ -1,6 +1,6 @@
 /// What VoiceOver hears when an event's uploads start or stop sending (the
-/// App Clip's sending line changes silently otherwise). Decided here, worded
-/// by the screen.
+/// App Clip's sending line changes silently otherwise; the app's uploads go
+/// on behind the event's screens).
 public enum SendingAnnouncement: Equatable, Sendable {
     /// Nothing was sending, now something is.
     case started
@@ -33,6 +33,17 @@ public enum SendingAnnouncement: Equatable, Sendable {
         guard old.active > 0, new.active == 0 else { return nil }
         if new.failed > 0 { return .someFailed(new.failed) }
         return new.done > old.done ? .allSent : nil
+    }
+}
+
+extension SendingAnnouncement {
+    /// What VoiceOver says, in the app and the App Clip.
+    public var message: String {
+        switch self {
+        case .started: String(localized: "Sending your photos.")
+        case .allSent: String(localized: "Your photos are sent.")
+        case let .someFailed(count): String(localized: "\(count) photos couldn't be sent. Open Your uploads to try again.")
+        }
     }
 }
 

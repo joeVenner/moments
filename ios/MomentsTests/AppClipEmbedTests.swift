@@ -135,7 +135,7 @@ import Testing
         let source = try String(contentsOf: file, encoding: .utf8)
         #expect(source.contains(".onChange(of: progress?.sendingSnapshot)"))
         #expect(source.contains("!hasLeft, (leave?.phase ?? .idle) == .idle"))
-        #expect(source.contains("AccessibilityNotification.Announcement(Self.message(for: announcement)).post()"))
+        #expect(source.contains("AccessibilityNotification.Announcement(announcement.message).post()"))
     }
 
     /// The app takes the Clip's queue over only once the Clip's guests are

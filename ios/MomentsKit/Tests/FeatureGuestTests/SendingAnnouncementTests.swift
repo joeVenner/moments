@@ -1,4 +1,5 @@
 import FeatureGuest
+import Foundation
 import Testing
 
 @Suite struct SendingAnnouncementTests {
@@ -46,5 +47,20 @@ import Testing
     @Test func anotherModelIsntAChange() {
         #expect(SendingAnnouncement.change(from: snapshot(2), to: snapshot(0, done: 5, of: other)) == nil)
         #expect(SendingAnnouncement.change(from: snapshot(0, of: other), to: snapshot(2)) == nil)
+    }
+
+    @Test func failuresSayHowMany() {
+        #expect(SendingAnnouncement.someFailed(3).message.contains("3"))
+        #expect(SendingAnnouncement.started.message != SendingAnnouncement.allSent.message)
+    }
+
+    /// The app's event screen announces too, except while leaving.
+    @Test func theEventScreenAnnouncesSending() throws {
+        let file = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "Sources/FeatureGuest/GuestEventView.swift")
+        let source = try String(contentsOf: file, encoding: .utf8)
+        #expect(source.contains(".onChange(of: progress?.sendingSnapshot)"))
+        #expect(source.contains("guard let old, let new, (leave?.phase ?? .idle) == .idle,"))
+        #expect(source.contains("AccessibilityNotification.Announcement(announcement.message).post()"))
     }
 }

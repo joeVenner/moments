@@ -506,6 +506,47 @@
         }
       }
     },
+    "%lld photos couldn't be sent. Open Your uploads to try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld photo couldn't be sent. Open Your uploads to try again."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld photos couldn't be sent. Open Your uploads to try again."
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld photo n'a pas pu être envoyée. Ouvrez Vos envois pour réessayer."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld photos n'ont pas pu être envoyées. Ouvrez Vos envois pour réessayer."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld pts": {
       "extractionState": "manual",
       "localizations": {
@@ -3160,6 +3201,17 @@
         }
       }
     },
+    "Sending your photos.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoi de vos photos."
+          }
+        }
+      }
+    },
     "Share": {
       "extractionState": "manual",
       "localizations": {
@@ -4905,6 +4957,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Votre téléphone n'a plus d'espace."
+          }
+        }
+      }
+    },
+    "Your photos are sent.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos photos sont envoyées."
           }
         }
       }
