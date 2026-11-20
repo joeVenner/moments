@@ -65,6 +65,7 @@ struct HostEventsView: View {
     var list: some View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
             header
+            if let plan = model.plan { HostPlanCard(plan: plan) }
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -241,6 +242,52 @@ struct HostLiveEventCard: View {
         .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.sheet))
         .overlay(RoundedRectangle(cornerRadius: Radius.sheet).stroke(MomentsColor.accent.opacity(0.6)))
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// The host's plan above their events: its guest limit, then whether it
+/// renews, ends or needs attention, and how many events can still be made.
+struct HostPlanCard: View {
+    let plan: HostPlan
+
+    var body: some View {
+        let status = HostPlanStatus(plan)
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            Text("Plan for \(plan.guestCap) guests")
+                .font(MomentsFont.heading())
+                .foregroundStyle(MomentsColor.text)
+            Text(Self.detailLine(status, creatable: plan.creatableEventCount))
+                .font(MomentsFont.caption())
+                // Orange only when the host has something to fix or save.
+                .foregroundStyle(status.needsAttention ? MomentsColor.accent : MomentsColor.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.sheet))
+        .accessibilityElement(children: .combine)
+    }
+
+    static func detailLine(_ status: HostPlanStatus, creatable: Int?) -> String {
+        let statusText = switch status {
+        case let .renews(date): String(localized: "Renews \(date.formatted(date: .abbreviated, time: .omitted))")
+        case let .ends(date): String(localized: "Ends \(date.formatted(date: .abbreviated, time: .omitted))")
+        case .paymentFailed: String(localized: "Payment failed. Update it in Settings.")
+        case let .ended(until?): String(localized: "Hosting ended. Download until \(until.formatted(date: .abbreviated, time: .omitted)).")
+        case .ended(nil): String(localized: "Hosting ended")
+        }
+        guard let creatable else { return statusText }
+        let left = String(localized: "\(creatable) events left")
+        return String(localized: "\(statusText) · \(left)")
+    }
+}
+
+private extension HostPlanStatus {
+    var needsAttention: Bool {
+        switch self {
+        case .renews, .ends: false
+        case .paymentFailed, .ended: true
+        }
     }
 }
 

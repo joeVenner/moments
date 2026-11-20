@@ -19,6 +19,10 @@ public final class HostEventsModel {
     public private(set) var events: [AdminEvent] = []
     public private(set) var isTruncated = false
     public private(set) var phase: Phase = .idle
+    /// The host's hosting plan, nil when they have none (or it hasn't loaded).
+    /// Loaded after the events; a failure keeps the last one and never fails
+    /// the list.
+    public private(set) var plan: HostPlan?
 
     @ObservationIgnored private let service: any HostService
     @ObservationIgnored private let account: HostAccount
@@ -38,6 +42,7 @@ public final class HostEventsModel {
             events = list.events
             isTruncated = list.isTruncated
             phase = .loaded
+            await loadPlan()
         case .signedOut, .notFound:
             clear()
         case .cancelled:
@@ -47,12 +52,21 @@ public final class HostEventsModel {
         }
     }
 
+    private func loadPlan() async {
+        switch await account.run(logCategory: "host-plan", { try await service.hostPlan(token: $0) }) {
+        case let .success(value): plan = value
+        case .signedOut: clear()
+        case .notFound, .cancelled, .failure: break
+        }
+    }
+
     /// Forgets the list, e.g. right after a sign-out.
     public func reset() { clear() }
 
     private func clear() {
         events = []
         isTruncated = false
+        plan = nil
         phase = .idle
     }
 }

@@ -1,6 +1,17 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@"
+          }
+        }
+      }
+    },
     "%@ · archived": {
       "localizations": {
         "fr": {
@@ -27,6 +38,47 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ · envois fermés"
+          }
+        }
+      }
+    },
+    "%lld events left": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld event left"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld events left"
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld événement restant"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld événements restants"
+                }
+              }
+            }
           }
         }
       }
@@ -842,6 +894,17 @@
         }
       }
     },
+    "Ends %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se termine le %@"
+          }
+        }
+      }
+    },
     "Enter a name between 1 and 60 characters.": {
       "extractionState": "manual",
       "localizations": {
@@ -1197,6 +1260,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Organiser"
+          }
+        }
+      }
+    },
+    "Hosting ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hébergement terminé"
+          }
+        }
+      }
+    },
+    "Hosting ended. Download until %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hébergement terminé. Téléchargez tout jusqu'au %@."
           }
         }
       }
@@ -1714,6 +1799,17 @@
         }
       }
     },
+    "Payment failed. Update it in Settings.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le paiement a échoué. Mettez-le à jour dans Réglages."
+          }
+        }
+      }
+    },
     "Photo": {
       "extractionState": "manual",
       "localizations": {
@@ -1795,6 +1891,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choisit un autre visage"
+          }
+        }
+      }
+    },
+    "Plan for %lld guests": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offre pour %lld invités"
           }
         }
       }
@@ -1986,6 +2093,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ne plus aimer"
+          }
+        }
+      }
+    },
+    "Renews %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se renouvelle le %@"
           }
         }
       }
