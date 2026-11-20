@@ -1785,6 +1785,17 @@
         }
       }
     },
+    "On the big screen, open the event and enter its PIN first": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur le grand écran, ouvrez d'abord l'événement et saisissez son code"
+          }
+        }
+      }
+    },
     "On, ^[%lld heart](inflect: true)": {
       "extractionState": "manual",
       "localizations": {
@@ -1837,6 +1848,17 @@
         }
       }
     },
+    "Open in Safari": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir dans Safari"
+          }
+        }
+      }
+    },
     "Open the event link again, then try again.": {
       "extractionState": "manual",
       "localizations": {
@@ -1855,6 +1877,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "L'ouvre en plein écran"
+          }
+        }
+      }
+    },
+    "Opens or shares the slideshow": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvre ou partage le diaporama"
           }
         }
       }
@@ -2012,6 +2045,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Offre pour %lld invités"
+          }
+        }
+      }
+    },
+    "Play moments live on a big screen": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diffusez les souvenirs en direct sur grand écran"
           }
         }
       }
@@ -2489,6 +2533,17 @@
         }
       }
     },
+    "Share the slideshow link": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partager le lien du diaporama"
+          }
+        }
+      }
+    },
     "Share your photos and videos, heart your favourites, and climb the leaderboard.": {
       "localizations": {
         "fr": {
@@ -2678,6 +2733,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Passer"
+          }
+        }
+      }
+    },
+    "Slideshow": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diaporama"
           }
         }
       }

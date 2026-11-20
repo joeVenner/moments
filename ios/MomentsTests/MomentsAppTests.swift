@@ -184,6 +184,17 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(flyer.fileName == expected)
     }
 
+    @Test(arguments: [
+        ("https://moments-hq.com/e/sara-omar", "https://moments-hq.com/e/sara-omar/slideshow"),
+        ("https://moments-hq.com/e/sara-omar/", "https://moments-hq.com/e/sara-omar/slideshow"),
+        ("https://moments-hq.com/e/sara-omar?invite=secret#x", "https://moments-hq.com/e/sara-omar/slideshow"),
+        ("https://moments-hq.com/e/f%C3%AAte%202026", "https://moments-hq.com/e/f%C3%AAte%202026/slideshow"),
+    ])
+    func theSlideshowLinkIsTheEventLinkWithoutItsQuery(event: String, expected: String) throws {
+        let url = try #require(URL(string: event))
+        #expect(HostEventDetailView.slideshowURL(url)?.absoluteString == expected)
+    }
+
     @Test func theModerateBadgeShowsOnlyWhenSomethingWaits() {
         #expect(HostManageRow.badgeLabel(0) == nil)
         #expect(HostManageRow.badgeLabel(-1) == nil)
