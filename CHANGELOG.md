@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS: the upload engine can adopt another queue's unfinished uploads (groundwork for continuing App Clip uploads in the app).
 - iOS: guests no longer see Share moments for an event that has stopped taking uploads or was archived; the App Clip says "This event has stopped taking photos." and keeps the Your uploads list.
 - iOS App Clip: uploads interrupted while the Clip was in the background go again as soon as it's back in front (not after the 30-second offline wait), and the screen stays on while photos are sending.
 - iOS App Clip: a guest who joined can share photos and videos, sent while the Clip is open over any network, with a "Your uploads" list. Uploads the Clip hasn't finished are lost when the full app replaces it, so the offer to install the app waits until nothing is sending. Its privacy manifest now matches the app's (photos and videos).
