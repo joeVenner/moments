@@ -59,6 +59,19 @@ public enum MomentsAPIError: Error, Sendable, Equatable {
     /// Deleting a moment: its files couldn't be removed, so the moment was
     /// kept. Safe to retry.
     case mediaDeleteFailed
+    /// Host screens: no hosting plan covers this. Creating an event needs a
+    /// plan that allows new events; on an event a plan pays for, the plan no
+    /// longer allows editing, moderating or (after the read-only window)
+    /// downloading. Show the paywall.
+    case planRequired
+    /// Creating an event: every event of that kind the plan includes is used,
+    /// or the test event's month is over. An Extra event adds a main one.
+    case noEventsLeft
+    /// Changing dates: a test event's dates come from the plan.
+    case testEventDatesFixed
+    /// Joining: the event has as many guests as its plan allows. Guests
+    /// already in it can always rejoin.
+    case guestCapReached
     /// Any other status, with the server's stable `code` when it sent one.
     case server(status: Int, code: String?)
 }

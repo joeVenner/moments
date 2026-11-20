@@ -233,7 +233,7 @@ private func adminMoment(id: String = "m1", status: String = "approved", kind: S
         (502, "media_delete_failed", MomentsAPIError.mediaDeleteFailed),
         (404, "moment_not_found", .momentNotFound),
         (401, "host_auth_required", .hostAuthRequired),
-        (402, "plan_required", .server(status: 402, code: "plan_required")),
+        (402, "plan_required", .planRequired),
     ])
     func mapsDeleteFailures(_ status: Int, _ code: String, _ expected: MomentsAPIError) async throws {
         let stub = StubTransport(status: status, json: #"{"error":"x","code":"\#(code)"}"#)

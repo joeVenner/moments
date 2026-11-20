@@ -414,6 +414,10 @@ public struct MomentsClient: MomentsService {
         case (410, "event_not_hosted"): .eventNotHosted
         case (426, _): .upgradeRequired
         case (409, "nickname_taken"): .nicknameTaken
+        case (409, "guest_cap_reached"): .guestCapReached
+        case (402, "plan_required"): .planRequired
+        case (409, "no_events_left"): .noEventsLeft
+        case (409, "test_event_dates_fixed"): .testEventDatesFixed
         case (404, "moment_not_found"): .momentNotFound
         case (403, "guest_required"): .guestRequired
         case (429, "rate_limited"): .rateLimited
