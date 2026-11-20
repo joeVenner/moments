@@ -165,10 +165,8 @@ struct AppEnvironment {
         let launch = Task(priority: .userInitiated) { () -> Bool in
             // A failed read leaves the queue unloaded, so it can be tried again
             // (a passing I/O error); after that, sharing reports a failure.
-            var report = await UploadLaunch.prepare(queue: queue, store: store, staging: staging, launchedAt: launchedAt)
-            for delay in [1, 3] where report.loaded == nil {
-                try? await Task.sleep(for: .seconds(delay))
-                report = await UploadLaunch.prepare(queue: queue, store: store, staging: staging, launchedAt: launchedAt)
+            let report = await UploadLaunch.retrying {
+                await UploadLaunch.prepare(queue: queue, store: store, staging: staging, launchedAt: launchedAt)
             }
             guard let loaded = report.loaded else {
                 log.error("upload queue could not load")
