@@ -53,13 +53,8 @@ struct HomeView: View {
                 .accessibilityAddTraits(.isHeader)
             joinCard
             if !myEvents.entries.isEmpty {
-                VStack(alignment: .leading, spacing: Spacing.sm) {
-                    Text("Your events")
-                        .font(MomentsFont.heading())
-                        .foregroundStyle(MomentsColor.text)
-                        .accessibilityAddTraits(.isHeader)
-                    MyEventsList(entries: myEvents.entries, open: navigation.open)
-                }
+                // The list carries its own "Your events" heading.
+                MyEventsList(entries: myEvents.entries, open: navigation.open)
             }
             if myEvents.phase == .unavailable {
                 // The keychain is locked (or unreadable); pull to refresh retries.
