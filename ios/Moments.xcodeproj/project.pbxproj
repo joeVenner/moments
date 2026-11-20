@@ -18,6 +18,10 @@
 		7A1C2E3F4B5D6E7F8A9B0C1D /* FeatureHost in Frameworks */ = {isa = PBXBuildFile; productRef = 8B2D3F4A5C6E7F8A9B0C1D2E /* FeatureHost */; };
 		5E1A0C2B7D3F4A6B8C9D0E1F /* UploadEngine in Frameworks */ = {isa = PBXBuildFile; productRef = 6F2B1D3C8E4A5B7C9D0E1F2A /* UploadEngine */; };
 		B4074831FB2CF022FBE7789B /* MomentsAPI in Frameworks */ = {isa = PBXBuildFile; productRef = C96976A483AF8B7DB302374B /* MomentsAPI */; };
+		A1C11B000000000000000011 /* AppRouting in Frameworks */ = {isa = PBXBuildFile; productRef = A1C11B00000000000000000E /* AppRouting */; };
+		A1C11B000000000000000012 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = A1C11B00000000000000000F /* DesignSystem */; };
+		A1C11B000000000000000013 /* MomentsDomain in Frameworks */ = {isa = PBXBuildFile; productRef = A1C11B000000000000000010 /* MomentsDomain */; };
+		A1C11B000000000000000008 /* MomentsClip.app in Embed App Clips */ = {isa = PBXBuildFile; fileRef = A1C11B000000000000000001 /* MomentsClip.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -28,12 +32,34 @@
 			remoteGlobalIDString = 7E42F14C8B35690A99455093;
 			remoteInfo = Moments;
 		};
+		A1C11B000000000000000009 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E8ABC6C90A8FA5AA4833075A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1C11B000000000000000002;
+			remoteInfo = MomentsClip;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A1C11B000000000000000007 /* Embed App Clips */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/AppClips";
+			dstSubfolderSpec = 16;
+			files = (
+				A1C11B000000000000000008 /* MomentsClip.app in Embed App Clips */,
+			);
+			name = "Embed App Clips";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		B79AD8397EB9294C45D7A230 /* Moments.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moments.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9841BD4DBD909C95939AE4E5 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		53DFC14767CE2A791C09F61E /* MomentsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MomentsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1C11B000000000000000001 /* MomentsClip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MomentsClip.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -45,6 +71,11 @@
 		2E7F959437C484A8560DCEDE /* MomentsTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = MomentsTests;
+			sourceTree = "<group>";
+		};
+		A1C11B000000000000000003 /* MomentsClip */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MomentsClip;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -75,6 +106,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1C11B000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1C11B000000000000000011 /* AppRouting in Frameworks */,
+				A1C11B000000000000000012 /* DesignSystem in Frameworks */,
+				A1C11B000000000000000013 /* MomentsDomain in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -83,6 +124,7 @@
 			children = (
 				7EDF518EF40896CC13AF1277 /* Config */,
 				EFCB34A7D2BEE1A9E1380B4F /* Moments */,
+				A1C11B000000000000000003 /* MomentsClip */,
 				2E7F959437C484A8560DCEDE /* MomentsTests */,
 				7E163D566289A1BA505EA238 /* Products */,
 			);
@@ -100,6 +142,7 @@
 			isa = PBXGroup;
 			children = (
 				B79AD8397EB9294C45D7A230 /* Moments.app */,
+				A1C11B000000000000000001 /* MomentsClip.app */,
 				53DFC14767CE2A791C09F61E /* MomentsTests.xctest */,
 			);
 			name = Products;
@@ -115,10 +158,12 @@
 				9EADAD101F7A9CABAEEA39E6 /* Sources */,
 				CCCE23FB6C551788EC37EA52 /* Frameworks */,
 				7E9135449DEBB42374C76A5A /* Resources */,
+				A1C11B000000000000000007 /* Embed App Clips */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A1C11B00000000000000000A /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				EFCB34A7D2BEE1A9E1380B4F /* Moments */,
@@ -164,6 +209,31 @@
 			productReference = 53DFC14767CE2A791C09F61E /* MomentsTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		A1C11B000000000000000002 /* MomentsClip */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1C11B00000000000000000B /* Build configuration list for PBXNativeTarget "MomentsClip" */;
+			buildPhases = (
+				A1C11B000000000000000004 /* Sources */,
+				A1C11B000000000000000005 /* Frameworks */,
+				A1C11B000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1C11B000000000000000003 /* MomentsClip */,
+			);
+			name = MomentsClip;
+			packageProductDependencies = (
+				A1C11B00000000000000000E /* AppRouting */,
+				A1C11B00000000000000000F /* DesignSystem */,
+				A1C11B000000000000000010 /* MomentsDomain */,
+			);
+			productName = MomentsClip;
+			productReference = A1C11B000000000000000001 /* MomentsClip.app */;
+			productType = "com.apple.product-type.application.on-demand-install-capable";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -198,6 +268,7 @@
 			projectRoot = "";
 			targets = (
 				7E42F14C8B35690A99455093 /* Moments */,
+				A1C11B000000000000000002 /* MomentsClip */,
 				4677E44F5CB164A8678A1467 /* MomentsTests */,
 			);
 		};
@@ -212,6 +283,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		CC94FCCC866841F24DBB5612 = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1C11B000000000000000006 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -235,6 +313,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1C11B000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -242,6 +327,11 @@
 			isa = PBXTargetDependency;
 			target = 7E42F14C8B35690A99455093 /* Moments */;
 			targetProxy = 39DECC8CA0826B835104DB7C /* PBXContainerItemProxy */;
+		};
+		A1C11B00000000000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1C11B000000000000000002 /* MomentsClip */;
+			targetProxy = A1C11B000000000000000009 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -337,6 +427,54 @@
 			};
 			name = Release;
 		};
+		A1C11B00000000000000000C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Config/MomentsClip.entitlements;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/MomentsClip-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Moments;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MOMENTS_BUNDLE_ID_PREFIX).moments.Clip";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		A1C11B00000000000000000D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Config/MomentsClip.entitlements;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/MomentsClip-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Moments;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MOMENTS_BUNDLE_ID_PREFIX).moments.Clip";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -363,6 +501,15 @@
 			buildConfigurations = (
 				0D489DAF1B2C2E210A50E093 /* Debug */,
 				83F7A18886315229D28F0A0E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1C11B00000000000000000B /* Build configuration list for PBXNativeTarget "MomentsClip" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1C11B00000000000000000C /* Debug */,
+				A1C11B00000000000000000D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -420,6 +567,18 @@
 		C96976A483AF8B7DB302374B /* MomentsAPI */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MomentsAPI;
+		};
+		A1C11B00000000000000000E /* AppRouting */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AppRouting;
+		};
+		A1C11B00000000000000000F /* DesignSystem */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DesignSystem;
+		};
+		A1C11B000000000000000010 /* MomentsDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MomentsDomain;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
