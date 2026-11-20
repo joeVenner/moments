@@ -133,6 +133,7 @@ struct HostModerationView: View {
             }
             if let failure = model.actionFailure { actionNotice(failure) }
             if let message = HostModeration.message(for: model.phase) { notice(message) }
+            if !model.moments.isEmpty { filterTabs }
             grid
             if model.isTruncated {
                 notice(String(localized: "Showing the newest 500 moments."))
@@ -155,8 +156,10 @@ struct HostModerationView: View {
             case .gone, .failed:
                 EmptyView()
             }
+        } else if model.visibleMoments.isEmpty {
+            notice(HostModeration.emptyMessage(for: model.filter))
         } else {
-            HostMomentGrid(moments: model.moments, pendingIDs: model.pendingIDs, thumbnails: thumbnails) { action in
+            HostMomentGrid(moments: model.visibleMoments, pendingIDs: model.pendingIDs, thumbnails: thumbnails) { action in
                 switch action {
                 case let .choose(moment): selectedID = moment.id
                 case let .setHidden(isHidden, moment): setHidden(isHidden, moment)
@@ -164,6 +167,32 @@ struct HostModerationView: View {
                 }
             }
         }
+    }
+
+    /// All, Reported and Hidden, each with its count.
+    private var filterTabs: some View {
+        HStack(spacing: Spacing.xxs) {
+            ForEach(HostModerationModel.Filter.allCases, id: \.self) { filter in
+                let isSelected = model.filter == filter
+                Button { model.filter = filter } label: {
+                    Text(HostModeration.tabTitle(for: filter, count: model.count(for: filter)))
+                        .font(MomentsFont.body(.subheadline).weight(isSelected ? .semibold : .medium))
+                        .foregroundStyle(isSelected ? MomentsColor.text : MomentsColor.textMuted)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity, minHeight: Radius.minimumTapTarget)
+                        .background(isSelected ? MomentsColor.border : .clear, in: RoundedRectangle(cornerRadius: Radius.control))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+            }
+        }
+        .padding(Spacing.xxs)
+        .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(MomentsColor.border))
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isTabBar)
     }
 
     private func setHidden(_ isHidden: Bool, _ moment: AdminMoment) {
@@ -234,7 +263,7 @@ struct HostMomentGrid: View {
                 .buttonStyle(.plain)
                 .disabled(isPending)
                 .accessibilityLabel(Text(HostModeration.label(for: moment)))
-                .accessibilityValue(isPending ? Text("Updating") : Text(verbatim: ""))
+                .accessibilityValue(HostModeration.stateValue(for: moment, isPending: isPending))
                 .accessibilityHint(Text("Shows the hide and delete options."))
                 .accessibilityActions {
                     // Nothing to offer while a change is on its way.
@@ -278,10 +307,14 @@ struct HostMomentCell: View {
                 }
             }
             .overlay(alignment: .topTrailing) {
-                if moment.media.kind == .video { badge("play.fill") }
+                if moment.media.kind == .video { badge("play.fill").padding(Spacing.xxs) }
             }
             .overlay(alignment: .bottomLeading) {
-                if moment.isHidden { badge("eye.slash") }
+                HStack(spacing: Spacing.xxs) {
+                    if moment.isHidden { badge("eye.slash") }
+                    if moment.isReported { reportedBadge }
+                }
+                .padding(Spacing.xxs)
             }
             .overlay {
                 if isPending {
@@ -304,7 +337,17 @@ struct HostMomentCell: View {
             .foregroundStyle(MomentsColor.text)
             .padding(Spacing.xxs)
             .background(MomentsColor.background.opacity(0.7), in: Circle())
-            .padding(Spacing.xxs)
+    }
+
+    /// Light on dark, like the design: it has to read over any photo.
+    private var reportedBadge: some View {
+        Text("Reported")
+            .font(MomentsFont.caption(.caption2).weight(.semibold))
+            .foregroundStyle(MomentsColor.background)
+            .padding(.horizontal, Spacing.xxs + 2)
+            .padding(.vertical, 2)
+            .background(MomentsColor.text, in: RoundedRectangle(cornerRadius: 6))
+            .lineLimit(1)
     }
 
     private func load() async {
@@ -340,6 +383,33 @@ enum HostModeration {
         case (false, true): return String(localized: "Hidden photo by \(name)")
         case (false, false): return String(localized: "Photo by \(name)")
         }
+    }
+
+    static func tabTitle(for filter: HostModerationModel.Filter, count: Int) -> String {
+        switch filter {
+        // The word, then the count: a "Hidden \(count)" key would clash
+        // with "\(count) hidden" in the generated string symbols.
+        case .all: String(localized: "moderation.tab.all", defaultValue: "All") + " \(count.formatted())"
+        // Its own key: French says "Signalés" here but "Signalé" on a tile.
+        case .reported: String(localized: "moderation.tab.reported", defaultValue: "Reported") + " \(count.formatted())"
+        case .hidden: String(localized: "Hidden") + " \(count.formatted())"
+        }
+    }
+
+    static func emptyMessage(for filter: HostModerationModel.Filter) -> String {
+        switch filter {
+        case .all: String(localized: "No moments yet.")
+        case .reported: String(localized: "No reported moments.")
+        case .hidden: String(localized: "No hidden moments.")
+        }
+    }
+
+    /// What VoiceOver adds after the label: updating, or how many guests
+    /// reported it.
+    static func stateValue(for moment: AdminMoment, isPending: Bool) -> Text {
+        if isPending { return Text("Updating") }
+        guard moment.isReported else { return Text(verbatim: "") }
+        return Text("Reported by ^[\(moment.reportCount) guest](inflect: true)")
     }
 
     static func message(for phase: HostModerationModel.Phase) -> String? {

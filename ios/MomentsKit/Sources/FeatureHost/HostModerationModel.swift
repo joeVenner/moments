@@ -27,8 +27,17 @@ public final class HostModerationModel {
         case failed
     }
 
+    /// Which moments the grid shows.
+    public enum Filter: CaseIterable, Sendable {
+        case all
+        /// Reported by at least one guest.
+        case reported
+        case hidden
+    }
+
     public let eventID: String
     public private(set) var moments: [AdminMoment] = []
+    public var filter: Filter = .all
     public private(set) var isTruncated = false
     public private(set) var phase: Phase = .idle
     /// Moments with a hide, show or delete on its way.
@@ -56,6 +65,25 @@ public final class HostModerationModel {
     }
 
     public var hiddenCount: Int { moments.count { $0.isHidden } }
+
+    /// The moments the current filter lets through, in list order. Worked
+    /// out from `moments`, so a reload or a hide moves tiles at once.
+    public var visibleMoments: [AdminMoment] {
+        moments.filter { Self.matches($0, filter) }
+    }
+
+    /// How many moments a filter's tab counts.
+    public func count(for filter: Filter) -> Int {
+        moments.count { Self.matches($0, filter) }
+    }
+
+    private static func matches(_ moment: AdminMoment, _ filter: Filter) -> Bool {
+        switch filter {
+        case .all: true
+        case .reported: moment.isReported
+        case .hidden: moment.isHidden
+        }
+    }
 
     public func load() async {
         guard phase != .loading else { return }

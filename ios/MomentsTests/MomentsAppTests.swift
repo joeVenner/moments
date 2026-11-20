@@ -329,6 +329,14 @@ private let invite = String(repeating: "ab12", count: 16)
         #expect(HostModeration.label(for: video) == "Video by Omar")
     }
 
+    @Test func moderationTabsAndEmptyLinesNameTheirFilter() {
+        #expect(HostModeration.tabTitle(for: .all, count: 128) == "All 128")
+        #expect(HostModeration.tabTitle(for: .reported, count: 3) == "Reported 3")
+        #expect(HostModeration.tabTitle(for: .hidden, count: 0) == "Hidden 0")
+        let filters = HostModerationModel.Filter.allCases
+        #expect(Set(filters.map { HostModeration.emptyMessage(for: $0) }).count == filters.count)
+    }
+
     @Test func everyModerationProblemHasItsOwnMessage() {
         #expect(HostModeration.message(for: HostModerationModel.Phase.loaded) == nil)
         let phases: [HostModerationModel.Phase] = [.gone, .failed(.offline), .failed(.appTooOld), .failed(.failed)]

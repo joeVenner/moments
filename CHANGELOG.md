@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS moderation: All / Reported / Hidden tabs with counts, and a "Reported" label on moments guests reported (VoiceOver says how many guests). English and French.
 - iOS: guests can report a moment from the full-screen viewer (flag button → "Report this moment?" → "Thanks, the host will take a look."), in English and French. A dead guest token or an ended event closes the viewer, as for hearts.
 - App API: hosts see how many guests reported each moment (`report_count` on `AdminMoment`, in the moderation list and after hide/show). Who reported is never sent. The iOS model gains `reportCount` / `isReported`.
 - App API: a guest who joined can report a moment to the host (`POST /api/v1/events/{slug}/moments/{id}/report`). One report per guest per moment; hidden or unknown moments answer 404. Reports are kept in a new `moment_reports` table (migration 0027) and go with their moment, reporter and event.

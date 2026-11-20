@@ -797,10 +797,10 @@ private func plan(
     }
 }
 
-func adminMoment(_ id: String, status: AdminMoment.Status = .approved) -> AdminMoment {
+func adminMoment(_ id: String, status: AdminMoment.Status = .approved, reports: Int = 0) -> AdminMoment {
     AdminMoment(
         id: id, eventID: "a", uploaderName: "Sara", createdAt: Date(timeIntervalSince1970: 1_800_000_000),
-        status: status, media: Media(kind: .image, url: "https://moments.test/media/\(id).jpg")
+        status: status, reportCount: reports, media: Media(kind: .image, url: "https://moments.test/media/\(id).jpg")
     )
 }
 
@@ -814,6 +814,34 @@ func adminMoment(_ id: String, status: AdminMoment.Status = .approved) -> AdminM
         let model = HostModerationModel(eventID: "a", service: service, account: host)
         await model.load()
         return (model, service, host)
+    }
+
+    @Test func filtersByReportsAndHiddenWithCountsForEachTab() async {
+        let (model, _, _) = await loaded([
+            adminMoment("calm"), adminMoment("flagged", reports: 2),
+            adminMoment("hidden", status: .hidden), adminMoment("both", status: .hidden, reports: 1),
+        ])
+        #expect(model.filter == .all && model.visibleMoments.map(\.id) == ["calm", "flagged", "hidden", "both"])
+        #expect(HostModerationModel.Filter.allCases.map { model.count(for: $0) } == [4, 2, 2])
+        model.filter = .reported
+        #expect(model.visibleMoments.map(\.id) == ["flagged", "both"])
+        model.filter = .hidden
+        #expect(model.visibleMoments.map(\.id) == ["hidden", "both"])
+    }
+
+    @Test func hidingAReportedMomentMovesItIntoHiddenAtOnce() async {
+        let (model, service, _) = await loaded([adminMoment("flagged", reports: 1)])
+        model.filter = .hidden
+        #expect(model.visibleMoments.isEmpty)
+        let gate = Gate()
+        service.actionGate = gate
+        let hiding = Task { await model.setHidden(true, momentID: "flagged") }
+        while service.moderateCalls.isEmpty { await Task.yield() }
+        // Before the server answers: the tile has already moved.
+        #expect(model.visibleMoments.map(\.id) == ["flagged"])
+        #expect(model.count(for: .reported) == 1)
+        await gate.open()
+        await hiding.value
     }
 
     @Test func loadsTheMomentsAndCountsTheHiddenOnes() async {
