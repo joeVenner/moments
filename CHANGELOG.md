@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS App Clip: guests can leave an event and delete what they shared, without installing the app.
 - iOS App Clip: finished uploads, and ones more than a week old, are cleared from the storage it shares with the app.
 - iOS App Clip: while your photos are sending, it offers the full app, which keeps sending them in the background.
 - iOS: photos and videos the App Clip hadn't finished sending are picked up and sent by the full app after it's installed.

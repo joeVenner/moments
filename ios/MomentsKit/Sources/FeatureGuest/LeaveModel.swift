@@ -87,16 +87,21 @@ public final class LeaveModel {
             return phase = .failed(.temporary)
         } catch {
             // Before anything was deleted: the keychain couldn't be read.
-            logger.error("reading the guest identity failed: \(String(describing: error), privacy: .public)")
+            logger.error("reading the guest identity failed: \(Self.status(error), privacy: .public)")
             return phase = .failed(.temporary)
         }
         do {
             try store.removeCredentials(for: slug)
         } catch {
-            logger.error("forgetting the guest identity failed: \(String(describing: error), privacy: .public)")
+            logger.error("forgetting the guest identity failed: \(Self.status(error), privacy: .public)")
             return phase = .failed(.storage)
         }
         phase = .left
+    }
+
+    /// Type and code only: a store error may carry a path.
+    private nonisolated static func status(_ error: any Error) -> String {
+        "\(type(of: error)) \((error as NSError).code)"
     }
 
     /// True once the server is done; false when it still had work after
@@ -116,5 +121,17 @@ public final class LeaveModel {
             }
         }
         return false
+    }
+}
+
+public extension LeaveModel.Failure {
+    /// What the failure alert says, in the app and the App Clip.
+    var message: LocalizedStringResource {
+        switch self {
+        case .busy: "Too many requests right now. Try again in a minute."
+        case .upgradeRequired: "Update Moments to leave this event."
+        case .temporary: "Moments couldn't finish leaving the event. Try again to continue where it stopped."
+        case .storage: "Your uploads are deleted, but this device couldn't forget your name. Try again."
+        }
     }
 }

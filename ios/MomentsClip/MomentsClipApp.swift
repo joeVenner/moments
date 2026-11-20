@@ -51,6 +51,13 @@ struct ClipRootView: View {
     @State private var presentedUpload: UploadModel?
     @State private var progress: UploadProgressModel?
     @State private var isShowingProgress = false
+    /// "Leave event and delete my uploads", as in the app.
+    @State private var leave: LeaveModel?
+    @State private var isConfirmingLeave = false
+    @State private var hasLeft = false
+    /// Cancelled when another link arrives mid-leave (the model's `end`
+    /// still runs, so the event reopens to uploads).
+    @State private var leaveTask: Task<Void, Never>?
     @Environment(\.scenePhase) private var scenePhase
     /// The Clip can't send in the background, so the screen stays on while
     /// it sends.
@@ -73,7 +80,9 @@ struct ClipRootView: View {
 
     var body: some View {
         Group {
-            if let join {
+            if hasLeft {
+                leftMessage
+            } else if let join {
                 if case let .joined(event, participant) = join.phase {
                     joined(as: participant.nickname, event: event, slug: join.slug)
                 } else {
@@ -87,14 +96,26 @@ struct ClipRootView: View {
         .background(MomentsColor.background)
         // The whole link: the same event with another invite starts over,
         // dropping the last event's unshared picks and closing its sheets.
-        .onChange(of: eventLink, initial: true) {
+        .onChange(of: eventLink, initial: true) { startOver() }
+        // Deleting takes a few calls; nothing else may start meanwhile.
+        .disabled(leave?.phase == .leaving)
+        .overlay {
+            if leave?.phase == .leaving {
+                ProgressView("Leaving…")
+                    .tint(MomentsColor.text)
+                    .foregroundStyle(MomentsColor.text)
+                    .padding(Spacing.md)
+                    .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.card))
+            }
+        }
+        .onChange(of: leave?.phase) { _, phase in
+            guard phase == .left else { return }
             presentedUpload?.discardAll()
             presentedUpload = nil
             upload = nil
             isShowingProgress = false
-            join = eventLink.map { link in
-                JoinModel(slug: link.slug, invite: link.invite, service: Self.client, store: Self.store)
-            }
+            join = nil
+            hasLeft = true
         }
         // Follows this event's uploads for the button and the overlay.
         .task(id: eventLink?.slug) {
@@ -141,9 +162,89 @@ struct ClipRootView: View {
         // Not over a sheet (it would cover the share button). While photos
         // are sending too: the app takes over what the Clip hasn't sent
         // (`UploadLaunch.prepare(adopting:)`) and goes on in the background.
-        guard let join, upload == nil, !isShowingProgress else { return false }
+        guard let join, upload == nil, !isShowingProgress, !isConfirmingLeave, leave?.phase != .leaving else { return false }
         if case .joined = join.phase { return true }
         return false
+    }
+
+    /// A new link, or "Join again" after leaving (the same link doesn't
+    /// change `eventLink`, so scanning it again wouldn't).
+    private func startOver() {
+        leaveTask?.cancel()
+        leaveTask = nil
+        presentedUpload?.discardAll()
+        presentedUpload = nil
+        upload = nil
+        isShowingProgress = false
+        join = eventLink.map { link in
+            JoinModel(slug: link.slug, invite: link.invite, service: Self.client, store: Self.store)
+        }
+        leave = eventLink.map { link in
+            LeaveModel(slug: link.slug, service: Self.client, store: Self.store, uploads: Self.uploads?.leaving)
+        }
+        hasLeft = false
+    }
+
+    private func startLeaving(_ leave: LeaveModel) {
+        leaveTask = Task { await leave.leave() }
+    }
+
+    private var leftMessage: some View {
+        VStack(spacing: Spacing.lg) {
+            Spacer()
+            Text("You've left this event.")
+                .font(MomentsFont.body())
+                .foregroundStyle(MomentsColor.textMuted)
+                .multilineTextAlignment(.center)
+            Button("Join again") { startOver() }
+                .font(MomentsFont.body().bold())
+                .foregroundStyle(MomentsColor.accent)
+                .frame(minHeight: 44)
+            Spacer()
+        }
+        .padding(Spacing.lg)
+    }
+
+    /// Top corner, as in the app: the install banner covers the bottom.
+    @ViewBuilder private func eventMenu() -> some View {
+        if let leave {
+            Menu {
+                Button("Leave event…", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                    isConfirmingLeave = true
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.title3)
+                    .foregroundStyle(MomentsColor.textMuted)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .accessibilityLabel(Text("Event options"))
+            .padding(.horizontal, Spacing.sm)
+            .confirmationDialog("Leave this event?", isPresented: $isConfirmingLeave, titleVisibility: .visible) {
+                Button("Leave and delete", role: .destructive) { startLeaving(leave) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The photos and videos you shared from this app are deleted and your nickname is freed. Anything shared from the website stays. This can't be undone.")
+            }
+            .alert(
+                "Couldn't leave the event",
+                // Closed any way but "Try again": back to idle, so it doesn't reappear.
+                isPresented: Binding(
+                    get: { leaveFailure(leave) != nil },
+                    set: { if !$0 { leave.dismissFailure() } }
+                ),
+                presenting: leaveFailure(leave)
+            ) { _ in
+                Button("Try again") { startLeaving(leave) }
+                Button("Cancel", role: .cancel) {}
+            } message: { failure in
+                Text(failure.message)
+            }
+        }
+    }
+
+    private func leaveFailure(_ leave: LeaveModel) -> LeaveModel.Failure? {
+        if case let .failed(failure) = leave.phase { failure } else { nil }
     }
 
     private var message: some View {
@@ -202,6 +303,7 @@ struct ClipRootView: View {
             Spacer()
         }
         .padding(Spacing.lg)
+        .overlay(alignment: .topTrailing) { eventMenu() }
     }
 
     private func shareButton(_ uploads: ClipUploads.Parts, slug: EventSlug) -> some View {

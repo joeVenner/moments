@@ -104,7 +104,7 @@ private let other = EventSlug("other")!
         relaunched.update(for: party) { $0.rememberReport(of: "m1") }
         #expect(try FileEventCredentialStore(directory: directory).credentials(for: party)?.guestToken == "gt_clip")
         #expect(try FileEventCredentialStore(directory: directory).credentials(for: party)?.reportedMomentIDs == ["m1"])
-        relaunched.removeCredentials(for: party)
+        try relaunched.removeCredentials(for: party)
         #expect(try FileEventCredentialStore(directory: directory).storedSlugs().isEmpty)
     }
 
@@ -153,7 +153,8 @@ private let other = EventSlug("other")!
         mirror.inner.save(joined, for: party)
         let store = ClipSessionStore(mirror: mirror)
         mirror.failsWrites = true
-        store.removeCredentials(for: party)
+        // Said, so leaving reports it instead of the app importing the guest.
+        #expect(throws: ClipSessionStore.ForgetNotCopied()) { try store.removeCredentials(for: party) }
         #expect(mirror.inner.credentials(for: party) != nil)
         // Still gone in the session, though the file has it.
         #expect(store.credentials(for: party) == nil)
@@ -190,5 +191,17 @@ private let other = EventSlug("other")!
         #expect(store.credentials(for: party) == nil)
         mirror.failsReads = false
         #expect(store.credentials(for: party)?.guestToken == "gt_clip")
+    }
+
+    /// Security audit: leaving forgets the file's entry even when this
+    /// session couldn't read it (it holds the leaving guest's token).
+    @Test func forgettingRemovesAnEntryItCouldntRead() throws {
+        let mirror = FlakyStore()
+        mirror.inner.save(joined, for: party)
+        mirror.failsReads = true
+        let store = ClipSessionStore(mirror: mirror)
+        #expect(store.credentials(for: party) == nil)
+        try store.removeCredentials(for: party)
+        #expect(mirror.inner.credentials(for: party) == nil)
     }
 }

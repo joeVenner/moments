@@ -108,8 +108,24 @@ import Testing
         let source = try String(contentsOf: file, encoding: .utf8)
         let offer = try #require(source.range(of: "private var shouldOfferApp: Bool {"))
         let gate = source[offer.upperBound...].prefix(600)
-        #expect(gate.contains("guard let join, upload == nil, !isShowingProgress else { return false }"))
+        #expect(gate.contains("guard let join, upload == nil, !isShowingProgress, !isConfirmingLeave, leave?.phase != .leaving else { return false }"))
         #expect(!gate.contains("activeCount"))
+    }
+
+    /// Guests can leave and delete what they shared from the Clip too (App
+    /// Review: user-generated content must be deletable where it's made).
+    /// Its queued uploads for the event are dropped first, as in the app.
+    @Test func theClipLetsAGuestLeave() throws {
+        let folder = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "MomentsClip")
+        let app = try String(contentsOf: folder.appending(path: "MomentsClipApp.swift"), encoding: .utf8)
+        #expect(app.contains("LeaveModel(slug: link.slug, service: Self.client, store: Self.store, uploads: Self.uploads?.leaving)"))
+        #expect(app.contains(".overlay(alignment: .topTrailing) { eventMenu() }"))
+        // The same link again doesn't change the route: "Join again" starts over.
+        #expect(app.contains("Button(\"Join again\") { startOver() }"))
+        let uploads = try String(contentsOf: folder.appending(path: "ClipUploads.swift"), encoding: .utf8)
+        #expect(uploads.contains("await queue.beginLeaving(eventSlug: slug)"))
+        #expect(uploads.contains("await queue.endLeaving(eventSlug: slug)"))
     }
 
     /// The app takes the Clip's queue over only once the Clip's guests are
