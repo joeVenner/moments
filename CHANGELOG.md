@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Terms of Use and Privacy Policy pages (English and French) at /terms and /privacy, linked from the footer and published to GitHub Pages.
 - iOS App Clip: the install banner no longer covers the "Couldn't leave the event" alert.
 - iOS app: uploads left behind by an App Clip guest who left are never sent as someone who joined the event later.
 - iOS app: Download everything keeps going past the 1-2 hour life of its signed links by reloading them.

@@ -293,6 +293,8 @@ const dict: Record<Lang, Record<string, Entry>> = {
     bannerOther: "Other",
 
     footerTagline: "Made for moments worth sharing.",
+    footerPrivacy: "Privacy",
+    footerTerms: "Terms",
   },
   fr: {
     appTagline:
@@ -581,6 +583,8 @@ const dict: Record<Lang, Record<string, Entry>> = {
     bannerOther: "Autre",
 
     footerTagline: "Conçu pour les instants qui valent d'être partagés.",
+    footerPrivacy: "Confidentialité",
+    footerTerms: "Conditions",
   },
 };
 
