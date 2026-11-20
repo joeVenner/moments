@@ -36,6 +36,13 @@ private let party = EventSlug("party")!
         StoredEventCredentials(eventID: "e1", guestToken: token, participantID: "p1", nickname: "Lea")
     }
 
+    /// As the App Clip saves it: stamped just now.
+    private func handed(_ token: String) -> StoredEventCredentials {
+        var value = joined(token)
+        value.handedOverAt = .now
+        return value
+    }
+
     @Test func theGroupsAreThisAppsAndTheSharedOne() throws {
         let appID = try #require(Bundle.main.bundleIdentifier)
         #expect(own.hasSuffix(".\(appID)") && own.count > appID.count + 1)
@@ -63,7 +70,7 @@ private let party = EventSlug("party")!
         defer { try? ownStore.removeAll(); try? sharedStore.removeAll() }
         let wedding = EventSlug("wedding")!
         try ownStore.save(joined("gt_old"), for: wedding)
-        try sharedStore.save(joined("gt_clip"), for: party)
+        try sharedStore.save(handed("gt_clip"), for: party)
         let install = try freshInstall("fresh")
         defer { install.forget() }
         AppEnvironment.prepareCredentials(own: ownStore, shared: sharedStore, defaults: install.defaults)
@@ -81,7 +88,7 @@ private let party = EventSlug("party")!
         AppEnvironment.prepareCredentials(own: ownStore, shared: sharedStore, defaults: defaults)
         let wedding = EventSlug("wedding")!
         try ownStore.save(joined("gt_app"), for: wedding)
-        try sharedStore.save(joined("gt_clip"), for: party)
+        try sharedStore.save(handed("gt_clip"), for: party)
         AppEnvironment.prepareCredentials(own: ownStore, shared: sharedStore, defaults: defaults)
         #expect(try ownStore.storedSlugs() == [party, wedding])
         #expect(try sharedStore.storedSlugs().isEmpty)

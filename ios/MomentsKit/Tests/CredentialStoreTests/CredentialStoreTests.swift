@@ -101,6 +101,18 @@ func exerciseListing(_ store: some EventCredentialStore) throws {
         #expect(again.reportedMomentIDs == ["m1"])
     }
 
+    @Test func theHandoverStampIsOptionalAndRoundTrips() throws {
+        let old = Data(#"{"schemaVersion":1,"guestToken":"gt"}"#.utf8)
+        var decoded = try #require(StoredEventCredentials.decode(old))
+        #expect(decoded.handedOverAt == nil)
+        decoded.handedOverAt = Date(timeIntervalSince1970: 2_000_000_000.5)
+        let again = try #require(StoredEventCredentials.decode(try StoredEventCredentials.encode(decoded)))
+        #expect(again.handedOverAt == decoded.handedOverAt)
+        var stampOnly = StoredEventCredentials(eventID: "e1")
+        stampOnly.handedOverAt = .now
+        #expect(stampOnly.isEmpty)
+    }
+
     @Test func mutesAloneAreNotWorthKeepingAndOlderEntriesDecode() throws {
         var stored = StoredEventCredentials()
         stored.mute(participantID: "p2")

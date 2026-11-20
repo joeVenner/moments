@@ -26,6 +26,10 @@ public struct StoredEventCredentials: Sendable, Hashable, Codable, CustomStringC
     /// Not secrets; optional so older entries still decode.
     public var mutedParticipantIDs: [String]?
 
+    /// When the App Clip last saved this entry for the app to pick up
+    /// (`CredentialHandoff`). Only the Clip sets it; the app clears it.
+    public var handedOverAt: Date?
+
     /// Enough for any one guest; the oldest are forgotten past it.
     public static let reportedMomentLimit = 200
     public static let mutedParticipantLimit = 200
@@ -75,7 +79,8 @@ public struct StoredEventCredentials: Sendable, Hashable, Codable, CustomStringC
     }
 
     /// Nothing worth keeping (an event ID alone is not, nor reported moments
-    /// alone: a report needs the guest token, and leaving should forget them).
+    /// alone: a report needs the guest token, and leaving should forget them;
+    /// nor a handover stamp alone).
     public var isEmpty: Bool {
         accessGrant == nil && accessGrantExpiresAt == nil && guestToken == nil && participantID == nil && nickname == nil
     }
