@@ -23,6 +23,8 @@ struct HomeView: View {
         let service: any HostService
         /// Loads moment thumbnails (host URLs carry their own signature).
         let mediaFetcher: MediaFetcher
+        /// "Download everything" to Photos.
+        let downloads: HostDownloads
     }
 
     @State private var link = ""

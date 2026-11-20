@@ -217,6 +217,88 @@
         }
       }
     },
+    "%lld moments couldn't be saved. Try again later.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld moment couldn't be saved. Try again later."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld moments couldn't be saved. Try again later."
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld souvenir n'a pas pu être enregistré. Réessayez plus tard."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld souvenirs n'ont pas pu être enregistrés. Réessayez plus tard."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld moments saved to Photos.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld moment saved to Photos."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld moments saved to Photos."
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld souvenir enregistré dans Photos."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld souvenirs enregistrés dans Photos."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld need attention": {
       "extractionState": "manual",
       "localizations": {
@@ -269,6 +351,17 @@
         }
       }
     },
+    "%lld of %lld saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld sur %lld enregistrés"
+          }
+        }
+      }
+    },
     "%lld of %lld shared": {
       "localizations": {
         "fr": {
@@ -296,6 +389,47 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld à vérifier"
+          }
+        }
+      }
+    },
+    "%lld videos can't be saved from the app yet.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld video can't be saved from the app yet."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld videos can't be saved from the app yet."
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld vidéo ne peut pas encore être enregistrée depuis l'app."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld vidéos ne peuvent pas encore être enregistrées depuis l'app."
+                }
+              }
+            }
           }
         }
       }
@@ -371,6 +505,47 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ajouté"
+          }
+        }
+      }
+    },
+    "All %lld moments to Photos": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld moment to Photos"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "All %lld moments to Photos"
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld souvenir dans Photos"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Les %lld souvenirs dans Photos"
+                }
+              }
+            }
           }
         }
       }
@@ -897,6 +1072,17 @@
         }
       }
     },
+    "Download everything": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout télécharger"
+          }
+        }
+      }
+    },
     "Each photo earns ^[%lld point](inflect: true), each video ^[%lld point](inflect: true).": {
       "localizations": {
         "fr": {
@@ -1100,6 +1286,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Commencer"
+          }
+        }
+      }
+    },
+    "Getting the list of moments…": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Récupération de la liste des souvenirs…"
           }
         }
       }
@@ -1425,6 +1622,17 @@
         }
       }
     },
+    "Keep Moments open until it's done.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gardez Moments ouvert jusqu'à la fin."
+          }
+        }
+      }
+    },
     "Large videos on Wi-Fi only": {
       "localizations": {
         "fr": {
@@ -1581,6 +1789,58 @@
           "stringUnit": {
             "state": "translated",
             "value": "Moments"
+          }
+        }
+      }
+    },
+    "Moments can't add to Photos any more. %lld moments were saved. Allow access in Settings to save the rest.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Moments can't add to Photos any more. %lld moment was saved. Allow access in Settings to save the rest."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Moments can't add to Photos any more. %lld moments were saved. Allow access in Settings to save the rest."
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Moments ne peut plus ajouter à Photos. %lld souvenir a été enregistré. Autorisez l'accès dans les Réglages pour enregistrer le reste."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Moments ne peut plus ajouter à Photos. %lld souvenirs ont été enregistrés. Autorisez l'accès dans les Réglages pour enregistrer le reste."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Moments can't add to Photos. Allow access in Settings, then try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moments ne peut pas ajouter à Photos. Autorisez l'accès dans les Réglages, puis réessayez."
           }
         }
       }
@@ -1792,6 +2052,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Activé, ^[%lld cœur](inflect: true)"
+          }
+        }
+      }
+    },
+    "Only the newest moments were included.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seuls les souvenirs les plus récents ont été inclus."
           }
         }
       }
@@ -2368,6 +2639,69 @@
         }
       }
     },
+    "Save every moment to Photos": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer tous les souvenirs dans Photos"
+          }
+        }
+      }
+    },
+    "Save to Photos": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer dans Photos"
+          }
+        }
+      }
+    },
+    "Saves the %lld moments guests can see to your Photos, one by one. Hidden moments stay out.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Saves the %lld moment guests can see to your Photos. Hidden moments stay out."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Saves the %lld moments guests can see to your Photos, one by one. Hidden moments stay out."
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Enregistre dans Photos le %lld souvenir visible par les invités. Les souvenirs masqués sont exclus."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Enregistre dans Photos, un par un, les %lld souvenirs visibles par les invités. Les souvenirs masqués sont exclus."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Saves your mobile data. Applies to what hasn't started sending.": {
       "localizations": {
         "fr": {
@@ -2779,6 +3113,17 @@
         }
       }
     },
+    "Stop": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêter"
+          }
+        }
+      }
+    },
     "Stopped.": {
       "extractionState": "manual",
       "localizations": {
@@ -2786,6 +3131,47 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arrêté."
+          }
+        }
+      }
+    },
+    "Stopped. %lld moments saved to Photos.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Stopped. %lld moment saved to Photos."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Stopped. %lld moments saved to Photos."
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Arrêté. %lld souvenir enregistré dans Photos."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Arrêté. %lld souvenirs enregistrés dans Photos."
+                }
+              }
+            }
           }
         }
       }
@@ -3028,6 +3414,17 @@
         }
       }
     },
+    "The moments couldn't be loaded. Try again later.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les souvenirs n'ont pas pu être chargés. Réessayez plus tard."
+          }
+        }
+      }
+    },
     "The moments guests love most": {
       "extractionState": "manual",
       "localizations": {
@@ -3087,6 +3484,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "L'envoi n'est pas arrivé intact."
+          }
+        }
+      }
+    },
+    "There are no moments to save yet.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il n'y a pas encore de souvenirs à enregistrer."
           }
         }
       }
@@ -3480,6 +3888,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mettez à jour Moments pour créer des événements."
+          }
+        }
+      }
+    },
+    "Update Moments to download this event.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettez Moments à jour pour télécharger cet événement."
           }
         }
       }

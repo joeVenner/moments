@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- iOS groundwork for "Download everything" (no screen yet): saves an event's visible moments to the host's library one by one, skipping hidden moments and videos only Stream can play.
+- iOS "Download everything" on a hosted event: saves every moment guests can see to Photos, one by one, with progress, Stop and a summary (failures, videos only Stream can play, a list cut at 500). Uses add-only Photos access, so the app never reads the library; the screen stays awake while it runs.
 - Hosting: a "Slideshow" row on the event screen opens the web slideshow in Safari or shares its link, for a big screen.
 - Hosting: "Print flyer" on the event screen shares an A6 PDF with the event's name, QR code and link (print it from the share sheet). It never carries the PIN or the invite link.
 - Hosting: the event screen's "Moderate moments" row shows how many moments wait for review as an orange badge, and the host screens reload when you come back to them so the counts stay current.

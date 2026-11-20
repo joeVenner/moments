@@ -21,6 +21,7 @@ struct HostEventDetailView: View {
     @State private var isConfirmingInviteCopy = false
     @State private var didCopyInvite = false
     @State private var editing: HostEventEdit?
+    @State private var isDownloading = false
     /// The first appearance loads through `.task`; later ones reload.
     @State private var hasAppeared = false
 
@@ -71,6 +72,9 @@ struct HostEventDetailView: View {
             case .privacy: HostEditPrivacyView(event: event, host: host, onDone: finishEditing)
             case .dates: HostEditDatesView(event: event, host: host, onDone: finishEditing)
             }
+        }
+        .sheet(isPresented: $isDownloading) {
+            EventDownloadView(eventID: event.id, visibleMoments: visibleMoments, host: host)
         }
         .confirmationDialog(
             Text("Copy the invite link?"),
@@ -127,6 +131,7 @@ struct HostEventDetailView: View {
     }
 
     private var event: Event { model.detail?.summary.event ?? summary.event }
+    private var visibleMoments: Int { model.detail.map { Self.visibleMoments($0.analytics) } ?? 0 }
     private var toReviewCount: Int { model.detail?.summary.toReviewCount ?? summary.toReviewCount }
 
     /// Everything the host can change, one row each, in one card.
@@ -154,6 +159,13 @@ struct HostEventDetailView: View {
                 .accessibilityHint(Text("Opens or shares the slideshow"))
                 rowDivider
             }
+            Button { isDownloading = true } label: {
+                HostManageRow(
+                    title: "Download everything", detail: EventDownloadView.rowLine(visibleMoments: visibleMoments),
+                    systemImage: "arrow.down.circle"
+                )
+            }
+            rowDivider
             Button { editing = .privacy } label: {
                 HostManageRow(title: "Privacy", detail: Self.privacyLine(event), systemImage: "lock")
             }
@@ -172,6 +184,11 @@ struct HostEventDetailView: View {
 
     private var rowDivider: some View {
         MomentsColor.border.frame(height: 1).padding(.leading, Spacing.md)
+    }
+
+    /// The moments guests can see: hidden ones stay out of the download.
+    static func visibleMoments(_ analytics: EventAnalytics) -> Int {
+        max(0, analytics.totalMoments - analytics.hiddenMoments)
     }
 
     /// On a private event the web slideshow asks for the PIN itself.
