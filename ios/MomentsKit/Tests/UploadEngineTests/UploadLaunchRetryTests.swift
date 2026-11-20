@@ -43,3 +43,26 @@ private final class Recorder: @unchecked Sendable {
         #expect(recorder.attempts == 3)
     }
 }
+
+@Suite struct UploadLaunchRetryAdoptionTests {
+    /// The first attempt's adoption happened even though its load failed:
+    /// the report keeps its counts.
+    @Test func keepsCountsFromEveryAttempt() async {
+        let attempts = AttemptLog()
+        let first = UploadLaunch.Report(loaded: nil, swept: nil, adoption: .init(moved: .init(adopted: 3), dropped: 1))
+        let second = UploadLaunch.Report(
+            loaded: QueueStore.Loaded(items: [], quarantined: 0, deferred: 0), swept: 0, adoption: .init(moved: .init(skipped: 1))
+        )
+        let report = await UploadLaunch.retrying(after: [.zero], sleep: { _ in }) {
+            attempts.next() == 0 ? first : second
+        }
+        #expect(report.adoption == .init(moved: .init(adopted: 3, skipped: 1), dropped: 1))
+        #expect(report.loaded != nil)
+    }
+}
+
+private final class AttemptLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func next() -> Int { lock.withLock { defer { count += 1 }; return count } }
+}

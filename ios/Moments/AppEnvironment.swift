@@ -57,10 +57,20 @@ struct AppEnvironment {
         let client = makeClient()
         // The app-hosted test run launches the app too: no real queue there.
         let isHostingTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-        let uploads = isHostingTests ? nil : startUploads(client: client, credentials: credentials)
+        // The Clip's uploads are taken over only once its guests are in the
+        // keychain: before that, every one would look like a stranger's.
+        let credentialsReady = credentialsArePrepared(credentialPreparation)
+        let uploads = isHostingTests ? nil : startUploads(client: client, credentials: credentials, adoptingClipQueue: credentialsReady)
         // No queue to hand session events to: release the system at once.
         if uploads == nil { BackgroundUploadEvents.connect { systemCompletion in systemCompletion() } }
         return make(client: client, credentials: credentials, hostSessions: hostSessions, uploads: uploads)
+    }
+
+    /// The first attempt at preparing credentials (the Clip's guests into the
+    /// keychain) worked: until it has, every Clip upload would look like a
+    /// stranger's.
+    static func credentialsArePrepared(_ preparation: RetryUntilDone?) -> Bool {
+        preparation?.isWaiting == false
     }
 
     /// The app's keychain stores, both in its own group, and the App Group
@@ -104,7 +114,10 @@ struct AppEnvironment {
         do {
             try CredentialHandoff.importFromClip(handover, into: own)
         } catch {
-            log.error("App Clip handoff failed: \(String(describing: error), privacy: .public)")
+            // Domain and code only: the error's description holds the
+            // group container's path.
+            let nsError = error as NSError
+            log.error("App Clip handoff failed: \(nsError.domain, privacy: .public) \(nsError.code, privacy: .public)")
             return false
         }
         return true
@@ -139,9 +152,13 @@ struct AppEnvironment {
     static let uploadSessionIdentifier = "com.moments-hq.moments.uploads"
 
     /// Builds the upload queue on the app's one background session, then
-    /// loads it, sweeps prepared files nothing owns, and runs it for the
-    /// app's life. Nil (uploads hidden) if the folders can't be set up.
-    private static func startUploads(client: MomentsClient, credentials: any EventCredentialStore) -> UploadDependencies? {
+    /// takes over what the App Clip left unsent (`adoptingClipQueue`; left
+    /// for a later launch otherwise), loads it, sweeps prepared files
+    /// nothing owns, and runs it for the app's life. Nil (uploads hidden) if
+    /// the folders can't be set up.
+    private static func startUploads(
+        client: MomentsClient, credentials: any EventCredentialStore, adoptingClipQueue: Bool
+    ) -> UploadDependencies? {
         let log = Logger(subsystem: "moments", category: "uploads")
         let hosts = StorageHostPolicy.moments
         let staging: StagingArea
@@ -155,9 +172,15 @@ struct AppEnvironment {
             return nil
         }
         let uploader = BackgroundPartUploader(identifier: uploadSessionIdentifier, service: client, staging: staging, hosts: hosts)
+        let lookup = uploadCredentialsLookup(store: credentials)
+        // Never created here: only a folder the Clip left.
+        let clipQueue = adoptingClipQueue
+            ? UploadFolders.clipBase(appGroup: CredentialGroups.appGroup).flatMap(UploadFolders.existing(at:))
+                .map { UploadLaunch.ClipQueue(folders: $0, strangersKeptFor: CredentialHandoff.handoffWindow, credentials: lookup) }
+            : nil
         let queue = UploadQueue(
             store: store, staging: staging, service: client, partUploader: uploader,
-            credentials: uploadCredentialsLookup(store: credentials),
+            credentials: lookup,
             thumbnailSender: URLSessionThumbnailSender(hosts: hosts)
         )
         let launchedAt = Date()
@@ -166,7 +189,10 @@ struct AppEnvironment {
             // A failed read leaves the queue unloaded, so it can be tried again
             // (a passing I/O error); after that, sharing reports a failure.
             let report = await UploadLaunch.retrying {
-                await UploadLaunch.prepare(queue: queue, store: store, staging: staging, launchedAt: launchedAt)
+                await UploadLaunch.prepare(queue: queue, store: store, staging: staging, launchedAt: launchedAt, adopting: clipQueue)
+            }
+            if let adoption = report.adoption {
+                log.info("App Clip uploads: \(adoption.moved.adopted, privacy: .public) taken over, \(adoption.moved.skipped, privacy: .public) left for later, \(adoption.moved.discarded, privacy: .public) discarded, \(adoption.dropped, privacy: .public) dropped")
             }
             guard let loaded = report.loaded else {
                 log.error("upload queue could not load")

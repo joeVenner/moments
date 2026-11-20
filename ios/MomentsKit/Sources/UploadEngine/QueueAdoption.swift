@@ -31,10 +31,11 @@ public enum QueueAdoption {
     }
 
     /// `targetStaging` must exist (`StagingArea.prepared`). Throws only when
-    /// the source folder can't be listed.
+    /// the source folder can't be listed. With `admitted`, any other record
+    /// (one that appeared after the caller checked) stays, as skipped.
     public static func adopt(
         from source: QueueStore, staging sourceStaging: StagingArea,
-        into target: QueueStore, staging targetStaging: StagingArea
+        into target: QueueStore, staging targetStaging: StagingArea, admitting admitted: Set<UUID>? = nil
     ) throws -> Report {
         let ids = try source.recordIDs()
         var report = Report()
@@ -43,6 +44,10 @@ public enum QueueAdoption {
             // below then fail and are tried again next run.
             try? target.prepareDirectory()
             for id in ids.sorted(by: { $0.uuidString < $1.uuidString }) {
+                if let admitted, !admitted.contains(id) {
+                    report.skipped += 1
+                    continue
+                }
                 adopt(id, from: source, sourceStaging, into: target, targetStaging, &report)
             }
         }

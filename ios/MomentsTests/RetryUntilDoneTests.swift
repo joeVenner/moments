@@ -28,4 +28,11 @@ import Testing
         center.post(name: trigger, object: nil)
         #expect(attempts == 1 && !retry.isWaiting)
     }
+
+    @Test func credentialsArePreparedOnlyAfterAFirstAttemptThatWorked() {
+        let center = NotificationCenter()
+        #expect(AppEnvironment.credentialsArePrepared(RetryUntilDone(on: trigger, center: center) { true }))
+        #expect(!AppEnvironment.credentialsArePrepared(RetryUntilDone(on: trigger, center: center) { false }))
+        #expect(!AppEnvironment.credentialsArePrepared(nil))
+    }
 }
