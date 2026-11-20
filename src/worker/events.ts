@@ -23,13 +23,16 @@ export interface LiveEventRef {
   uploads_open: number;
   /** 1 while sessions opened before the close may still finish (close + grace). */
   uploads_finishing: number;
+  /** For the plan check (eventPlanAccess); internal, never sent to clients. */
+  kind: EventRow["kind"];
+  owner_user_id: string | null;
 }
 
 /** Id of a live (not archived, not purged) event and whether it takes uploads, or null. */
 export async function getEventBySlug(db: D1Database, slug: string): Promise<LiveEventRef | null> {
   return db
     .prepare(
-      `SELECT id, ${UPLOADS_OPEN_SQL} AS uploads_open, ${UPLOADS_FINISHING_SQL} AS uploads_finishing
+      `SELECT id, ${UPLOADS_OPEN_SQL} AS uploads_open, ${UPLOADS_FINISHING_SQL} AS uploads_finishing, kind, owner_user_id
          FROM events WHERE ${ACTIVE_EVENT_FILTER}`
     )
     .bind(slug)

@@ -60,6 +60,7 @@ import {
 } from "../eventWrites";
 import { planAccess, testEventDates } from "../plans";
 import { loadLivePlan } from "../plansRepo";
+import { canGuestsShare } from "../eventPlanAccess";
 import { lifecycleChangeFrom, type SettingsResult, updateEventAccess, updateEventLifecycle } from "../eventSettings";
 import { deleteAdminMoment, listAdminMoments, setMomentModeration } from "../adminModeration";
 import {
@@ -1209,7 +1210,7 @@ v1.openapi(startUploadRoute, async (c) => {
       },
       {
         canStartNew: async () => {
-          if (!areUploadsOpen(event)) return "closed";
+          if (!areUploadsOpen(event) || !(await canGuestsShare(c.env.DB, event))) return "closed";
           return (await isUploadLimited(c, guest.sessionId)) ? "rate_limited" : "ok";
         },
         onCleanupError: (err) => logUploadError("v1_upload_cleanup_failed", { eventId: event.id }, err),

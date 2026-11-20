@@ -5,6 +5,7 @@ import { deleteAdminMoment } from "./adminModeration";
 import type { Env, EventRow, MomentRow, LeaderboardEntry, UploadRow } from "./types";
 import { insertEvent, normalizeDate } from "./eventWrites";
 import { OPERATOR_USER_ID } from "./hostSessions";
+import { canStartWebUpload, webUploaderEnv } from "./eventPlanAccess";
 import { upsertParticipant } from "./participants";
 import { lifecycleChangeFrom, type SettingsRefusal, updateEventAccess, updateEventLifecycle } from "./eventSettings";
 import { putMedia, pointsForContentType, isAllowedContentType, MAX_UPLOAD_BYTES, momentKey } from "./storage";
@@ -484,12 +485,12 @@ app.post("/api/events/:slug/moments", async (c) => {
   const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
   // New uploads only; sessions opened before the close may still finish.
-  if (!event.uploads_open) return c.json(UPLOADS_CLOSED, 403);
+  if (!(await canStartWebUpload(c.env.DB, event))) return c.json(UPLOADS_CLOSED, 403);
 
   // Parsed lazily: an enforced request without a token is refused unread.
   let parsed: Awaited<ReturnType<typeof c.req.parseBody>> | undefined;
   const readBody = async () => (parsed ??= await c.req.parseBody());
-  const uploader = await resolveWebUploader(c.env, {
+  const uploader = await resolveWebUploader(webUploaderEnv(c.env, event), {
     eventId: event.id,
     token: c.req.header(GUEST_TOKEN_HEADER),
     clientName: async () => (await readBody()).uploader_name,
@@ -735,14 +736,14 @@ app.post("/api/events/:slug/moments/stream/session", async (c) => {
   const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
   // New uploads only; sessions opened before the close may still finish.
-  if (!event.uploads_open) return c.json(UPLOADS_CLOSED, 403);
+  if (!(await canStartWebUpload(c.env.DB, event))) return c.json(UPLOADS_CLOSED, 403);
   if (!isStreamConfigured(c.env)) return c.json({ error: "Stream uploads are not configured" }, 501);
   const body = (await c.req.json().catch(() => null)) as {
     uploader_name?: unknown;
     content_type?: unknown;
     size?: unknown;
   } | null;
-  const uploader = await resolveWebUploader(c.env, {
+  const uploader = await resolveWebUploader(webUploaderEnv(c.env, event), {
     eventId: event.id,
     token: c.req.header(GUEST_TOKEN_HEADER),
     clientName: () => body?.uploader_name,
@@ -1017,7 +1018,7 @@ app.post("/api/events/:slug/moments/multipart/init", async (c) => {
   const event = await getEventBySlug(c.env.DB, c.req.param("slug"));
   if (!event) return c.json({ error: "event not found" }, 404);
   // New uploads only; sessions opened before the close may still finish.
-  if (!event.uploads_open) return c.json(UPLOADS_CLOSED, 403);
+  if (!(await canStartWebUpload(c.env.DB, event))) return c.json(UPLOADS_CLOSED, 403);
   if (!isR2Configured(c.env)) {
     return c.json({ error: "Large direct uploads are not configured" }, 501);
   }
@@ -1029,7 +1030,7 @@ app.post("/api/events/:slug/moments/multipart/init", async (c) => {
     filename?: unknown;
   } | null;
 
-  const uploader = await resolveWebUploader(c.env, {
+  const uploader = await resolveWebUploader(webUploaderEnv(c.env, event), {
     eventId: event.id,
     token: c.req.header(GUEST_TOKEN_HEADER),
     clientName: () => body?.uploader_name,
