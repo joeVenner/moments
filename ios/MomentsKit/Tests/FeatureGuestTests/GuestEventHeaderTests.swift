@@ -38,4 +38,10 @@ import Testing
         #expect(GuestEventHeader.headerLine(event(closes: closesAt), stats: nil) == "Sharing open until \(when)")
         #expect(GuestEventHeader.headerLine(event(closes: nil), stats: nil) == nil)
     }
+
+    @Test func thePillShowsShortPointsAndNeverANegative() {
+        #expect(GuestEventHeader.pointsLabel(210) == "210 pts")
+        #expect(GuestEventHeader.pointsLabel(0) == "0 pts")
+        #expect(GuestEventHeader.pointsLabel(-3) == "0 pts")
+    }
 }

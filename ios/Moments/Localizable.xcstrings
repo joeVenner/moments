@@ -413,6 +413,17 @@
         }
       }
     },
+    "%lld pts": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld pts"
+          }
+        }
+      }
+    },
     "%lld to %lld characters": {
       "localizations": {
         "fr": {
@@ -3017,6 +3028,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Affiche les options pour masquer ou supprimer."
+          }
+        }
+      }
+    },
+    "Shows the leaderboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affiche le classement"
           }
         }
       }

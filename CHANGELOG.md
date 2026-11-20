@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS event header shows the guest's avatar and points ("210 pts") top right; tapping it opens the leaderboard.
 - iOS event header shows how many moments and guests the event has, next to when sharing closes ("128 moments · 46 guests · open until …"), refreshed on pull to refresh and when new moments arrive.
 - The app API's event response now includes header counts: moments guests can see and guests in the event.
 - iOS "Download everything" on a hosted event: saves every moment guests can see to Photos, one by one, with progress, Stop and a summary (failures, videos only Stream can play, a list cut at 500). Uses add-only Photos access, so the app never reads the library; the screen stays awake while it runs.
