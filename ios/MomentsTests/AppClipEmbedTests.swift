@@ -108,7 +108,7 @@ import Testing
         let source = try String(contentsOf: file, encoding: .utf8)
         let offer = try #require(source.range(of: "private var shouldOfferApp: Bool {"))
         let gate = source[offer.upperBound...].prefix(600)
-        #expect(gate.contains("guard let join, upload == nil, !isShowingProgress, !isConfirmingLeave, leave?.phase != .leaving else { return false }"))
+        #expect(gate.contains("guard let join, upload == nil, !isShowingProgress, !isConfirmingLeave, (leave?.phase ?? .idle) == .idle else { return false }"))
         #expect(!gate.contains("activeCount"))
     }
 

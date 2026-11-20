@@ -169,7 +169,9 @@ struct ClipRootView: View {
         // Not over a sheet (it would cover the share button). While photos
         // are sending too: the app takes over what the Clip hasn't sent
         // (`UploadLaunch.prepare(adopting:)`) and goes on in the background.
-        guard let join, upload == nil, !isShowingProgress, !isConfirmingLeave, leave?.phase != .leaving else { return false }
+        // Nor while leaving is confirmed, running or reporting a failure
+        // (the banner would cover the alert's buttons).
+        guard let join, upload == nil, !isShowingProgress, !isConfirmingLeave, (leave?.phase ?? .idle) == .idle else { return false }
         if case .joined = join.phase { return true }
         return false
     }
