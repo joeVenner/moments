@@ -3,9 +3,11 @@ import Foundation
 /// Saves queued uploads, one JSON file per item named by its id, so a
 /// damaged or tampered record costs that item and never the whole queue.
 ///
-/// Lives in the app's own Application Support folder, not the App Group: a
-/// suspended app holding a file lock in a shared container is killed by the
-/// system (0xdead10cc). Files are excluded from backup (they point at staged
+/// The app's lives in its own Application Support folder. The App Clip's
+/// lives in the App Group (`UploadFolders.clip`) so the app can adopt it;
+/// that's safe because nothing here holds a file lock (records are written
+/// atomically, staged files only read), and a suspended app is killed
+/// (0xdead10cc) only for a lock held in a shared container. Files are excluded from backup (they point at staged
 /// files that aren't backed up either) and readable after first unlock, so a
 /// background wake while the phone is locked can still update them.
 ///
