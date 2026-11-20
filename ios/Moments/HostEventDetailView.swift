@@ -40,7 +40,7 @@ struct HostEventDetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(MomentsColor.background.ignoresSafeArea())
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarHiddenKeepingSwipeBack()
         .task { await model.load() }
         // The "copied" label is a moment's confirmation, not a lasting state.
         .task(id: didCopyInvite) {
