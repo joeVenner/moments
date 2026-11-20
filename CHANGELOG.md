@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Host API: each event in `GET /api/v1/admin/events` and its detail carries `guest_cap`, the guest limit the host is told (15 for a test event, the plan's tier for a main event, null for no limit). The iOS Hosting screen shows it as "Guests: 3 of 15" on event rows and "up to N guests" on the live card (English and French).
 - iOS guest app: in My events, an event whose host's plan has ended stays listed and reads "No longer hosted" (English and French).
 - iOS Hosting screen: the plan's test event carries a TEST chip on its row (read as "Test event" by VoiceOver; English and French).
 - iOS guest app: an event whose host's plan has ended now says "This event is no longer hosted" (when opening or joining it, and mid-visit on any tab) instead of a connection error with a retry that can't work (English and French).
