@@ -237,7 +237,7 @@ public final class JoinModel: Identifiable {
             unsavedJoin = nil
             hasUnsavedIdentity = false
         } catch {
-            logger.error("saving the guest identity failed: \(String(describing: error), privacy: .public)")
+            logger.error("saving the guest identity failed: \(String(describing: type(of: error)), privacy: .public) \(String(describing: error), privacy: .private)")
             // Only a newly issued token is irreplaceable; a confirmed
             // returning guest already has theirs stored.
             guard result.guestToken != nil else { return phase = .joined(event, result.participant) }
@@ -293,7 +293,7 @@ public final class JoinModel: Identifiable {
                 try clearStoredGrant()
             } catch {
                 // Not sent again (freshGrant is nil); the next unlock overwrites it.
-                logger.error("clearing a rejected grant failed: \(String(describing: error), privacy: .public)")
+                logger.error("clearing a rejected grant failed: \(String(describing: type(of: error)), privacy: .public) \(String(describing: error), privacy: .private)")
             }
             phase = .needsAccess(lapsed ? .expired : nil)
         } catch MomentsAPIError.eventNotFound {
@@ -308,7 +308,7 @@ public final class JoinModel: Identifiable {
             phase = .failed(.temporary)
         } catch {
             // The client only throws MomentsAPIError; anything else is the store.
-            logger.error("join step failed: \(String(describing: error), privacy: .public)")
+            logger.error("join step failed: \(String(describing: type(of: error)), privacy: .public) \(String(describing: error), privacy: .private)")
             phase = .failed(.storage)
         }
     }

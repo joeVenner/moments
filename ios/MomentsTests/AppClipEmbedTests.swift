@@ -20,15 +20,63 @@ import Testing
         }
     }
 
-    @Test func theClipHasItsOwnPrivacyManifest() throws {
-        let clip = try #require(clip)
-        let url = try #require(clip.url(forResource: "PrivacyInfo", withExtension: "xcprivacy"))
-        let manifest = try #require(
+    private func manifest(_ bundle: Bundle) throws -> [String: Any] {
+        let url = try #require(bundle.url(forResource: "PrivacyInfo", withExtension: "xcprivacy"))
+        return try #require(
             PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil) as? [String: Any]
         )
-        // The Clip only reads its link today: no tracking, nothing collected.
-        // Revisit with joining and uploading from the Clip.
-        #expect(manifest["NSPrivacyTracking"] as? Bool == false)
-        #expect((manifest["NSPrivacyCollectedDataTypes"] as? [Any])?.isEmpty == true)
+    }
+
+    private func values(_ manifest: [String: Any], _ list: String, _ key: String) -> Set<String> {
+        Set((manifest[list] as? [[String: Any]] ?? []).compactMap { $0[key] as? String })
+    }
+
+    @Test func theClipHasItsOwnPrivacyManifest() throws {
+        let clip = try manifest(try #require(clip))
+        let app = try manifest(.main)
+        #expect(clip["NSPrivacyTracking"] as? Bool == false)
+        // Joining sends a nickname and keeps a guest identity; photos only
+        // once the Clip uploads.
+        #expect(values(clip, "NSPrivacyCollectedDataTypes", "NSPrivacyCollectedDataType") == [
+            "NSPrivacyCollectedDataTypeUserID", "NSPrivacyCollectedDataTypeOtherUserContent",
+        ])
+        // The Clip links the app's guest code, so it uses the same
+        // required-reason APIs.
+        let apiTypes = "NSPrivacyAccessedAPITypes", apiType = "NSPrivacyAccessedAPIType"
+        #expect(!values(app, apiTypes, apiType).isEmpty)
+        #expect(values(clip, apiTypes, apiType) == values(app, apiTypes, apiType))
+    }
+
+    @Test func theClipHandsOverInTheAppsGroup() throws {
+        let clip = try #require(clip)
+        let group = try #require(Bundle.main.object(forInfoDictionaryKey: "MomentsAppGroup") as? String)
+        #expect(clip.object(forInfoDictionaryKey: "MomentsAppGroup") as? String == group)
+        #expect(clip.object(forInfoDictionaryKey: "MomentsKeychainGroup") == nil)
+    }
+
+    /// Security audit: only `ClipCredentials` builds the handover store, and
+    /// always behind the stamping store; nothing in the Clip touches the
+    /// keychain or host sessions.
+    @Test func onlyClipCredentialsBuildsTheHandoverStore() throws {
+        let folder = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "MomentsClip")
+        let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "swift" }
+        #expect(files.count >= 3)
+        for file in files {
+            let source = try String(contentsOf: file, encoding: .utf8)
+            let name = file.lastPathComponent
+            #expect(!source.contains("Keychain"), "\(name)")
+            #expect(!source.contains("HostSession"), "\(name)")
+            let builds = ["FileEventCredentialStore", "ClipSessionStore(", "HandoverStampingStore("]
+                .map { source.contains($0) }
+            if name == "ClipCredentials.swift" {
+                #expect(builds == [true, true, true])
+                // The file store is only ever reached through the stamping one.
+                #expect(source.contains(".map { HandoverStampingStore($0) }"))
+            } else {
+                #expect(builds == [false, false, false], "\(name)")
+            }
+        }
     }
 }
