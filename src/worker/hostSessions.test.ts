@@ -75,10 +75,10 @@ describe("host sessions", () => {
     expect(await resolveHostSession(sqlite.db, ENV, token, now)).toEqual({ ...session, userId: hostId, role: "host" });
   });
 
-  it("treats a session opened by older code (no user) as the operator's", async () => {
-    const { token, session } = await createHostSession(sqlite.db, ENV, now);
+  it("refuses a session that belongs to no user (opened by code older than 0023)", async () => {
+    const { token } = await createHostSession(sqlite.db, ENV, now);
     sqlite.raw.prepare("UPDATE host_sessions SET user_id = NULL").run();
-    expect(await resolveHostSession(sqlite.db, ENV, token, now)).toEqual(session);
+    expect(await resolveHostSession(sqlite.db, ENV, token, now)).toBeNull();
   });
 
   it("refuses a session linked to a user that doesn't exist", async () => {
