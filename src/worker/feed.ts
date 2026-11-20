@@ -30,6 +30,8 @@ export type FeedMoment = Omit<
   MomentRow,
   "moderation_status" | "seq" | "change_seq" | "reaction_count" | "reacted" | RawMediaColumn
 > & {
+  /** The sharer's participant id; null for moments from before guest ids. */
+  uploader_id: string | null;
   seq: number;
   change_seq: number;
   reaction_count: number;
@@ -88,7 +90,9 @@ export function clampLimit(raw: string | undefined, fallback: number, max: numbe
   return Math.min(Math.max(parsed, 1), max);
 }
 
-const MOMENT_COLUMNS = `m.id, m.event_id, m.uploader_name, m.media_url, m.caption, m.points_awarded,
+// `uploader_id` is the sharer's participant id (null for legacy rows), so a
+// guest can mute someone; the leaderboard already pairs ids with nicknames.
+const MOMENT_COLUMNS = `m.id, m.event_id, m.uploader_name, m.participant_id AS uploader_id, m.media_url, m.caption, m.points_awarded,
   m.created_at, m.size_bytes, m.mime_type, m.seq, m.change_seq,
   m.width, m.height, m.duration_ms, m.blurhash, m.thumb_key, m.display_key, m.poster_key,
   (SELECT COUNT(*) FROM moment_reactions r WHERE r.moment_id = m.id) AS reaction_count,

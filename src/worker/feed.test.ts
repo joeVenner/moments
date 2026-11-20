@@ -34,6 +34,20 @@ beforeEach(() => {
   seedEvent("event-2", "other");
 });
 
+describe("uploader id", () => {
+  it("names the sharer's participant for muting, and null for older moments", async () => {
+    addMoment("legacy");
+    run(
+      "INSERT INTO moments (id, event_id, uploader_name, media_url, participant_id) VALUES ('owned', 'event-1', 'Lea', '/media/owned.jpg', 'p-lea')"
+    );
+    const { moments } = await page(null, 10);
+    const ids = Object.fromEntries(moments.map((moment) => [moment.id, moment.uploader_id]));
+    expect(ids).toEqual({ owned: "p-lea", legacy: null });
+    const fresh = await changes(0);
+    expect(fresh.upserts.find((moment) => moment.id === "owned")?.uploader_id).toBe("p-lea");
+  });
+});
+
 describe("seq triggers", () => {
   it("numbers each event's moments independently, one counter step per insert", () => {
     addMoment("m1");

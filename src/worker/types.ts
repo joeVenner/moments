@@ -88,7 +88,8 @@ export interface MomentRow {
   size_bytes: number | null;
   mime_type: string | null;
   moderation_status: "approved" | "hidden";
-  /** The guest who shared it (0020); never sent to guests (webUploader.ts guestMoment). */
+  /** The guest who shared it (0020). Web `SELECT *` responses strip it (webUploader.ts
+   *  guestMoment); the app feed sends it as `uploader_id` (feed.ts), like the leaderboard. */
   participant_id?: string | null;
   /** Global upload order (migration 0011, trigger-assigned). */
   seq?: number | null;

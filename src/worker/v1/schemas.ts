@@ -87,6 +87,9 @@ export const MomentSchema = z
     id: z.string(),
     event_id: z.string(),
     uploader_name: z.string(),
+    uploader_id: z.string().nullable().optional().openapi({
+      description: "The sharer's participant id (as on the leaderboard), for muting; null for older moments.",
+    }),
     media_url: z.string(),
     caption: z.string().nullable(),
     points_awarded: z.number().int(),
