@@ -157,6 +157,15 @@ private final class Clock: @unchecked Sendable {
         await model.refresh()
         #expect(fatal == 1)
     }
+
+    @Test func handsOffAnEventNoLongerHosted() async {
+        let (model, service) = makeModel()
+        var fatal: [any Error] = []
+        model.onFatalError = { fatal.append($0) }
+        service.leaderboardResults = [.failure(MomentsAPIError.eventNotHosted)]
+        await model.refresh()
+        #expect(fatal.count == 1)
+    }
 }
 
 @Suite struct InitialsAvatarTests {

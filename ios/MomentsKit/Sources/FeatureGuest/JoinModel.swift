@@ -41,6 +41,8 @@ public final class JoinModel: Identifiable {
 
     public enum Failure: Equatable, Sendable {
         case eventNotFound
+        /// The host's plan no longer covers the event: guests can't open it.
+        case eventNotHosted
         case upgradeRequired
         /// Private events can't be unlocked right now (server not configured).
         case accessUnavailable
@@ -296,6 +298,8 @@ public final class JoinModel: Identifiable {
             phase = .needsAccess(lapsed ? .expired : nil)
         } catch MomentsAPIError.eventNotFound {
             phase = .failed(.eventNotFound)
+        } catch MomentsAPIError.eventNotHosted {
+            phase = .failed(.eventNotHosted)
         } catch MomentsAPIError.upgradeRequired {
             phase = .failed(.upgradeRequired)
         } catch MomentsAPIError.accessUnavailable {

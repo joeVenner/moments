@@ -376,6 +376,7 @@ private func makeModel(invite: InviteToken? = nil, store: InMemoryEventCredentia
 
     @Test(arguments: [
         (MomentsAPIError.eventNotFound, JoinModel.Failure.eventNotFound),
+        (.eventNotHosted, .eventNotHosted),
         (.upgradeRequired, .upgradeRequired),
         (.accessUnavailable, .accessUnavailable),
         (.transport(.notConnectedToInternet), .temporary),

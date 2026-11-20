@@ -22,11 +22,21 @@ public final class FeedModel {
         case guestRequired
     }
 
+    /// Whether this guest's event screen is over (every tab stops).
+    public var hasEnded: Bool {
+        switch phase {
+        case .accessLost, .guestRequired, .failed(.eventGone), .failed(.notHosted): true
+        case .loading, .loaded, .failed(.temporary): false
+        }
+    }
+
     public enum Failure: Equatable, Sendable {
         /// Network or server trouble; `loadFirstPage()` tries again.
         case temporary
         /// The event no longer exists.
         case eventGone
+        /// The host's plan no longer covers the event.
+        case notHosted
     }
 
     public static let pageSize = 60
@@ -247,7 +257,8 @@ public final class FeedModel {
     @discardableResult
     public func endIfFatal(_ error: any Error) -> Bool {
         switch error {
-        case MomentsAPIError.accessRequired, MomentsAPIError.eventNotFound, MomentsAPIError.guestRequired:
+        case MomentsAPIError.accessRequired, MomentsAPIError.eventNotFound, MomentsAPIError.eventNotHosted,
+             MomentsAPIError.guestRequired:
             handle(error, isBackground: true)
             return true
         default:
@@ -319,6 +330,9 @@ public final class FeedModel {
             reactionSenders.cancelAll()
         case MomentsAPIError.eventNotFound:
             phase = .failed(.eventGone)
+            reactionSenders.cancelAll()
+        case MomentsAPIError.eventNotHosted:
+            phase = .failed(.notHosted)
             reactionSenders.cancelAll()
         case MomentsAPIError.guestRequired:
             // Ends the screen, so no heart is retried with the dead token;

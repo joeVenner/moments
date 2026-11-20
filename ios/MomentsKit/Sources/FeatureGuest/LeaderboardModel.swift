@@ -90,7 +90,7 @@ public final class LeaderboardModel {
             switch error {
             case is CancellationError:
                 return
-            case MomentsAPIError.accessRequired, MomentsAPIError.eventNotFound:
+            case MomentsAPIError.accessRequired, MomentsAPIError.eventNotFound, MomentsAPIError.eventNotHosted:
                 end()
                 onFatalError?(error)
             case MomentsAPIError.rateLimited:

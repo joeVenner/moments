@@ -142,6 +142,7 @@ private func makeModel(store: InMemoryEventCredentialStore = .init()) -> (FeedMo
     @Test(arguments: [
         (MomentsAPIError.transport(.notConnectedToInternet), FeedModel.Phase.failed(.temporary)),
         (.eventNotFound, .failed(.eventGone)),
+        (.eventNotHosted, .failed(.notHosted)),
         (.accessRequired, .accessLost),
     ])
     func firstPageFailures(_ error: MomentsAPIError, _ expected: FeedModel.Phase) async {
@@ -217,6 +218,15 @@ private func makeModel(store: InMemoryEventCredentialStore = .init()) -> (FeedMo
         service.beforePage = nil
         await model.refresh()
         #expect(model.refreshFailed && model.phase == .loaded)
+    }
+
+    @Test func anotherTabSeeingTheEventUnhostedEndsTheFeed() async {
+        let (model, service) = makeModel()
+        service.pageResults = [.success(page(1...1))]
+        await model.loadFirstPage()
+        #expect(!model.hasEnded)
+        #expect(model.endIfFatal(MomentsAPIError.eventNotHosted))
+        #expect(model.phase == .failed(.notHosted) && model.hasEnded)
     }
 
     @Test func pollingEndsOnceTheFeedIsOver() async {
