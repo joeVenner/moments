@@ -13,6 +13,9 @@ protocol MomentBrowsing: AnyObject {
     @discardableResult func toggleReaction(onMomentID id: String) -> Task<Void, Never>?
     /// A page came on screen (the feed loads older moments near the end).
     func momentShown(_ moment: Moment)
+    /// Reports a moment to the host. An answer that ends the event ends
+    /// the screen too (so the viewer closes).
+    func report(momentID: String) async -> ReportOutcome
 }
 
 extension FeedModel: MomentBrowsing {

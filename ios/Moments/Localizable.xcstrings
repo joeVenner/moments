@@ -702,6 +702,17 @@
         }
       }
     },
+    "Couldn't send the report. Try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d'envoyer le signalement. Réessayez."
+          }
+        }
+      }
+    },
     "Couldn't sign in. Try again.": {
       "localizations": {
         "fr": {
@@ -2163,6 +2174,28 @@
         }
       }
     },
+    "Report": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signaler"
+          }
+        }
+      }
+    },
+    "Report this moment?": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signaler ce moment ?"
+          }
+        }
+      }
+    },
     "Sara & Omar": {
       "localizations": {
         "fr": {
@@ -2624,6 +2657,17 @@
         }
       }
     },
+    "Thanks, the host will take a look.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merci, l'hôte va y jeter un œil."
+          }
+        }
+      }
+    },
     "That PIN or invitation is not valid.": {
       "extractionState": "manual",
       "localizations": {
@@ -2784,6 +2828,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "L'hôte a modifié l'accès à cet événement. Rejoignez-le à nouveau pour continuer."
+          }
+        }
+      }
+    },
+    "The host will review it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'hôte va le vérifier."
           }
         }
       }
@@ -2997,6 +3052,17 @@
         }
       }
     },
+    "This moment is no longer here.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce moment n'est plus là."
+          }
+        }
+      }
+    },
     "This nickname is already taken in this event.": {
       "extractionState": "manual",
       "localizations": {
@@ -3132,6 +3198,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trop de personnes rejoignent depuis ce réseau. Réessayez dans une minute."
+          }
+        }
+      }
+    },
+    "Too many reports for now. Try again in a minute.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop de signalements pour l'instant. Réessayez dans une minute."
           }
         }
       }
