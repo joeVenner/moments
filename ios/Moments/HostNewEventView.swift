@@ -72,7 +72,9 @@ struct HostNewEventView: View {
         case .appTooOld: String(localized: "Update Moments to create events.")
         case .rateLimited: String(localized: "You've created a lot of events just now. Wait a minute and try again.")
         case .refused: String(localized: "The event couldn't be created with these details. Check the dates and try again.")
-        case .gone, .failed: String(localized: "The event couldn't be created. Try again.")
+        case .planRequired: String(localized: "You need a hosting plan to create events.")
+        case .noEventsLeft: String(localized: "Your plan has no events left. An Extra event adds one.")
+        case .gone, .datesFixed, .failed: String(localized: "The event couldn't be created. Try again.")
         }
     }
 }

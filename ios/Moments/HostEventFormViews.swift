@@ -326,7 +326,9 @@ enum HostEventFormText {
         case .rateLimited: String(localized: "Too many changes just now. Wait a minute and try again.")
         case .refused: String(localized: "These changes couldn't be saved. Check the dates and try again.")
         case .gone: String(localized: "This event was deleted.")
-        case .failed: String(localized: "That didn't work, so nothing changed. Try again.")
+        case .planRequired: String(localized: "Your hosting plan doesn't allow this right now. Resubscribe to bring everything back.")
+        case .datesFixed: String(localized: "A test event's dates come from your plan, so they can't be changed.")
+        case .noEventsLeft, .failed: String(localized: "That didn't work, so nothing changed. Try again.")
         }
     }
 

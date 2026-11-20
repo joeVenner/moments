@@ -222,6 +222,7 @@ struct HostEventDetailView: View {
         case .gone: String(localized: "This event was deleted.")
         case .failed(.offline): String(localized: "You're offline. Pull down to try again.")
         case .failed(.appTooOld): String(localized: "Update Moments to see this event.")
+        case .failed(.planRequired): String(localized: "Your hosting plan doesn't allow this right now. Resubscribe to bring everything back.")
         case .failed(.failed): String(localized: "This event couldn't be loaded. Pull down to try again.")
         }
     }

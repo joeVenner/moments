@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS host screens explain plan refusals instead of a generic error: no plan to create events, no events left (an Extra event adds one), a test event's fixed dates, and "your hosting plan doesn't allow this right now" when viewing, editing or moderating an event the plan no longer covers (English and French).
 - iOS: joining a full event now says so ("This event is full…", in English and French) instead of a generic error.
 - iOS client: plan errors now have their own named cases (`planRequired`, `noEventsLeft`, `testEventDatesFixed`, `guestCapReached`) instead of a generic server error, so screens can show the paywall or a clear message.
 - Host routes on events a plan pays for follow the host's plan: editing, changing access or dates needs a plan that allows editing; hiding or deleting moments needs moderation (still allowed while a payment is retried); reading the event and its moments works until the read-only window after a lapse ends. Otherwise the app API answers `plan_required` (402). The operator and events from before plans are unaffected.

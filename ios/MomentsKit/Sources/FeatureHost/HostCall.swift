@@ -6,12 +6,16 @@ import OSLog
 public enum HostLoadFailure: Equatable, Sendable {
     case offline
     case appTooOld
+    /// The host's plan doesn't cover this (none, ended, or a payment is
+    /// failing): resubscribing brings it back.
+    case planRequired
     case failed
 
     static func from(_ error: any Error) -> HostLoadFailure {
         switch error as? MomentsAPIError {
         case .transport: .offline
         case .upgradeRequired: .appTooOld
+        case .planRequired: .planRequired
         default: .failed
         }
     }

@@ -348,6 +348,7 @@ enum HostModeration {
         case .gone: String(localized: "This event was deleted.")
         case .failed(.offline): String(localized: "You're offline. Pull down to try again.")
         case .failed(.appTooOld): String(localized: "Update Moments to moderate this event.")
+        case .failed(.planRequired): String(localized: "Your hosting plan doesn't allow this right now. Resubscribe to bring everything back.")
         case .failed(.failed): String(localized: "The moments couldn't be loaded. Pull down to try again.")
         }
     }
@@ -357,6 +358,7 @@ enum HostModeration {
         case .offline: String(localized: "You're offline, so nothing changed. Try again when you're connected.")
         case .appTooOld: String(localized: "Update Moments to moderate this event.")
         case .mediaKept: String(localized: "The moment's files couldn't be deleted, so it was kept. Try again in a moment.")
+        case .planRequired: String(localized: "Your hosting plan doesn't allow this right now. Resubscribe to bring everything back.")
         case .failed: String(localized: "That didn't work, so nothing changed. Try again.")
         }
     }
