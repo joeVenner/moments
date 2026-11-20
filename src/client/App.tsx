@@ -22,12 +22,14 @@ function RouteFallback() {
 export default function App() {
   const { pathname } = useLocation();
   const isSlideshow = pathname.endsWith("/slideshow");
+  // The landing brings its own nav, language toggle and footer.
+  const hasSiteChrome = !isSlideshow && pathname !== "/";
 
   return (
     <I18nProvider>
       <ClickSpark />
-      {!isSlideshow && <Header />}
-      {!isSlideshow && <LanguageSwitcher />}
+      {hasSiteChrome && <Header />}
+      {hasSiteChrome && <LanguageSwitcher />}
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -36,7 +38,7 @@ export default function App() {
           <Route path="/e/:slug/slideshow" element={<Slideshow />} />
         </Routes>
       </Suspense>
-      {!isSlideshow && <Footer />}
+      {hasSiteChrome && <Footer />}
     </I18nProvider>
   );
 }
