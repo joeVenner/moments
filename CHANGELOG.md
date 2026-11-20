@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS App Clip: while your photos are sending, it offers the full app, which keeps sending them in the background.
 - iOS: photos and videos the App Clip hadn't finished sending are picked up and sent by the full app after it's installed.
 - iOS App Clip: unfinished uploads are kept in the storage shared with the full app (groundwork for the app finishing them).
 - iOS: the upload engine can adopt another queue's unfinished uploads (groundwork for continuing App Clip uploads in the app).
