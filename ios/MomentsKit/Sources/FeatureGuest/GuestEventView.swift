@@ -53,7 +53,9 @@ public struct GuestEventView: View {
                 VStack(spacing: 0) {
                     if join.hasUnsavedIdentity { unsavedBanner }
                     if leave != nil || progress != nil || onHome != nil { topBar }
-                    GuestEventHeader(event: feed.event, stats: feed.stats, section: $section)
+                    GuestEventHeader(event: feed.event, stats: feed.stats, myEntry: leaderboard.myEntry, section: $section)
+                        // New moments change points too; the board waits 30 s between loads.
+                        .task(id: feed.stats) { await leaderboard.loadIfStale() }
                     // Every opened section stays alive, keeping its scroll.
                     ZStack {
                         FeedView(model: feed, thumbnails: thumbnails, viewerImages: viewerImages, isSelected: section == .moments)
@@ -355,30 +357,74 @@ struct GuestEventHeader: View {
     let event: Event
     /// The counts line; nil (an older server) keeps the sharing line alone.
     var stats: EventStats?
+    /// The guest's leaderboard entry, for the points pill; nil hides it.
+    var myEntry: LeaderboardEntry?
     @Binding var section: GuestEventSection
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            VStack(alignment: .leading, spacing: Spacing.xxs) {
-                Text(verbatim: event.title)
-                    .font(MomentsFont.display(.title))
-                    .foregroundStyle(MomentsColor.text)
-                    .accessibilityAddTraits(.isHeader)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let line = Self.headerLine(event, stats: stats) {
-                    Text(line)
-                        .font(MomentsFont.caption())
-                        .foregroundStyle(MomentsColor.textMuted)
-                        // VoiceOver would read the separators as "dot".
-                        .accessibilityLabel(Text(verbatim: line.replacingOccurrences(of: " · ", with: ", ")))
-                }
+            // Large text: the title needs the width, so the pill goes below.
+            let layout = typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.sm))
+                : AnyLayout(HStackLayout(alignment: .top, spacing: Spacing.sm))
+            layout {
+                titleBlock
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let myEntry { pointsPill(myEntry) }
             }
             sectionPicker
         }
         .padding(.horizontal, Spacing.md)
         .padding(.bottom, Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The guest's avatar and points; opens the leaderboard.
+    private func pointsPill(_ entry: LeaderboardEntry) -> some View {
+        Button { section = .leaderboard } label: {
+            HStack(spacing: Spacing.xs) {
+                GuestAvatar(nickname: entry.nickname, seed: entry.avatarSeed, size: 30)
+                Text(Self.pointsLabel(entry.totalPoints))
+                    .font(MomentsFont.caption().weight(.semibold))
+                    .foregroundStyle(MomentsColor.text)
+            }
+            .padding(.leading, Spacing.xxs)
+            .padding(.trailing, Spacing.sm)
+            .frame(minHeight: 40)
+            .background(MomentsColor.surface, in: Capsule())
+            .overlay(Capsule().stroke(MomentsColor.border, lineWidth: 1))
+            // The capsule looks 40 pt tall; the tap area is the full 44.
+            .frame(minHeight: Radius.minimumTapTarget)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("^[\(entry.totalPoints) point](inflect: true)"))
+        .accessibilityHint(Text("Shows the leaderboard"))
+    }
+
+    /// "210 pts": short, for the pill.
+    static func pointsLabel(_ points: Int) -> String {
+        String(localized: "\(max(0, points)) pts")
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            Text(verbatim: event.title)
+                .font(MomentsFont.display(.title))
+                .foregroundStyle(MomentsColor.text)
+                .accessibilityAddTraits(.isHeader)
+                .fixedSize(horizontal: false, vertical: true)
+            if let line = Self.headerLine(event, stats: stats) {
+                Text(line)
+                    .font(MomentsFont.caption())
+                    .foregroundStyle(MomentsColor.textMuted)
+                    // VoiceOver would read the separators as "dot".
+                    .accessibilityLabel(Text(verbatim: line.replacingOccurrences(of: " · ", with: ", ")))
+            }
+        }
     }
 
     @ViewBuilder private var sectionPicker: some View {
