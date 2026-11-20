@@ -51,7 +51,12 @@ final class FakeHostService: HostService, @unchecked Sendable {
         get { lock.withLock { _planResult } }
         set { lock.withLock { _planResult = newValue } }
     }
-    func hostPlan(token: String) async throws -> HostPlan? { try planResult.get() }
+    private var _planTokens: [String] = []
+    var planTokens: [String] { lock.withLock { _planTokens } }
+    func hostPlan(token: String) async throws -> HostPlan? {
+        lock.withLock { _planTokens.append(token) }
+        return try planResult.get()
+    }
 
     /// `holdsSignIn: false` holds only event requests.
     init(holding gate: Gate? = nil, holdsSignIn: Bool = true) {
@@ -563,6 +568,50 @@ private func plan(
         let model = HostEventsModel(service: service, account: account(service, store: FlakyHostStore(live)))
         await model.load()
         #expect(model.phase == .loaded && model.plan == plan(.active))
+    }
+
+    @Test func asksForThePlanWithoutWaitingForTheEvents() async {
+        let gate = Gate()
+        let service = FakeHostService(holding: gate)
+        service.planResult = .success(plan(.active))
+        let model = HostEventsModel(service: service, account: account(service, store: FlakyHostStore(live)))
+        let loading = Task { await model.load() }
+        // The events are held open, yet the plan request has gone out.
+        while service.planTokens.isEmpty { await Task.yield() }
+        #expect(service.planTokens == ["hs_live"] && model.plan == nil)
+        await gate.open()
+        await loading.value
+        #expect(model.phase == .loaded && model.plan == plan(.active))
+    }
+
+    @Test func aPlanFromBeforeSigningInAgainIsNotShown() async {
+        let gate = Gate()
+        let service = FakeHostService(holding: gate, holdsSignIn: false)
+        service.planResult = .success(plan(.active))
+        let host = account(service, store: FlakyHostStore(live))
+        let model = HostEventsModel(service: service, account: host)
+        let loading = Task { await model.load() }
+        // The plan answers for the old session; then the host signs in again
+        // while the events are still held.
+        while service.planTokens.isEmpty || service.eventTokens.isEmpty { await Task.yield() }
+        // Let the plan's answer settle for the old session first.
+        for _ in 0..<200 { await Task.yield() }
+        await host.signOut()
+        service.signInResult = .success(HostSession(token: "hs_new", subject: "operator", expiresAt: later))
+        _ = await host.signIn(username: "admin", password: "pw")
+        await gate.open()
+        await loading.value
+        #expect(service.planTokens == ["hs_live"] && service.eventTokens == ["hs_live", "hs_new"])
+        #expect(model.phase == .loaded && model.plan == nil)
+    }
+
+    @Test func aPlanIsNotShownWhenTheEventsFail() async {
+        let service = FakeHostService()
+        service.eventsResult = .failure(MomentsAPIError.transport(.timedOut))
+        service.planResult = .success(plan(.active))
+        let model = HostEventsModel(service: service, account: account(service, store: FlakyHostStore(live)))
+        await model.load()
+        #expect(model.phase == .failed(.offline) && model.plan == nil)
     }
 
     @Test func aPlanThatWontLoadKeepsTheLastOneAndTheList() async {
