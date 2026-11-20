@@ -17,6 +17,8 @@ struct AppEnvironment {
     /// Built once here: the account reads the keychain when created.
     let hostAccount: HostAccount
     let hostEvents: HostEventsModel
+    /// "Download everything": files from the API origin into Photos.
+    let hostDownloads: HostDownloads
 
     static let productionBaseURL = URL(string: "https://moments-hq.com")!
 
@@ -76,7 +78,8 @@ struct AppEnvironment {
         let hostAccount = HostAccount(service: client, store: hostSessions)
         return AppEnvironment(
             service: client, credentials: credentials, guest: guest, hostService: client,
-            hostAccount: hostAccount, hostEvents: HostEventsModel(service: client, account: hostAccount)
+            hostAccount: hostAccount, hostEvents: HostEventsModel(service: client, account: hostAccount),
+            hostDownloads: makeHostDownloads()
         )
     }
 
@@ -160,6 +163,17 @@ struct AppEnvironment {
             fatalError("the production base URL must be accepted")
         }
         return fetcher
+    }
+
+    /// The same base URL as the client, so the files the model accepts are
+    /// the ones the downloader may fetch.
+    private static func makeHostDownloads() -> HostDownloads {
+        for origin in [baseURL, productionBaseURL] {
+            if let downloader = try? MediaFileDownloader(baseURL: origin, identity: .fromBundle()) {
+                return HostDownloads(origin: origin, downloader: downloader, saver: PhotoLibrarySaver())
+            }
+        }
+        fatalError("the production base URL must be accepted")
     }
 
     private static func makeClient() -> MomentsClient {

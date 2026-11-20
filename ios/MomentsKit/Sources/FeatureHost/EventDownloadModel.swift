@@ -43,6 +43,14 @@ public final class EventDownloadModel {
         public let isTruncated: Bool
         /// Stopped before the end.
         public let wasCancelled: Bool
+
+        public init(saved: Int, failed: Int, skippedVideos: Int, isTruncated: Bool, wasCancelled: Bool) {
+            self.saved = saved
+            self.failed = failed
+            self.skippedVideos = skippedVideos
+            self.isTruncated = isTruncated
+            self.wasCancelled = wasCancelled
+        }
     }
 
     public enum Failure: Equatable, Sendable {

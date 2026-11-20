@@ -38,7 +38,8 @@ struct RootView: View {
             } else {
                 AppShell(navigation: navigation, myEvents: myEvents, host: HomeView.Host(
                     account: environment.hostAccount, events: environment.hostEvents,
-                    service: environment.hostService, mediaFetcher: environment.guest.mediaFetcher
+                    service: environment.hostService, mediaFetcher: environment.guest.mediaFetcher,
+                    downloads: environment.hostDownloads
                 ), notice: notice)
             }
         }
