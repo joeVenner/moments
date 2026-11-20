@@ -122,7 +122,7 @@ struct ClipRootView: View {
         .onChange(of: progress?.sendingSnapshot) { old, new in
             guard let old, let new, !hasLeft, (leave?.phase ?? .idle) == .idle,
                   let announcement = SendingAnnouncement.change(from: old, to: new) else { return }
-            AccessibilityNotification.Announcement(Self.message(for: announcement)).post()
+            AccessibilityNotification.Announcement(announcement.message).post()
         }
         // Follows this event's uploads for the button and the overlay.
         .task(id: eventLink?.slug) {
@@ -190,14 +190,6 @@ struct ClipRootView: View {
             LeaveModel(slug: link.slug, service: Self.client, store: Self.store, uploads: Self.uploads?.leaving)
         }
         hasLeft = false
-    }
-
-    private static func message(for announcement: SendingAnnouncement) -> String {
-        switch announcement {
-        case .started: String(localized: "Sending your photos.")
-        case .allSent: String(localized: "Your photos are sent.")
-        case let .someFailed(count): String(localized: "\(count) photos couldn't be sent. Open Your uploads to try again.")
-        }
     }
 
     private func startLeaving(_ leave: LeaveModel) {

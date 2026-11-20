@@ -1303,6 +1303,7 @@
       }
     },
     "Sending your photos.": {
+      "extractionState": "manual",
       "localizations": {
         "fr": {
           "stringUnit": {
@@ -2102,6 +2103,7 @@
       }
     },
     "Your photos are sent.": {
+      "extractionState": "manual",
       "localizations": {
         "fr": {
           "stringUnit": {

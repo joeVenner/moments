@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS app: VoiceOver announces when uploads start, finish, or fail on an event's screen, as in the App Clip.
 - iOS App Clip: VoiceOver announces when photos start sending, are sent, or couldn't be sent.
 - iOS App Clip: guests can leave an event and delete what they shared, without installing the app.
 - iOS App Clip: finished uploads, and ones more than a week old, are cleared from the storage it shares with the app.

@@ -173,6 +173,13 @@ public struct GuestEventView: View {
                 progress = UploadProgressModel.live(eventSlug: join.slug.value, source: source)
             }
         }
+        // VoiceOver hears uploads start and finish, as in the App Clip. Not
+        // while leaving: that drops queued items, which were never sent.
+        .onChange(of: progress?.sendingSnapshot) { old, new in
+            guard let old, let new, (leave?.phase ?? .idle) == .idle,
+                  let announcement = SendingAnnouncement.change(from: old, to: new) else { return }
+            AccessibilityNotification.Announcement(announcement.message).post()
+        }
         .onChange(of: leave?.phase) { _, phase in
             guard phase == .left else { return }
             upload?.discardAll()
