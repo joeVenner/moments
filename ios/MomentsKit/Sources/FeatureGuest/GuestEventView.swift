@@ -53,7 +53,7 @@ public struct GuestEventView: View {
                 VStack(spacing: 0) {
                     if join.hasUnsavedIdentity { unsavedBanner }
                     if leave != nil || progress != nil || onHome != nil { topBar }
-                    GuestEventHeader(event: feed.event, section: $section)
+                    GuestEventHeader(event: feed.event, stats: feed.stats, section: $section)
                     // Every opened section stays alive, keeping its scroll.
                     ZStack {
                         FeedView(model: feed, thumbnails: thumbnails, viewerImages: viewerImages, isSelected: section == .moments)
@@ -353,6 +353,8 @@ private extension View {
 /// The event's name, when sharing closes, and the section switcher.
 struct GuestEventHeader: View {
     let event: Event
+    /// The counts line; nil (an older server) keeps the sharing line alone.
+    var stats: EventStats?
     @Binding var section: GuestEventSection
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -364,10 +366,12 @@ struct GuestEventHeader: View {
                     .foregroundStyle(MomentsColor.text)
                     .accessibilityAddTraits(.isHeader)
                     .fixedSize(horizontal: false, vertical: true)
-                if let line = Self.sharingLine(event) {
+                if let line = Self.headerLine(event, stats: stats) {
                     Text(line)
                         .font(MomentsFont.caption())
                         .foregroundStyle(MomentsColor.textMuted)
+                        // VoiceOver would read the separators as "dot".
+                        .accessibilityLabel(Text(verbatim: line.replacingOccurrences(of: " · ", with: ", ")))
                 }
             }
             sectionPicker
@@ -392,10 +396,27 @@ struct GuestEventHeader: View {
         }
     }
 
+    /// "128 moments · 46 guests · open until 21 Nov, 21:00". Without counts,
+    /// just "Sharing open until …"; nil when there is nothing to say.
+    static func headerLine(_ event: Event, stats: EventStats?) -> String? {
+        guard let stats else { return sharingLine(event) }
+        var parts = [
+            String(localized: "\(stats.momentCount) moments"),
+            String(localized: "\(stats.guestCount) guests"),
+        ]
+        if let when = openUntil(event) { parts.append(String(localized: "open until \(when)")) }
+        return parts.joined(separator: " · ")
+    }
+
     /// "Sharing open until 21 Nov, 21:00"; nil once closed or with no end.
-    static func sharingLine(_ event: Event) -> LocalizedStringResource? {
+    static func sharingLine(_ event: Event) -> String? {
+        guard let when = openUntil(event) else { return nil }
+        return String(localized: "Sharing open until \(when)")
+    }
+
+    /// When sharing closes, formatted; nil once closed or with no end.
+    private static func openUntil(_ event: Event) -> String? {
         guard event.areUploadsOpen, event.archivedAt == nil, let closesAt = event.effectiveUploadsCloseAt else { return nil }
-        let when = closesAt.formatted(date: .abbreviated, time: .shortened)
-        return "Sharing open until \(when)"
+        return closesAt.formatted(date: .abbreviated, time: .shortened)
     }
 }

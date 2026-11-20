@@ -94,6 +94,47 @@
         }
       }
     },
+    "%lld guests": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld guest"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld guests"
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld invité"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld invités"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld hidden": {
       "extractionState": "manual",
       "localizations": {
@@ -4625,6 +4666,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reported"
+          }
+        }
+      }
+    },
+    "open until %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ouvert jusqu'au %@"
           }
         }
       }
