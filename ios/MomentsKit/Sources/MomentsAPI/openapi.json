@@ -95,6 +95,113 @@
           "password"
         ]
       },
+      "HostPlanResponse": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/HostPlan"
+          }
+        },
+        "required": [
+          "plan"
+        ]
+      },
+      "HostPlan": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "state": {
+            "type": "string",
+            "description": "active: paid and renewing; canceling: paid until period_ends_at, won't renew; grace: a payment failed, full service; billing_retry: guests view only, the host reads and moderates; lapsed / revoked (refunded): the host can download until readonly_until"
+          },
+          "product_id": {
+            "type": "string",
+            "description": "The tier in force, e.g. `host_150`"
+          },
+          "guest_cap": {
+            "type": "integer",
+            "description": "Guests per main event on this tier (joins get 10% grace above it)"
+          },
+          "pending_product_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A downgrade that applies at the next renewal"
+          },
+          "period_ends_at": {
+            "type": "string",
+            "description": "UTC, `YYYY-MM-DD HH:MM:SS`: the end of the paid period",
+            "example": "2026-11-17 18:30:00"
+          },
+          "test_window_ends_at": {
+            "type": "string",
+            "description": "UTC, `YYYY-MM-DD HH:MM:SS`: the test event is live until then",
+            "example": "2026-11-17 18:30:00"
+          },
+          "grace_ends_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "While in grace: when Apple's grace period ends",
+            "example": "2026-11-17 18:30:00"
+          },
+          "readonly_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Once the plan ended: downloads stop and data is deleted after this",
+            "example": "2026-11-17 18:30:00"
+          },
+          "can_edit": {
+            "type": "boolean",
+            "description": "Create events and change their settings"
+          },
+          "can_moderate": {
+            "type": "boolean",
+            "description": "Hide or delete moments"
+          },
+          "can_download": {
+            "type": "boolean",
+            "description": "Open events and download everything"
+          },
+          "events_left": {
+            "type": "object",
+            "properties": {
+              "main": {
+                "type": "integer"
+              },
+              "test": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "main",
+              "test"
+            ],
+            "description": "Events that can be created right now, by kind (0 when the plan doesn't allow creating)"
+          }
+        },
+        "required": [
+          "state",
+          "product_id",
+          "guest_cap",
+          "pending_product_id",
+          "period_ends_at",
+          "test_window_ends_at",
+          "grace_ends_at",
+          "readonly_until",
+          "can_edit",
+          "can_moderate",
+          "can_download",
+          "events_left"
+        ],
+        "description": "Null when the host has no plan (or is the operator)"
+      },
       "AdminEventList": {
         "type": "object",
         "properties": {
@@ -1479,6 +1586,62 @@
           },
           "401": {
             "description": "`host_auth_required`: no live session for this token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "This app build is too old; show the update screen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/plan": {
+      "get": {
+        "operationId": "getHostPlan",
+        "tags": [
+          "Host"
+        ],
+        "summary": "The signed-in host's hosting plan: state, dates, rights and events left",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The plan, or null when there is none",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostPlanResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`host_auth_required`: sign in again",
             "content": {
               "application/json": {
                 "schema": {

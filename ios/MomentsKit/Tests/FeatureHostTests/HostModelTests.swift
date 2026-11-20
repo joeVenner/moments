@@ -46,6 +46,8 @@ final class FakeHostService: HostService, @unchecked Sendable {
     let beforeAnswer: Gate?
     private let holdsSignIn: Bool
 
+    func hostPlan(token: String) async throws -> HostPlan? { nil }
+
     /// `holdsSignIn: false` holds only event requests.
     init(holding gate: Gate? = nil, holdsSignIn: Bool = true) {
         beforeAnswer = gate

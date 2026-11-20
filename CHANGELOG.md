@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- App API: `GET /api/v1/admin/plan` returns the signed-in host's hosting plan: state, tier and guest cap, dates, what the host may do now, and how many events of each kind they can still create (null without a plan). The iOS client reads it as `HostPlan`.
 - iOS host screens explain plan refusals instead of a generic error: no plan to create events, no events left (an Extra event adds one), a test event's fixed dates, and "your hosting plan doesn't allow this right now" when viewing, editing or moderating an event the plan no longer covers (English and French).
 - iOS: joining a full event now says so ("This event is full…", in English and French) instead of a generic error.
 - iOS client: plan errors now have their own named cases (`planRequired`, `noEventsLeft`, `testEventDatesFixed`, `guestCapReached`) instead of a generic server error, so screens can show the paywall or a clear message.

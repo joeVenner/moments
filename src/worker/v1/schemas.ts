@@ -360,6 +360,32 @@ export const HostSessionSchema = z
   })
   .openapi("HostSession");
 
+export const HostPlanSchema = z
+  .object({
+    state: z.enum(["active", "canceling", "grace", "billing_retry", "lapsed", "revoked"]).openapi({
+      description:
+        "active: paid and renewing; canceling: paid until period_ends_at, won't renew; grace: a payment failed, full service; billing_retry: guests view only, the host reads and moderates; lapsed / revoked (refunded): the host can download until readonly_until",
+    }),
+    product_id: z.string().openapi({ description: "The tier in force, e.g. `host_150`" }),
+    guest_cap: z.number().int().openapi({ description: "Guests per main event on this tier (joins get 10% grace above it)" }),
+    pending_product_id: z.string().nullable().openapi({ description: "A downgrade that applies at the next renewal" }),
+    period_ends_at: timestamp.openapi({ description: "UTC, `YYYY-MM-DD HH:MM:SS`: the end of the paid period" }),
+    test_window_ends_at: timestamp.openapi({ description: "UTC, `YYYY-MM-DD HH:MM:SS`: the test event is live until then" }),
+    grace_ends_at: timestamp.nullable().openapi({ description: "While in grace: when Apple's grace period ends" }),
+    readonly_until: timestamp.nullable().openapi({ description: "Once the plan ended: downloads stop and data is deleted after this" }),
+    can_edit: z.boolean().openapi({ description: "Create events and change their settings" }),
+    can_moderate: z.boolean().openapi({ description: "Hide or delete moments" }),
+    can_download: z.boolean().openapi({ description: "Open events and download everything" }),
+    events_left: z
+      .object({ main: z.number().int(), test: z.number().int() })
+      .openapi({ description: "Events that can be created right now, by kind (0 when the plan doesn't allow creating)" }),
+  })
+  .openapi("HostPlan");
+
+export const HostPlanResponseSchema = z
+  .object({ plan: HostPlanSchema.nullable().openapi({ description: "Null when the host has no plan (or is the operator)" }) })
+  .openapi("HostPlanResponse");
+
 export const AdminEventSchema = EventSchema.extend({
   kind: z.enum(["legacy", "operator", "main", "test"]).openapi({
     description:

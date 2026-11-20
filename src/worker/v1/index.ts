@@ -49,6 +49,7 @@ import {
 import { ADMIN_RETRY_AFTER_SECONDS, attemptAdminLogin } from "../adminLogin";
 import { getAdminEventDetail, listAdminEvents } from "../adminEvents";
 import { findHostEvent, findHostMomentEvent, ownerScope, type HostEventRef } from "../eventOwnership";
+import { loadHostPlanView, type HostPlanView } from "../hostPlan";
 import {
   insertEvent,
   insertPlanEvent,
@@ -111,6 +112,8 @@ import {
   HostSessionSchema,
   HostSignInRequestSchema,
   HostSignInResponseSchema,
+  HostPlanResponseSchema,
+  HostPlanSchema,
 } from "./schemas";
 
 /**
@@ -478,6 +481,21 @@ const getSessionRoute = createRoute({
   responses: {
     200: json(HostSessionSchema, "The session is live"),
     401: json(ErrorSchema, "`host_auth_required`: no token, or it expired, was signed out, or the admin password changed"),
+    426: json(ErrorSchema, "This app build is too old; show the update screen"),
+    default: json(ErrorSchema, "Any other error"),
+  },
+});
+
+const getHostPlanRoute = createRoute({
+  method: "get",
+  path: "/admin/plan",
+  operationId: "getHostPlan",
+  tags: ["Host"],
+  summary: "The signed-in host's hosting plan: state, dates, rights and events left",
+  security: HOST_SECURITY,
+  responses: {
+    200: json(HostPlanResponseSchema, "The plan, or null when there is none"),
+    401: json(ErrorSchema, "`host_auth_required`: sign in again"),
     426: json(ErrorSchema, "This app build is too old; show the update screen"),
     default: json(ErrorSchema, "Any other error"),
   },
@@ -854,6 +872,32 @@ v1.openapi(getSessionRoute, (c) => {
   const session = c.get("hostSession");
   return c.json({ subject: session.subject, expires_at: session.expiresAt }, 200);
 });
+
+v1.openapi(getHostPlanRoute, async (c) => {
+  const session = c.get("hostSession");
+  // The operator hosts without a plan.
+  if (session.role === "operator") return c.json({ plan: null }, 200);
+  const view = await loadHostPlanView(c.env.DB, session.userId);
+  return c.json({ plan: view && toHostPlanWire(view) }, 200);
+});
+
+/** The plan in the API's snake_case shape. */
+function toHostPlanWire(view: HostPlanView): z.infer<typeof HostPlanSchema> {
+  return {
+    state: view.state,
+    product_id: view.productId,
+    guest_cap: view.guestCap,
+    pending_product_id: view.pendingProductId,
+    period_ends_at: view.periodEndsAt,
+    test_window_ends_at: view.testWindowEndsAt,
+    grace_ends_at: view.graceEndsAt,
+    readonly_until: view.readonlyUntil,
+    can_edit: view.canEdit,
+    can_moderate: view.canModerate,
+    can_download: view.canDownload,
+    events_left: view.eventsLeft,
+  };
+}
 
 v1.openapi(listAdminEventsRoute, async (c) => {
   return c.json(await listAdminEvents(c.env.DB, c.env.EVENT_ACCESS_SECRET, ownerScope(c.get("hostSession"))), 200);
