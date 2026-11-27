@@ -2,9 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>MomentsKeychainGroup</key>
-	<string>$(AppIdentifierPrefix)$(MOMENTS_BUNDLE_ID_PREFIX).moments</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>MomentsAppGroup</key>
 	<string>group.$(MOMENTS_BUNDLE_ID_PREFIX).moments</string>
+	<key>MomentsKeychainGroup</key>
+	<string>$(AppIdentifierPrefix)$(MOMENTS_BUNDLE_ID_PREFIX).moments</string>
 </dict>
 </plist>
