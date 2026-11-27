@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS: an app icon for the app and the App Clip (the lens mark), and the export-compliance answer in both Info.plists, so builds can be uploaded to TestFlight.
 - iOS: the home screen showed the "Your events" heading twice.
 - iOS: a new first-launch welcome in the landing's style, ending in Join an event (opens the scanner) or Host an event (opens Hosting).
 - New bilingual landing page at / with hosting prices (from $7.99 a month), how it works, features and FAQ; it keeps the event-code join box.
