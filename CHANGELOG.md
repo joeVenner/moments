@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- iOS: the event screen opens on a banner (the cover photo, or a scene in the event type's colours) with the event's name, then its moments and guests counts.
+- iOS: the Events tab is now the app's landing: what Moments is, Scan and Host buttons, your events, a link box and how it works.
+- iOS: after sharing, the uploads list opens with each item's live progress, and a progress strip stays above the feed while uploads run.
+- iOS: picked photos and videos show a preview in the share sheet.
 - iOS: an app icon for the app and the App Clip (the lens mark), and the export-compliance answer in both Info.plists, so builds can be uploaded to TestFlight.
 - iOS: the home screen showed the "Your events" heading twice.
 - iOS: a new first-launch welcome in the landing's style, ending in Join an event (opens the scanner) or Host an event (opens Hosting).
@@ -180,6 +184,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Website uploads now belong to the guest who made them. A guest who joined always uploads under their own nickname, whatever name the page sends, so nobody can post photos as someone else. Once guest identities are required, the website refuses uploads from visitors who haven't joined, before anything is stored.
 - Hearts now belong to the guest, not the device. A guest who joined reacts as themselves on the website and in the app: the server decides whose heart it is, so a client can no longer send hearts on another guest's behalf, and a guest sees their hearts on every device where they joined. Leaving an event takes back that guest's hearts. Clients without a guest identity keep their device id only until guest identities are required.
 ### Fixed
+- iOS: videos shared from the website (which have no poster image) showed "Couldn't load this moment" and couldn't be played. They now play, with a frame read from the video as their poster.
+- iOS: with the "Button Shapes" accessibility setting on, every button had a grey capsule behind it. The app's buttons now keep their own shape only; the top buttons and "New face" are smaller.
 - iOS: a mute or unmute this phone couldn't save now says so (viewer banner; footnote in Muted guests, announced to VoiceOver) instead of failing silently.
 - iOS: saving a report or mute no longer deletes an event's keychain entry that this app version can't read (e.g. after a downgrade), which could erase the guest token; a rejoin still replaces it.
 - Web slideshow says it is loading (or retrying) until the first load succeeds, instead of claiming the event has no moments yet.
