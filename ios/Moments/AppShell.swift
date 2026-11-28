@@ -58,7 +58,7 @@ struct AppShell: View {
         ZStack {
             HomeView(
                 navigation: navigation, myEvents: myEvents, notice: notice,
-                onScan: scanAction, isScanBusy: isRequestingCamera
+                onScan: scanAction, isScanBusy: isRequestingCamera, onHost: { select(.hosting) }
             )
             .tabContent(isSelected: tabs.tab == .events)
             if tabs.hasOpenedHosting {
@@ -87,20 +87,23 @@ struct AppShell: View {
             if scenePhase == .active { host.account.refresh() }
         }
         .fullScreenCover(item: $scanSheet) { sheet in
-            switch sheet {
-            case .scanner:
-                QRScannerSheet { text in
-                    guard navigation.handle(text: text) else { return false }
-                    scanSheet = nil
-                    return true
-                } onCancel: {
-                    scanSheet = nil
-                } onUnavailable: {
-                    scanSheet = .denied
+            Group {
+                switch sheet {
+                case .scanner:
+                    QRScannerSheet { text in
+                        guard navigation.handle(text: text) else { return false }
+                        scanSheet = nil
+                        return true
+                    } onCancel: {
+                        scanSheet = nil
+                    } onUnavailable: {
+                        scanSheet = .denied
+                    }
+                case .denied:
+                    CameraDeniedSheet { scanSheet = nil } onGranted: { scanSheet = .scanner }
                 }
-            case .denied:
-                CameraDeniedSheet { scanSheet = nil } onGranted: { scanSheet = .scanner }
             }
+            .momentsButtonDefaults()
         }
     }
 
@@ -228,6 +231,7 @@ struct HostingTab: View {
             } onCancel: {
                 isShowingSignIn = false
             }
+            .momentsButtonDefaults()
         }
     }
 }

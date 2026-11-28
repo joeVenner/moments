@@ -1,3 +1,4 @@
+import CoreGraphics
 import DesignSystem
 import MomentsAPI
 import MomentsDomain
@@ -18,6 +19,8 @@ public struct GuestEventView: View {
     @State private var leave: LeaveModel?
     @State private var progress: UploadProgressModel?
     @State private var isShowingProgress = false
+    /// A batch was just queued: the uploads list opens once the picker closes.
+    @State private var showsProgressAfterSharing = false
     @State private var isConfirmingLeave = false
     @State private var isShowingMutedGuests = false
     @State private var feed: FeedModel?
@@ -53,10 +56,21 @@ public struct GuestEventView: View {
             if let feed, let highlights, let leaderboard, let thumbnails, let viewerImages {
                 VStack(spacing: 0) {
                     if join.hasUnsavedIdentity { unsavedBanner }
-                    if leave != nil || progress != nil || onHome != nil { topBar }
-                    GuestEventHeader(event: feed.event, stats: feed.stats, myEntry: leaderboard.myEntry, section: $section)
+                    GuestEventHeader(
+                        event: feed.event, stats: feed.stats, myEntry: leaderboard.myEntry, images: thumbnails, section: $section
+                    )
+                        // The buttons sit on the banner, as on the website.
+                        .overlay(alignment: .top) {
+                            if leave != nil || progress != nil || onHome != nil { topBar }
+                        }
                         // New moments change points too; the board waits 30 s between loads.
                         .task(id: feed.stats) { await leaderboard.loadIfStale() }
+                    if let progress, progress.activeCount > 0 || progress.failedCount > 0 {
+                        UploadStrip(model: progress) { isShowingProgress = true }
+                            .padding(.horizontal, Spacing.md)
+                            .padding(.bottom, Spacing.sm)
+                            .transition(.opacity)
+                    }
                     // Every opened section stays alive, keeping its scroll.
                     ZStack {
                         FeedView(model: feed, thumbnails: thumbnails, viewerImages: viewerImages, isSelected: section == .moments)
@@ -115,9 +129,18 @@ public struct GuestEventView: View {
         .sheet(item: $upload, onDismiss: {
             presentedUpload?.discardAll()
             presentedUpload = nil
+            // Straight to the uploads list, so each one's progress shows live.
+            if showsProgressAfterSharing, progress != nil { isShowingProgress = true }
+            showsProgressAfterSharing = false
         }) { model in
-            UploadView(model: model) { sharedBatches += 1 }
+            UploadView(model: model) {
+                sharedBatches += 1
+                showsProgressAfterSharing = true
+            }
+            .momentsButtonDefaults()
         }
+        // Follows the queue while the event is shown, so counts and bars are live.
+        .task(id: progress.map(ObjectIdentifier.init)) { await progress?.observe() }
         // The event ended for this guest: every tab stops; lost access also
         // drops cached images of the private event.
         .onChange(of: feed?.phase) {
@@ -129,6 +152,7 @@ public struct GuestEventView: View {
             leaderboard?.end()
             guard feed?.phase == .accessLost else { return }
             for loader in [thumbnails, viewerImages].compactMap(\.self) { Task { await loader.removeAll() } }
+            Task { await VideoPosterLoader.shared.removeAll() }
         }
         .onChange(of: join.phase, initial: true) { _, phase in
             guard case let .joined(event, participant) = phase, feed == nil else { return }
@@ -187,6 +211,7 @@ public struct GuestEventView: View {
             highlights?.end()
             leaderboard?.end()
             for loader in [thumbnails, viewerImages].compactMap(\.self) { Task { await loader.removeAll() } }
+            Task { await VideoPosterLoader.shared.removeAll() }
             onLeft()
         }
     }
@@ -200,40 +225,28 @@ public struct GuestEventView: View {
             if let progress { uploadsButton(progress) }
             if let leave, let leaderboard { eventMenu(leave, leaderboard: leaderboard) }
         }
-        .padding(.horizontal, Spacing.sm)
+        .padding(.horizontal, Spacing.xs)
+        .padding(.top, Spacing.xxs)
     }
 
     private func homeButton(_ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: "chevron.backward")
-                .font(.title3)
-                .foregroundStyle(MomentsColor.textMuted)
-                .frame(minWidth: 44, minHeight: 44)
-                .contentShape(Rectangle())
-        }
-        .accessibilityLabel(Text("Home"))
+        Button(action: action) { BannerIcon(systemName: "chevron.backward") }
+            .accessibilityLabel(Text("Home"))
     }
 
     /// Opens "Your uploads"; a count while some are under way, and a mark
     /// when one needs attention.
     private func uploadsButton(_ progress: UploadProgressModel) -> some View {
         Button { isShowingProgress = true } label: {
-            HStack(spacing: Spacing.xs) {
-                Image(systemName: progress.failedCount > 0 ? "exclamationmark.arrow.circlepath" : "arrow.up.circle")
-                if progress.activeCount > 0 {
-                    Text(progress.activeCount, format: .number)
-                        .font(MomentsFont.caption().bold())
-                }
-            }
-            .font(.title3)
-            .foregroundStyle(progress.failedCount > 0 ? MomentsColor.accent : MomentsColor.textMuted)
-            .frame(minWidth: 44, minHeight: 44)
+            BannerIcon(
+                systemName: progress.failedCount > 0 ? "exclamationmark.arrow.circlepath" : "arrow.up",
+                count: progress.activeCount > 0 ? progress.activeCount : nil,
+                isHighlighted: progress.failedCount > 0
+            )
         }
         .accessibilityLabel(Text("Your uploads"))
         .accessibilityValue(Text(uploadsSummary(progress)))
-        // Follows the queue while the event is shown, so the count is live.
-        .task { await progress.observe() }
-        .sheet(isPresented: $isShowingProgress) { UploadProgressView(model: progress, eventTitle: feed?.event.title) }
+        .sheet(isPresented: $isShowingProgress) { UploadProgressView(model: progress, eventTitle: feed?.event.title).momentsButtonDefaults() }
     }
 
     private func uploadsSummary(_ progress: UploadProgressModel) -> String {
@@ -251,11 +264,10 @@ public struct GuestEventView: View {
                     isConfirmingLeave = true
                 }
             } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.title3)
-                    .foregroundStyle(MomentsColor.textMuted)
-                    .frame(minWidth: 44, minHeight: 44)
+                BannerIcon(systemName: "ellipsis")
             }
+            // Menus ignore the default style; plain keeps Button Shapes off the label.
+            .buttonStyle(.plain)
             .accessibilityLabel(Text("Event options"))
             .disabled(leave.phase == .leaving)
         }
@@ -264,7 +276,7 @@ public struct GuestEventView: View {
             feed?.reloadHidden()
             highlights?.reloadHidden()
         }) {
-            MutedGuestsView(model: leaderboard)
+            MutedGuestsView(model: leaderboard).momentsButtonDefaults()
         }
         .confirmationDialog("Leave this event?", isPresented: $isConfirmingLeave, titleVisibility: .visible) {
             Button("Leave and delete", role: .destructive) { Task { await leave.leave() } }
@@ -359,32 +371,185 @@ private extension View {
     }
 }
 
-/// The event's name, when sharing closes, and the section switcher.
+/// A round icon button drawn on the event banner: a 36 pt disc inside a
+/// 44 pt tap target.
+struct BannerIcon: View {
+    let systemName: String
+    /// Shown beside the icon (uploads under way).
+    var count: Int?
+    var isHighlighted = false
+
+    var body: some View {
+        HStack(spacing: Spacing.xxs) {
+            Image(systemName: systemName)
+                .font(.system(size: 15, weight: .semibold))
+            if let count {
+                Text(count, format: .number)
+                    .font(MomentsFont.number(.footnote))
+            }
+        }
+        .foregroundStyle(isHighlighted ? MomentsColor.accent : MomentsColor.text)
+        .padding(.horizontal, count == nil ? 0 : Spacing.sm)
+        .frame(minWidth: 36, minHeight: 36)
+        .background(MomentsColor.background.opacity(0.55), in: Capsule())
+        .frame(minWidth: Radius.minimumTapTarget, minHeight: Radius.minimumTapTarget)
+        .contentShape(Rectangle())
+    }
+}
+
+/// Uploads under way, above the feed: how far the batch is; opens the list
+/// with each item's own progress.
+struct UploadStrip: View {
+    let model: UploadProgressModel
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: Spacing.sm) {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Text(UploadQueueHeader.title(model.headline))
+                        .font(MomentsFont.caption().weight(.semibold))
+                        .foregroundStyle(model.activeCount > 0 ? MomentsColor.text : MomentsColor.accent)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if model.activeCount > 0 {
+                        ProgressView(value: model.overallFraction)
+                            .tint(MomentsColor.accent)
+                    }
+                }
+                if model.activeCount > 0 {
+                    Text(model.overallFraction, format: .percent.precision(.fractionLength(0)))
+                        .font(MomentsFont.number(.footnote))
+                        .foregroundStyle(MomentsColor.textMuted)
+                }
+                Image(systemName: "chevron.forward")
+                    .font(MomentsFont.caption().weight(.semibold))
+                    .foregroundStyle(MomentsColor.textMuted)
+            }
+            .padding(.horizontal, Spacing.sm)
+            .padding(.vertical, Spacing.xs)
+            .frame(minHeight: Radius.minimumTapTarget)
+            .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.control))
+            .overlay(RoundedRectangle(cornerRadius: Radius.control).stroke(MomentsColor.border))
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(UploadQueueHeader.title(model.headline)))
+        .accessibilityValue(model.activeCount > 0 ? Text(model.overallFraction, format: .percent.precision(.fractionLength(0))) : Text(verbatim: ""))
+        .accessibilityHint(Text("Shows your uploads"))
+    }
+}
+
+/// The event's banner (its cover photo, or a scene for its type) with the
+/// name on it, then the counts and the section switcher.
 struct GuestEventHeader: View {
     let event: Event
-    /// The counts line; nil (an older server) keeps the sharing line alone.
+    /// The counts; nil (an older server) keeps the sharing line alone.
     var stats: EventStats?
     /// The guest's leaderboard entry, for the points pill; nil hides it.
     var myEntry: LeaderboardEntry?
+    /// Loads the cover photo (with the private-event grant); nil shows the scene.
+    var images: ThumbnailLoader?
     @Binding var section: GuestEventSection
     @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var cover: CGImage?
+
+    /// Tall enough for the buttons above a one-line title.
+    private static let bannerMinHeight: CGFloat = 168
+    private static let coverPixelSize = 1320
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            // Large text: the title needs the width, so the pill goes below.
-            let layout = typeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.sm))
-                : AnyLayout(HStackLayout(alignment: .top, spacing: Spacing.sm))
-            layout {
-                titleBlock
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if let myEntry { pointsPill(myEntry) }
+            banner
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                // Large text: the counts need the width, so the pill goes below.
+                let layout = typeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.sm))
+                    : AnyLayout(HStackLayout(alignment: .center, spacing: Spacing.sm))
+                layout {
+                    statsBlock
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if let myEntry { pointsPill(myEntry) }
+                }
+                sectionPicker
             }
-            sectionPicker
+            .padding(.horizontal, Spacing.md)
         }
-        .padding(.horizontal, Spacing.md)
         .padding(.bottom, Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .task(id: event.coverImageURL) { await loadCover() }
+    }
+
+    private var banner: some View {
+        titleBlock
+            .padding(.horizontal, Spacing.md)
+            .padding(.bottom, Spacing.sm)
+            // Clear of the buttons drawn over the banner's top.
+            .padding(.top, Radius.minimumTapTarget + Spacing.sm)
+            .frame(maxWidth: .infinity, minHeight: Self.bannerMinHeight, alignment: .bottomLeading)
+            .background {
+                ZStack {
+                    if let cover {
+                        Color.clear.overlay {
+                            Image(decorative: cover, scale: 1)
+                                .resizable()
+                                .scaledToFill()
+                        }
+                    } else {
+                        EventBannerScene(type: event.type)
+                    }
+                    // Keeps the name readable over any photo.
+                    LinearGradient(
+                        stops: [
+                            .init(color: MomentsColor.background.opacity(0.35), location: 0),
+                            .init(color: MomentsColor.background.opacity(0.1), location: 0.35),
+                            .init(color: MomentsColor.background.opacity(0.92), location: 1),
+                        ],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                }
+                .clipped()
+                .ignoresSafeArea(edges: .top)
+            }
+    }
+
+    private func loadCover() async {
+        guard let images, let url = event.coverImageURL.flatMap(URL.init(string:)) else {
+            cover = nil
+            return
+        }
+        // A cover that can't load leaves the scene: nothing to report.
+        cover = try? await images.image(at: url, maxPixelSize: Self.coverPixelSize)
+    }
+
+    /// "128 moments", "46 guests", then when sharing closes.
+    @ViewBuilder private var statsBlock: some View {
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            if let stats {
+                HStack(spacing: Spacing.md) {
+                    stat(String(localized: "\(stats.momentCount) moments"), systemImage: "photo.on.rectangle")
+                    stat(String(localized: "\(stats.guestCount) guests"), systemImage: "person.2")
+                }
+            }
+            if let line = Self.sharingLine(event) {
+                Text(line)
+                    .font(MomentsFont.caption())
+                    .foregroundStyle(MomentsColor.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        // VoiceOver would read the separators as "dot".
+        .accessibilityLabel(Text(verbatim: (Self.headerLine(event, stats: stats) ?? "").replacingOccurrences(of: " · ", with: ", ")))
+    }
+
+    private func stat(_ text: String, systemImage: String) -> some View {
+        HStack(spacing: Spacing.xxs) {
+            Image(systemName: systemImage)
+                .foregroundStyle(MomentsColor.accent)
+            Text(verbatim: text)
+                .foregroundStyle(MomentsColor.text)
+        }
+        .font(MomentsFont.caption().weight(.semibold))
+        .lineLimit(1)
     }
 
     /// The guest's avatar and points; opens the leaderboard.
@@ -417,20 +582,37 @@ struct GuestEventHeader: View {
         String(localized: "\(max(0, points)) pts")
     }
 
+    /// The type in the accent colour, the name, and who it is about.
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
+            if let type = Self.typeLabel(event) {
+                type
+                    .font(MomentsFont.caption(.caption).weight(.semibold))
+                    .textCase(.uppercase)
+                    .kerning(1.2)
+                    .foregroundStyle(MomentsColor.accent)
+            }
             Text(verbatim: event.title)
                 .font(MomentsFont.display(.title))
                 .foregroundStyle(MomentsColor.text)
                 .accessibilityAddTraits(.isHeader)
                 .fixedSize(horizontal: false, vertical: true)
-            if let line = Self.headerLine(event, stats: stats) {
-                Text(line)
-                    .font(MomentsFont.caption())
+            if let people = event.mainCharacters?.trimmingCharacters(in: .whitespacesAndNewlines), !people.isEmpty {
+                Text(verbatim: people)
+                    .font(MomentsFont.body(.subheadline))
                     .foregroundStyle(MomentsColor.textMuted)
-                    // VoiceOver would read the separators as "dot".
-                    .accessibilityLabel(Text(verbatim: line.replacingOccurrences(of: " · ", with: ", ")))
+                    .lineLimit(2)
             }
+        }
+    }
+
+    /// A known type in the guest's language, a custom one as the host wrote
+    /// it, nil when the event has none.
+    static func typeLabel(_ event: Event) -> Text? {
+        switch JoinEventLine(event).kind {
+        case let .preset(preset): Text(LocalizedStringKey(preset.storedValue))
+        case let .custom(written): Text(verbatim: written)
+        case .none: nil
         }
     }
 

@@ -67,14 +67,18 @@ struct HostEventDetailView: View {
             }
         }
         .sheet(item: $editing) { edit in
-            switch edit {
-            case .details: HostEditDetailsView(event: event, host: host, onDone: finishEditing)
-            case .privacy: HostEditPrivacyView(event: event, host: host, onDone: finishEditing)
-            case .dates: HostEditDatesView(event: event, host: host, onDone: finishEditing)
+            Group {
+                switch edit {
+                case .details: HostEditDetailsView(event: event, host: host, onDone: finishEditing)
+                case .privacy: HostEditPrivacyView(event: event, host: host, onDone: finishEditing)
+                case .dates: HostEditDatesView(event: event, host: host, onDone: finishEditing)
+                }
             }
+            .momentsButtonDefaults()
         }
         .sheet(isPresented: $isDownloading) {
             EventDownloadView(eventID: event.id, visibleMoments: visibleMoments, host: host)
+                .momentsButtonDefaults()
         }
         .confirmationDialog(
             Text("Copy the invite link?"),
@@ -156,6 +160,8 @@ struct HostEventDetailView: View {
                         systemImage: "play.rectangle", trailingSymbol: "ellipsis"
                     )
                 }
+                // Menus ignore the default style; plain keeps Button Shapes off the label.
+                .buttonStyle(.plain)
                 .accessibilityHint(Text("Opens or shares the slideshow"))
                 rowDivider
             }

@@ -72,6 +72,7 @@ public struct FeedView: View {
         .fullScreenCover(item: $viewing, onDismiss: { model.viewerDidClose() }) { request in
             MomentViewer(model: model, images: viewerImages, start: request.id)
                 .presentationBackground(.clear)
+                .momentsButtonDefaults()
         }
         #endif
     }
@@ -194,7 +195,7 @@ struct MomentThumbnail: View {
                         .resizable()
                         .scaledToFill()
                 } else if failed {
-                    Image(systemName: "photo")
+                    Image(systemName: moment.media.kind == .video ? "video" : "photo")
                         .foregroundStyle(MomentsColor.textMuted)
                 }
             }
@@ -245,7 +246,7 @@ struct MomentThumbnail: View {
             .accessibilityAddTraits(.isImage)
             // Same view either way (a conditional modifier would reset the cell's state).
             .accessibilityValue(accessibilityValue)
-            .task(id: LoadKey(urls: imageURLs, attempt: attempt)) { await load() }
+            .task(id: LoadKey(urls: imageURLs, video: moment.media.posterSourceURL, attempt: attempt)) { await load() }
     }
 
     /// "0:42" or "1:05:09", in whole seconds as players show it (at least
@@ -284,6 +285,7 @@ struct MomentThumbnail: View {
 
     private struct LoadKey: Equatable {
         let urls: [URL]
+        let video: String?
         let attempt: Int
     }
 
@@ -309,8 +311,13 @@ struct MomentThumbnail: View {
         let loader = thumbnails
         let pixelSize = Self.pixelSize
         do {
-            image = try await GridImage.load(imageURLs) { url in
-                try await loader.image(at: url, maxPixelSize: pixelSize)
+            if imageURLs.isEmpty, let video = moment.media.posterSourceURL.flatMap(URL.init(string:)) {
+                // A video with no poster: a frame read from the file itself.
+                image = try await VideoPosterLoader.shared.poster(for: video, maxPixelSize: pixelSize)
+            } else {
+                image = try await GridImage.load(imageURLs) { url in
+                    try await loader.image(at: url, maxPixelSize: pixelSize)
+                }
             }
             failed = false
         } catch is CancellationError {

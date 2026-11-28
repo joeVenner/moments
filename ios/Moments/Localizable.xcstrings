@@ -1731,6 +1731,16 @@
         }
       }
     },
+    "Have a link?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous avez un lien ?"
+          }
+        }
+      }
+    },
     "Heart": {
       "extractionState": "manual",
       "localizations": {
@@ -2724,6 +2734,16 @@
         }
       }
     },
+    "Paste the event's link from the invitation.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collez le lien de l'événement reçu avec l'invitation."
+          }
+        }
+      }
+    },
     "Payment failed. Update it in Settings.": {
       "extractionState": "manual",
       "localizations": {
@@ -3557,6 +3577,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Les affiche en haut du fil"
+          }
+        }
+      }
+    },
+    "Shows your uploads": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affiche vos envois"
           }
         }
       }

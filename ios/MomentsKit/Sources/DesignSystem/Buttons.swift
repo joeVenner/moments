@@ -69,3 +69,34 @@ public struct MomentsFieldStyle: ViewModifier {
 public extension View {
     func momentsField() -> some View { modifier(MomentsFieldStyle()) }
 }
+
+/// The app's default button: just its label, dimmed while pressed or
+/// disabled. The system's borderless style is not used because the "Button
+/// Shapes" accessibility setting draws a grey capsule behind it (and
+/// underlines its text), which doubles every button that already draws its
+/// own shape. Labels without a colour of their own take the tint, as before.
+public struct BareButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    public init() {}
+
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.tint)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.6 : 1) : 0.5)
+            .contentShape(Rectangle())
+    }
+}
+
+public extension ButtonStyle where Self == BareButtonStyle {
+    static var momentsBare: BareButtonStyle { BareButtonStyle() }
+}
+
+public extension View {
+    /// Makes `BareButtonStyle` the default for every button below (set once
+    /// at the app's root). A `Menu` ignores custom styles: give it `.buttonStyle(.plain)`.
+    func momentsButtonDefaults() -> some View {
+        buttonStyle(.momentsBare)
+            .tint(MomentsColor.accent)
+    }
+}

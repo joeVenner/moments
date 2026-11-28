@@ -1444,6 +1444,17 @@
         }
       }
     },
+    "Shows your uploads": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affiche vos envois"
+          }
+        }
+      }
+    },
     "Still preparing.": {
       "extractionState": "manual",
       "localizations": {

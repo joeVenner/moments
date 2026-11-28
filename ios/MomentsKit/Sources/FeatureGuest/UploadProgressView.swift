@@ -18,7 +18,15 @@ public struct UploadProgressView: View {
     }
 
     public var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            SheetHeader(title: "Your uploads") {
+                if model.doneCount > 0 {
+                    Button("Clear finished") { Task { await model.clearDone() } }
+                }
+            } trailing: {
+                Button("Done") { dismiss() }
+                    .fontWeight(.semibold)
+            }
             Group {
                 if model.rows.isEmpty {
                     Text("Nothing is uploading.")
@@ -51,26 +59,12 @@ public struct UploadProgressView: View {
                     .scrollContentBackground(.hidden)
                 }
             }
-            .background(MomentsColor.background)
             // Also with nothing queued, so it can be set before sharing.
             .safeAreaInset(edge: .bottom) {
                 if showsWiFiChoice { LargeVideosSetting(onChange: model.refresh) }
             }
-            .navigationTitle("Your uploads")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-                if model.doneCount > 0 {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button("Clear finished") { Task { await model.clearDone() } }
-                    }
-                }
-            }
         }
+        .background(MomentsColor.background.ignoresSafeArea())
         // Sheets don't inherit the event screen's tint.
         .tint(MomentsColor.accent)
     }
@@ -191,7 +185,7 @@ struct UploadProgressRow: View {
                     .foregroundStyle(MomentsColor.accent)
                     .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.momentsBare)
             } else if row.status == .done {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(MomentsColor.accent)

@@ -325,6 +325,19 @@ private func loaded(_ page: [Moment], nextBefore: Int? = nil, cursor: Int = 10) 
         #expect(Media(kind: .video, url: "o").viewerImageURL == nil)
     }
 
+    /// Videos shared from the website have no poster: a frame is read from the file.
+    @Test func aVideoWithoutAnyStillOffersItsFileForAPoster() {
+        let file = "https://moments-hq.com/media/events/e/moments/v-upload"
+        #expect(Media(kind: .video, url: file).posterSourceURL == file)
+        #expect(Media(kind: .video, url: file, posterURL: "p").posterSourceURL == nil)
+        #expect(Media(kind: .video, url: file, thumbURL: "t").posterSourceURL == nil)
+        // Stream has its own poster, and frames can't be cut from a manifest.
+        #expect(Media(kind: .video, url: file, hlsURL: "https://customer-abc.cloudflarestream.com/uid/manifest/video.m3u8").posterSourceURL == nil)
+        #expect(Media(kind: .image, url: file).posterSourceURL == nil)
+        // Not something a player can open.
+        #expect(Media(kind: .video, url: "/media/v.mp4").posterSourceURL == nil)
+    }
+
     @Test func picksWhatAPlayerCanOpen() {
         let stream = "https://customer-abc.cloudflarestream.com/uid/iframe"
         #expect(Media(kind: .video, url: stream, hlsURL: "https://customer-abc.cloudflarestream.com/uid/manifest/video.m3u8").playbackURL?.hasSuffix(".m3u8") == true)

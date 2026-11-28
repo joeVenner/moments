@@ -95,6 +95,13 @@ public final class UploadModel {
     }
 
     public private(set) var items: [Item] = []
+
+    /// The small image made beside a prepared pick, for its tile; nil until
+    /// it's ready (or when none could be made).
+    public func previewURL(for item: Item) -> URL? {
+        guard case let .ready(media) = item.state, let thumbnail = media.thumbnail else { return nil }
+        return staging.folder(for: item.id).appending(path: thumbnail.name)
+    }
     /// A batch uses the caption as it was on Share (the screen also locks
     /// the field while sharing).
     public var caption = ""
