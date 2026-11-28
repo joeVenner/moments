@@ -46,6 +46,7 @@ public struct HighlightsView: View {
         .fullScreenCover(item: $viewing, onDismiss: { model.viewerDidClose() }) { request in
             MomentViewer(model: model, images: viewerImages, start: request.id)
                 .presentationBackground(.clear)
+                .momentsButtonDefaults()
         }
         #endif
     }

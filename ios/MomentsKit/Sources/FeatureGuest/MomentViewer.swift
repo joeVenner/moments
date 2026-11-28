@@ -419,6 +419,10 @@ private struct ViewerPage: View {
                 .resizable()
                 .scaledToFit()
                 .overlay { if !isPhoto { videoOverlay } }
+        } else if !isPhoto {
+            // No still yet, or none at all (a video shared without a poster,
+            // or one that didn't load): the video itself can already play.
+            Color.clear.overlay { videoOverlay }
         } else if failed {
             message("Couldn't load this moment.", systemImage: "photo")
         } else {
@@ -611,13 +615,20 @@ private struct ViewerPage: View {
 
     private func loadImage(pixelSize: Int) async {
         guard image == nil else { return }
-        guard let url = moment.media.viewerImageURL.flatMap(URL.init(string:)) else {
+        let still = moment.media.viewerImageURL.flatMap(URL.init(string:))
+        let video = moment.media.posterSourceURL.flatMap(URL.init(string:))
+        guard still != nil || video != nil else {
             failed = true
             return
         }
         failed = false
         do {
-            image = try await images.image(at: url, maxPixelSize: pixelSize)
+            if let still {
+                image = try await images.image(at: still, maxPixelSize: pixelSize)
+            } else if let video {
+                // A video with no poster: a frame read from the file itself.
+                image = try await VideoPosterLoader.shared.poster(for: video, maxPixelSize: pixelSize)
+            }
         } catch is CancellationError {
             return
         } catch {

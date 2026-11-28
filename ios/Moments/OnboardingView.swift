@@ -62,24 +62,11 @@ struct OnboardingView: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private struct Step: Identifiable {
-        let number: Int
-        let title: LocalizedStringResource
-        let detail: LocalizedStringResource
-        var id: Int { number }
-    }
-
-    private static let steps = [
-        Step(number: 1, title: "Create your event", detail: "A name, a date, who it is about. Make it private with a PIN if you like."),
-        Step(number: 2, title: "Put the QR on the tables", detail: "Print the flyer or share the link. Guests scan and they're in: no account, no download."),
-        Step(number: 3, title: "Watch it fill up", detail: "Photos and videos land in one live feed. Hearts, points and a leaderboard keep everyone sharing."),
-    ]
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.xl) {
                 hero
-                howItWorks
+                HowItWorks()
                 plans
                 // At the largest text sizes pinned buttons would leave little
                 // room to scroll: they scroll with the rest instead.
@@ -127,36 +114,6 @@ struct OnboardingView: View {
                 .font(MomentsFont.body())
                 .foregroundStyle(MomentsColor.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var howItWorks: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            sectionTitle("How it works")
-            ForEach(Self.steps) { step in
-                HStack(alignment: .top, spacing: Spacing.md) {
-                    Text(step.number, format: .number)
-                        .font(MomentsFont.heading(.headline))
-                        .foregroundStyle(MomentsColor.onAccent)
-                        .frame(width: 36, height: 36)
-                        .background(MomentsColor.accent, in: Circle())
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: Spacing.xxs) {
-                        Text(step.title)
-                            .font(MomentsFont.heading(.headline))
-                            .foregroundStyle(MomentsColor.text)
-                        Text(step.detail)
-                            .font(MomentsFont.body(.subheadline))
-                            .foregroundStyle(MomentsColor.textMuted)
-                    }
-                    .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 0)
-                }
-                .padding(Spacing.md)
-                .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.card))
-                .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(MomentsColor.border))
-                .accessibilityElement(children: .combine)
-            }
         }
     }
 
@@ -223,5 +180,54 @@ struct OnboardingView: View {
             .font(MomentsFont.display(.title2))
             .foregroundStyle(MomentsColor.text)
             .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// The three steps, numbered, on the welcome and on the home screen.
+struct HowItWorks: View {
+    private struct Step: Identifiable {
+        let number: Int
+        let title: LocalizedStringResource
+        let detail: LocalizedStringResource
+        var id: Int { number }
+    }
+
+    private static let steps = [
+        Step(number: 1, title: "Create your event", detail: "A name, a date, who it is about. Make it private with a PIN if you like."),
+        Step(number: 2, title: "Put the QR on the tables", detail: "Print the flyer or share the link. Guests scan and they're in: no account, no download."),
+        Step(number: 3, title: "Watch it fill up", detail: "Photos and videos land in one live feed. Hearts, points and a leaderboard keep everyone sharing."),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("How it works")
+                .font(MomentsFont.display(.title2))
+                .foregroundStyle(MomentsColor.text)
+                .accessibilityAddTraits(.isHeader)
+            ForEach(Self.steps) { step in
+                HStack(alignment: .top, spacing: Spacing.md) {
+                    Text(step.number, format: .number)
+                        .font(MomentsFont.heading(.headline))
+                        .foregroundStyle(MomentsColor.onAccent)
+                        .frame(width: 36, height: 36)
+                        .background(MomentsColor.accent, in: Circle())
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                        Text(step.title)
+                            .font(MomentsFont.heading(.headline))
+                            .foregroundStyle(MomentsColor.text)
+                        Text(step.detail)
+                            .font(MomentsFont.body(.subheadline))
+                            .foregroundStyle(MomentsColor.textMuted)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(Spacing.md)
+                .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.card))
+                .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(MomentsColor.border))
+                .accessibilityElement(children: .combine)
+            }
+        }
     }
 }

@@ -59,6 +59,7 @@ struct HostEventsView: View {
         // may or may not have happened shows up.
         .sheet(isPresented: $isCreatingEvent, onDismiss: { Task { await model.load() } }) {
             HostNewEventView(host: host, onCreated: showCreated, onCancel: { isCreatingEvent = false })
+                .momentsButtonDefaults()
         }
         .confirmationDialog(Text("Sign out of hosting on this phone?"), isPresented: $isConfirmingSignOut, titleVisibility: .visible) {
             Button("Sign out", role: .destructive) {
@@ -98,6 +99,8 @@ struct HostEventsView: View {
                     .frame(width: Radius.minimumTapTarget, height: Radius.minimumTapTarget)
                     .contentShape(Rectangle())
             }
+            // Menus ignore the default style; plain keeps Button Shapes off the label.
+            .buttonStyle(.plain)
             .accessibilityLabel(Text("Account"))
             Button { isCreatingEvent = true } label: {
                 Image(systemName: "plus")

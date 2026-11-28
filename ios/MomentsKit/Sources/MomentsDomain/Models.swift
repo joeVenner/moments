@@ -169,6 +169,14 @@ public struct Media: Sendable, Hashable {
         return candidate
     }
 
+    /// A video file a still frame can be read from, for videos that came
+    /// with no poster (web uploads to R2). Never a Stream manifest: those
+    /// have a poster of their own, and frames can't be cut from HLS.
+    public var posterSourceURL: String? {
+        guard kind == .video, hlsURL == nil, posterURL == nil, thumbURL == nil, displayURL == nil else { return nil }
+        return playbackURL
+    }
+
     static func isStreamEmbed(_ url: String) -> Bool {
         guard let host = URL(string: url)?.host()?.lowercased() else { return false }
         return host.hasSuffix(".cloudflarestream.com") || host == "iframe.videodelivery.net"

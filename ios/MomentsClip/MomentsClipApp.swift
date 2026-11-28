@@ -18,6 +18,7 @@ struct MomentsClipApp: App {
     var body: some Scene {
         WindowGroup {
             ClipRootView(route: route)
+                .momentsButtonDefaults()
                 // Invoked by a QR code, App Clip Code, Safari banner or Messages.
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                     route = activity.webpageURL.flatMap(Self.router.route(for:))
@@ -138,10 +139,10 @@ struct ClipRootView: View {
             presentedUpload?.discardAll()
             presentedUpload = nil
         }) { model in
-            UploadView(model: model)
+            UploadView(model: model).momentsButtonDefaults()
         }
         .sheet(isPresented: $isShowingProgress) {
-            if let progress { UploadProgressView(model: progress, showsWiFiChoice: false) }
+            if let progress { UploadProgressView(model: progress, showsWiFiChoice: false).momentsButtonDefaults() }
         }
         // Back in front: what failed while suspended (as if offline) goes
         // again now rather than after the offline wait.
@@ -227,6 +228,8 @@ struct ClipRootView: View {
                     .foregroundStyle(MomentsColor.textMuted)
                     .frame(minWidth: 44, minHeight: 44)
             }
+            // Menus ignore the default style; plain keeps Button Shapes off the label.
+            .buttonStyle(.plain)
             .accessibilityLabel(Text("Event options"))
             .padding(.horizontal, Spacing.sm)
             .confirmationDialog("Leave this event?", isPresented: $isConfirmingLeave, titleVisibility: .visible) {

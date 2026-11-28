@@ -4,8 +4,9 @@ import FeatureHost
 import MomentsAPI
 import SwiftUI
 
-/// The Events tab: a card to join an event (scan its QR code or paste its
-/// link), then the events joined on this phone.
+/// The Events tab, and the app's landing: what Moments is, the ways in
+/// (scan, host, paste a link), the events joined on this phone, and how it
+/// works.
 struct HomeView: View {
     let navigation: AppNavigation
     let myEvents: MyEventsModel
@@ -14,6 +15,8 @@ struct HomeView: View {
     /// Opens the scanner; nil on a device without a camera.
     let onScan: (() -> Void)?
     let isScanBusy: Bool
+    /// Shows the Hosting tab, where hosts sign in.
+    var onHost: () -> Void = {}
 
     /// The host's account and events, for the Hosting tab and every host
     /// screen behind it.
@@ -47,15 +50,14 @@ struct HomeView: View {
     /// Everything without the scroll view (also rendered by screenshot tests).
     var content: some View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
-            Text("Moments")
-                .font(MomentsFont.display())
-                .foregroundStyle(MomentsColor.text)
-                .accessibilityAddTraits(.isHeader)
-            joinCard
+            hero
+            actions
             if !myEvents.entries.isEmpty {
                 // The list carries its own "Your events" heading.
                 MyEventsList(entries: myEvents.entries, open: navigation.open)
             }
+            joinCard
+            HowItWorks()
             if myEvents.phase == .unavailable {
                 // The keychain is locked (or unreadable); pull to refresh retries.
                 Text("Your events can't be shown right now. Pull down to try again.")
@@ -70,16 +72,37 @@ struct HomeView: View {
         .padding(.bottom, Spacing.lg)
     }
 
-    private var joinCard: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("At an event?")
-                .font(MomentsFont.heading())
-                .foregroundStyle(MomentsColor.text)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(notice ?? String(localized: "Scan the QR code on the table or the invitation, or paste the event's link."))
+    /// The brand, the promise, and one line on how it works.
+    private var hero: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            HStack(spacing: Spacing.xs) {
+                BrandMark(size: 28)
+                Text(verbatim: "Moments")
+                    .font(MomentsFont.display(.title2))
+                    .foregroundStyle(MomentsColor.text)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(verbatim: "Moments"))
+            .accessibilityAddTraits(.isHeader)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Every guest's camera.")
+                    .foregroundStyle(MomentsColor.text)
+                Text("One shared album.")
+                    .foregroundStyle(MomentsColor.accent)
+            }
+            .font(MomentsFont.display(.largeTitle))
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .combine)
+            Text(notice ?? String(localized: "Guests scan a QR code and share photos and videos from their phone, with nothing to install. You keep every moment, in full quality."))
                 .font(MomentsFont.body())
                 .foregroundStyle(MomentsColor.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Scan (the one orange button) and Host.
+    private var actions: some View {
+        VStack(spacing: Spacing.sm) {
             if let onScan {
                 Button(action: onScan) {
                     Label("Scan QR code", systemImage: "qrcode.viewfinder")
@@ -87,6 +110,23 @@ struct HomeView: View {
                 .buttonStyle(.momentsPrimary)
                 .disabled(isScanBusy)
             }
+            Button(action: onHost) {
+                Label("Host an event", systemImage: "star")
+            }
+            .buttonStyle(.momentsSecondary)
+        }
+    }
+
+    private var joinCard: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("Have a link?")
+                .font(MomentsFont.heading())
+                .foregroundStyle(MomentsColor.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Paste the event's link from the invitation.")
+                .font(MomentsFont.body(.subheadline))
+                .foregroundStyle(MomentsColor.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
             TextField(text: $link, prompt: Text("Event link").foregroundStyle(MomentsColor.textMuted)) { Text("Event link") }
                 .linkInput()
                 .submitLabel(.go)
@@ -107,8 +147,8 @@ struct HomeView: View {
             }
         }
         .padding(Spacing.md)
-        .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.sheet))
-        .overlay(RoundedRectangle(cornerRadius: Radius.sheet).stroke(MomentsColor.border))
+        .background(MomentsColor.surface, in: RoundedRectangle(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(MomentsColor.border))
     }
 
     private var openButton: some View {
@@ -134,5 +174,19 @@ private extension View {
         #else
         self
         #endif
+    }
+}
+
+/// The lens mark: an orange ring around a dot, as on the app icon.
+struct BrandMark: View {
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle().strokeBorder(MomentsColor.accent, lineWidth: size * 0.17)
+            Circle().fill(MomentsColor.accent).frame(width: size * 0.3, height: size * 0.3)
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }

@@ -1,4 +1,5 @@
 import AppRouting
+import DesignSystem
 import SwiftUI
 import UIKit
 
@@ -53,6 +54,7 @@ struct MomentsApp: App {
             RootView(navigation: navigation, environment: environment)
                 // Dark-only design system; Info.plist forces it for system chrome.
                 .preferredColorScheme(.dark)
+                .momentsButtonDefaults()
         }
     }
 

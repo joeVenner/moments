@@ -136,11 +136,16 @@ public struct JoinView: View {
                 Button {
                     avatarSeed = JoinModel.randomAvatarSeed()
                 } label: {
+                    // A small pill; the tap target is still the full 44 pt.
                     Label("New face", systemImage: "arrow.triangle.2.circlepath")
-                        .font(MomentsFont.body())
+                        .font(MomentsFont.caption().weight(.semibold))
+                        .foregroundStyle(MomentsColor.accent)
+                        .padding(.horizontal, Spacing.sm)
+                        .frame(minHeight: 30)
+                        .overlay(Capsule().stroke(MomentsColor.border))
                         .frame(minHeight: Radius.minimumTapTarget)
+                        .contentShape(Rectangle())
                 }
-                .foregroundStyle(MomentsColor.accent)
                 .disabled(model.isWorking)
                 .accessibilityHint(Text("Picks a different face"))
             }
